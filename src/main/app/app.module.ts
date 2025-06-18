@@ -1,14 +1,14 @@
 import { join } from 'node:path'
 import { ElectronModule } from '@doubleshot/nest-electron'
-import customConfig from './config/custom-config'
-import { InstagramModule } from './modules/instagram/instagram.module'
-import { SettingsModule } from './modules/settings/settings.module'
-import { PrismaService } from './shared/prisma.service'
-import { GlobalExceptionFilter } from '../filters/global-exception.filter'
+import { DcinsideModule } from '@main/app/modules/dcinside/dcinside.module'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, HttpAdapterHost } from '@nestjs/core'
 import { app, BrowserWindow } from 'electron'
+import { GlobalExceptionFilter } from '../filters/global-exception.filter'
+import customConfig from './config/custom-config'
+import { SettingsModule } from './modules/settings/settings.module'
+import { PrismaService } from './shared/prisma.service'
 
 @Module({
   imports: [
@@ -43,7 +43,7 @@ import { app, BrowserWindow } from 'electron'
       isGlobal: true,
     }),
     SettingsModule,
-    InstagramModule,
+    DcinsideModule,
   ],
   providers: [
     {

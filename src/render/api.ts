@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:3553'
+const API_BASE_URL = 'http://localhost:3554'
 
 // 에러 코드 enum
 export enum ErrorCode {
@@ -75,51 +75,21 @@ export function getErrorDetails(error: any): string | undefined {
   return undefined
 }
 
-// 게시물 엑셀 내보내기
-export async function exportPostsXlsx(data: {
-  keyword: string
-  limit?: number
-}): Promise<Blob> {
-  const res = await axios.post(`${API_BASE_URL}/instagram/workflow/export-posts-xlsx`, data, {
-    responseType: 'blob',
-  })
-  return res.data
-}
-
-// DM 보내기 (엑셀 업로드)
-export async function sendDmTo(file: File): Promise<any> {
+// DCinside 워크플로우 엑셀 업로드
+export async function uploadDcinsideExcel(file: File): Promise<any> {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await axios.post(`${API_BASE_URL}/instagram/workflow/send-dm-to`, formData)
+  const res = await axios.post(`${API_BASE_URL}/posting/excel-upload`, formData)
   return res.data
 }
 
-// 인스타그램 설정 불러오기
-export async function getInstagramSettings() {
-  const res = await axios.get(`${API_BASE_URL}/settings/instagram`)
+// OpenAI API 키 서버 저장/불러오기
+export async function saveOpenAIApiKeyToServer(key: string) {
+  const res = await axios.post(`${API_BASE_URL}/settings/global`, { openAIApiKey: key })
   return res.data
 }
 
-// 인스타그램 설정 저장
-export async function saveInstagramSettings(data: any) {
-  const res = await axios.post(`${API_BASE_URL}/settings/instagram`, data)
-  return res.data
-}
-
-// 인스타그램 로그인 상태 확인 (수동)
-export async function checkLoginStatus() {
-  const res = await axios.get(`${API_BASE_URL}/instagram/api/login-status`)
-  return res.data
-}
-
-// 워크플로우 기반 인스타그램 수동 로그인
-export async function workflowInstagramLogin() {
-  const res = await axios.post(`${API_BASE_URL}/instagram/workflow/login`)
-  return res.data
-}
-
-// 워크플로우 기반 인스타그램 로그아웃(쿠키 삭제)
-export async function workflowInstagramLogout() {
-  const res = await axios.post(`${API_BASE_URL}/instagram/workflow/logout`)
-  return res.data
+export async function getOpenAIApiKeyFromServer(): Promise<string> {
+  const res = await axios.get(`${API_BASE_URL}/settings/global`)
+  return res.data?.data?.openAIApiKey || ''
 }

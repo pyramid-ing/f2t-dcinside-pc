@@ -1,8 +1,3 @@
-import { AppModule } from './app/app.module'
-import { EnvConfig } from './config/env.config'
-import { LoggerConfig } from './config/logger.config'
-import { environment } from './environments/environment'
-import { GlobalExceptionFilter } from './filters/global-exception.filter'
 import { BadRequestException, type ValidationError, ValidationPipe } from '@nestjs/common'
 import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
@@ -10,6 +5,11 @@ import { app, ipcMain, shell } from 'electron'
 import { WinstonModule } from 'nest-winston'
 import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
 import winston from 'winston'
+import { AppModule } from './app/app.module'
+import { EnvConfig } from './config/env.config'
+import { LoggerConfig } from './config/logger.config'
+import { environment } from './environments/environment'
+import { GlobalExceptionFilter } from './filters/global-exception.filter'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -22,7 +22,7 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
 // IPC 핸들러 설정
 function setupIpcHandlers() {
-  ipcMain.handle('get-backend-port', () => 3553)
+  ipcMain.handle('get-backend-port', () => null)
   ipcMain.handle('open-external', async (_, url) => {
     await shell.openExternal(url)
   })
@@ -101,9 +101,9 @@ async function bootstrap() {
     // Support 10mb csv/json files for importing activities
     app.use(bodyParser.json({ limit: '10mb' }))
 
-    await app.listen(3553)
+    await app.listen(3554)
 
-    console.log('NestJS HTTP server is running on port 3553')
+    console.log('NestJS HTTP server is running on port 3554')
   }
   catch (error) {
     console.log(error)

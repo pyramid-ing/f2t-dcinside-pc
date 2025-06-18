@@ -3,8 +3,7 @@ import { Layout, Menu, Tabs } from 'antd'
 import React, { useEffect } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import styled from 'styled-components'
-import ExportPostsXlsx from '../components/ExportPostsXlsx'
-import SendDMForm from '../components/SendDMForm'
+import UploadDcinsideExcelForm from '../components/UploadDcinsideExcelForm'
 import SettingsPage from './Settings'
 
 const { Sider, Content } = Layout
@@ -83,14 +82,9 @@ const App: React.FC = () => {
                     style={{ width: 500, maxWidth: '90vw' }}
                     items={[
                       {
-                        key: 'send-dm',
-                        label: 'DM 보내기',
-                        children: <SendDMForm />,
-                      },
-                      {
-                        key: 'export-posts',
-                        label: '게시물 엑셀 내보내기',
-                        children: <ExportPostsXlsx />,
+                        key: 'dcinside-excel-upload',
+                        label: '디씨 엑셀 업로드',
+                        children: <UploadDcinsideExcelForm />,
                       },
                     ]}
                   />

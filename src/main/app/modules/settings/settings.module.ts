@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common'
-import { SettingsController } from './settings.controller'
+import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { PrismaService } from '../../shared/prisma.service'
-import { SettingsService } from '../../shared/settings.service'
+import { SettingsController } from './settings.controller'
 
 @Module({
   providers: [PrismaService, SettingsService],
