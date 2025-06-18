@@ -16,7 +16,8 @@ const OpenAISettingsForm: React.FC = () => {
     try {
       await saveOpenAIApiKeyToServer(values.openAIApiKey)
       message.success('OpenAI API 키가 저장되었습니다.')
-    } catch {
+    }
+    catch {
       message.error('저장에 실패했습니다.')
     }
   }
@@ -44,4 +45,4 @@ const OpenAISettingsForm: React.FC = () => {
   )
 }
 
-export default OpenAISettingsForm 
+export default OpenAISettingsForm

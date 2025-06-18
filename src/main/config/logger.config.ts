@@ -25,7 +25,8 @@ export class LoggerConfig {
         const timestamp = Date.now()
         return `${oldFile}.${timestamp}`
       }
-    } else {
+    }
+    else {
       // 개발환경에서는 파일 로깅 비활성화
       this.logger.transports.file.level = false
     }

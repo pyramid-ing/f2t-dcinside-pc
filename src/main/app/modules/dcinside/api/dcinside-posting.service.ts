@@ -1,5 +1,6 @@
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
@@ -18,6 +19,7 @@ export class DcinsidePostingService {
   constructor(
     private readonly cookieService: CookieService,
     private readonly dcinsideLoginService: DcinsideLoginService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
@@ -33,7 +35,7 @@ export class DcinsidePostingService {
         headless: params.headless ?? true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ko-KR,ko'],
       }
-      if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
         launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
       }
       browser = await puppeteer.launch(launchOptions)
@@ -170,7 +172,12 @@ export class DcinsidePostingService {
         // 1. 이미지 base64 추출
         const captchaBase64 = await captchaImg.screenshot({ encoding: 'base64' })
         // 2. OpenAI Vision API로 답 얻기
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+        const globalSettings = await this.settingsService.findByKey('global')
+        const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
+        if (!openAIApiKey) {
+          throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
+        }
+        const openai = new OpenAI({ apiKey: openAIApiKey })
         const response = await openai.chat.completions.create({
           model: 'gpt-4o',
           messages: [
@@ -198,7 +205,7 @@ export class DcinsidePostingService {
         try {
           answer = JSON.parse(response.choices[0].message.content).answer
         }
-        catch (e) {
+        catch {
           throw new Error('캡챠 해제 실패(OpenAI 응답 파싱 오류)')
         }
         await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
@@ -218,7 +225,7 @@ export class DcinsidePostingService {
         // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
         await page.waitForSelector('table.gall_list', { timeout: 10000 })
         postUrl = await page.evaluate((title) => {
-          const rows = document.querySelectorAll('table.gall_list tbody tr.ub-content')
+          const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
           for (const row of rows) {
             const titTd = row.querySelector('td.gall_tit.ub-word')
             if (!titTd)

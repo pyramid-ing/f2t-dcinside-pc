@@ -51,7 +51,7 @@ const App: React.FC = () => {
   return (
     <StyledLayout>
       <Sider width={200}>
-        <Logo>인스타 봇</Logo>
+        <Logo>DC 봇</Logo>
         <Menu
           theme="dark"
           defaultSelectedKeys={['1']}
@@ -60,7 +60,7 @@ const App: React.FC = () => {
             {
               key: '1',
               icon: <HomeOutlined />,
-              label: <NavLink to="/">인스타 대시보드</NavLink>,
+              label: <NavLink to="/">대시보드</NavLink>,
             },
             {
               key: '2',

@@ -18,7 +18,11 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "db:init": "prisma generate && prisma migrate deploy && npm run db:seed",
-    "build-initial-db": "node scripts/build-initial-db.cjs"
+    "build-initial-db": "node scripts/build-initial-db.cjs",
+    "dev:front": "vite --config src/render/vite.config.mts",
+    "dev:server": "tsx src/main/index.ts",
+    "dev:electron": "tsc -p tsconfig.json && cross-env ELECTRON_DEBUG=true electron --inspect=9228 ."
+
   },
   "dependencies": {
     "@ant-design/cssinjs": "^1.23.0",

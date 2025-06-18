@@ -16,10 +16,14 @@ export class DcinsideLoginService {
   async login(id: string, password: string, headless: boolean = true): Promise<{ success: boolean, message: string }> {
     let browser = null
     try {
-      browser = await puppeteer.launch({
-        headless,
+      const launchOptions: any = {
+        headless: headless ?? true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ko-KR,ko'],
-      })
+      }
+      if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+      }
+      browser = await puppeteer.launch(launchOptions)
       const page: Page = await browser.newPage()
       await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9' })
 

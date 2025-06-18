@@ -79,7 +79,7 @@ export function getErrorDetails(error: any): string | undefined {
 export async function uploadDcinsideExcel(file: File): Promise<any> {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await axios.post(`${API_BASE_URL}/posting/excel-upload`, formData)
+  const res = await axios.post(`${API_BASE_URL}/dcinside/workflow/posting/excel-upload`, formData)
   return res.data
 }
 
