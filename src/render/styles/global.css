@@ -1,0 +1,27 @@
+@layer tailwind-base, antd
+
+@layer tailwind-base {
+  @tailwind base;
+}
+@tailwind components;
+@tailwind utilities;
+
+/* Ant Design 추가 스타일 */
+@layer antd {
+  .ant-layout {
+    min-height: 100vh;
+  }
+
+  .ant-layout-sider-children {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ant-menu {
+    flex: 1;
+  }
+
+  .site-layout-background {
+    background: #fff;
+  }
+}

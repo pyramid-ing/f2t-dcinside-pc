@@ -1,0 +1,65 @@
+name: Build and Release Electron App
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      # 1. 리포지토리 클론
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Node.js 환경 설정
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # 3. pnpm 설치
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.12.1
+
+      # 4. 캐시 활성화
+      - name: Cache pnpm modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      # 5. pnpm 의존성 설치 (루트)
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      # 6. Prisma Client 생성
+      - name: Generate Prisma Client
+        run: pnpm prisma generate
+
+      # 7. (필요시) Prisma 마이그레이션/시드
+      # - name: Run Prisma Migrate
+      #   run: pnpm prisma migrate deploy
+      # - name: Seed Database
+      #   run: pnpm prisma db seed
+
+      # 8. Electron 빌드 (스크립트명에 맞게 수정)
+      - name: Build Windows App
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: pnpm build
+        shell: pwsh
+
+      # 9. 빌드된 파일 업로드
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: f2t-insta-pc
+          path: dist/electron
