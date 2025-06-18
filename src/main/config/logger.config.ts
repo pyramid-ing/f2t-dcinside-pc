@@ -10,28 +10,26 @@ export class LoggerConfig {
   private static logger = electronLog
 
   public static initialize() {
-    // 로그 파일 경로 설정
-    this.logger.transports.file.resolvePathFn = () => {
-      return path.join(
-        EnvConfig.isPackaged ? app.getPath('logs') : process.cwd(),
-        'logs/main.log',
-      )
+    // 로그 파일 경로 설정 및 파일 로깅은 패키지 상태에서만 적용
+    if (EnvConfig.isPackaged) {
+      this.logger.transports.file.resolvePathFn = () => {
+        return path.join(
+          EnvConfig.isPackaged ? app.getPath('logs') : process.cwd(),
+          'logs/main.log',
+        )
+      }
+      this.logger.transports.file.level = 'info'
+      this.logger.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text} {stack}'
+      this.logger.transports.file.maxSize = 10 * 1024 * 1024
+      this.logger.transports.file.archiveLog = (oldFile) => {
+        const timestamp = Date.now()
+        return `${oldFile}.${timestamp}`
+      }
+    } else {
+      // 개발환경에서는 파일 로깅 비활성화
+      this.logger.transports.file.level = false
     }
-
     this.logger.transports.console.level = 'info'
-    this.logger.transports.file.level = 'info'
-
-    // 로그 포맷 설정 - 스택 트레이스 포함
-    this.logger.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text} {stack}'
-
-    // 로그 파일 크기 제한 (10MB)
-    this.logger.transports.file.maxSize = 10 * 1024 * 1024
-
-    // 로그 파일 순환 설정
-    this.logger.transports.file.archiveLog = (oldFile) => {
-      const timestamp = Date.now()
-      return `${oldFile}.${timestamp}`
-    }
 
     // 전역 에러 핸들링 설정
     this.setupErrorHandlers()
