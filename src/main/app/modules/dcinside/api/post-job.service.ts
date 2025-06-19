@@ -115,9 +115,9 @@ export class PostJobService {
     })
   }
 
-  // 예약 작업 목록 조회
+  // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
   async getPostJobs() {
-    return this.prismaService.postJob.findMany({ orderBy: { scheduledAt: 'asc' } })
+    return this.prismaService.postJob.findMany({ orderBy: { updatedAt: 'desc' } })
   }
 
   // 예약 작업 상태/결과 갱신
@@ -164,5 +164,46 @@ export class PostJobService {
       },
     })
     return result.count
+  }
+
+  // 실패한 작업 재시도 (상태를 pending으로 변경)
+  async retryPostJob(id: number) {
+    const job = await this.prismaService.postJob.findUnique({ where: { id } })
+
+    if (!job) {
+      return { success: false, message: '작업을 찾을 수 없습니다.' }
+    }
+
+    if (job.status !== 'failed') {
+      return { success: false, message: '실패한 작업만 재시도할 수 있습니다.' }
+    }
+
+    await this.prismaService.postJob.update({
+      where: { id },
+      data: {
+        status: 'pending',
+        resultMsg: null,
+        resultUrl: null,
+      },
+    })
+
+    return { success: true, message: '재시도 요청이 완료되었습니다.' }
+  }
+
+  // 작업 삭제
+  async deletePostJob(id: number) {
+    const job = await this.prismaService.postJob.findUnique({ where: { id } })
+
+    if (!job) {
+      return { success: false, message: '작업을 찾을 수 없습니다.' }
+    }
+
+    if (job.status === 'processing') {
+      return { success: false, message: '실행 중인 작업은 삭제할 수 없습니다.' }
+    }
+
+    await this.prismaService.postJob.delete({ where: { id } })
+
+    return { success: true, message: '작업이 삭제되었습니다.' }
   }
 }

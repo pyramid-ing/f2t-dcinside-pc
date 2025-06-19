@@ -1,5 +1,5 @@
 import { UploadOutlined } from '@ant-design/icons'
-import { Button, Form, message, Upload, Table, Typography, Tag } from 'antd'
+import { Button, Form, message, Table, Tag, Typography, Upload } from 'antd'
 import React, { useState } from 'react'
 import { uploadDcinsideExcel } from '../api'
 
@@ -35,7 +35,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
       render: (url: string) => {
         const match = url.match(/id=(\w+)/)
         return match ? match[1] : url
-      }
+      },
     },
     {
       title: '상태',
@@ -77,13 +77,14 @@ const UploadDcinsideExcelForm: React.FC = () => {
           try {
             const res = await uploadDcinsideExcel(file)
             setResults(res)
-            
+
             const successCount = res.filter((r: UploadResult) => r.success).length
             const totalCount = res.length
-            
+
             if (successCount === totalCount) {
               message.success(`모든 ${totalCount}개 항목이 성공적으로 처리되었습니다.`)
-            } else {
+            }
+            else {
               message.warning(`${totalCount}개 중 ${successCount}개 성공, ${totalCount - successCount}개 실패`)
             }
           }
@@ -112,7 +113,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
           </Button>
         </Form.Item>
       </Form>
-      
+
       {results.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <Title level={4}>업로드 결과</Title>
@@ -125,13 +126,13 @@ const UploadDcinsideExcelForm: React.FC = () => {
               pageSize: 10,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total, range) => 
+              showTotal: (total, range) =>
                 `${range[0]}-${range[1]} / 총 ${total}개 항목`,
             }}
             summary={(pageData) => {
               const successCount = pageData.filter(item => item.success).length
               const failureCount = pageData.length - successCount
-              
+
               return (
                 <Table.Summary fixed>
                   <Table.Summary.Row>
@@ -139,8 +140,14 @@ const UploadDcinsideExcelForm: React.FC = () => {
                       <strong>요약</strong>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={2}>
-                      <Tag color="success">성공: {successCount}</Tag>
-                      <Tag color="error">실패: {failureCount}</Tag>
+                      <Tag color="success">
+                        성공:
+                        {successCount}
+                      </Tag>
+                      <Tag color="error">
+                        실패:
+                        {failureCount}
+                      </Tag>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={3} colSpan={2} />
                   </Table.Summary.Row>

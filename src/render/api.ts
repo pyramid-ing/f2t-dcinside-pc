@@ -105,6 +105,7 @@ export interface PostJob {
   scheduledAt: string
   status: string
   resultMsg?: string
+  resultUrl?: string
   createdAt: string
   updatedAt: string
   headtext?: string
@@ -119,5 +120,11 @@ export async function getPostJobs(): Promise<PostJob[]> {
 // 실패/대기중 Job 재시도
 export async function retryPostJob(id: number): Promise<any> {
   const res = await axios.post(`${API_BASE_URL}/dcinside/api/post-jobs/${id}/retry`)
+  return res.data
+}
+
+// 작업 삭제
+export async function deletePostJob(id: number): Promise<any> {
+  const res = await axios.delete(`${API_BASE_URL}/dcinside/api/post-jobs/${id}`)
   return res.data
 }

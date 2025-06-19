@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common'
 import { PostJobDto } from './dto/scheduled-post.dto'
 import { PostJobService } from './post-job.service'
 
@@ -14,5 +14,15 @@ export class PostJobController {
   @Get()
   async findAll() {
     return this.postJobService.getPostJobs()
+  }
+
+  @Post(':id/retry')
+  async retry(@Param('id') id: string) {
+    return this.postJobService.retryPostJob(Number(id))
+  }
+
+  @Delete(':id')
+  async delete(@Param('id') id: string) {
+    return this.postJobService.deletePostJob(Number(id))
   }
 }
