@@ -19,6 +19,13 @@ interface ExcelRow {
   이미지경로1?: string
   이미지경로2?: string
   이미지경로3?: string
+  이미지경로4?: string
+  이미지경로5?: string
+  이미지경로6?: string
+  이미지경로7?: string
+  이미지경로8?: string
+  이미지경로9?: string
+  이미지경로10?: string
   로그인ID?: string
   로그인비번?: string
   말머리?: string // headtext
@@ -48,6 +55,13 @@ export class DcinsideWorkflowService {
       이미지경로1: 'imagePath1',
       이미지경로2: 'imagePath2',
       이미지경로3: 'imagePath3',
+      이미지경로4: 'imagePath4',
+      이미지경로5: 'imagePath5',
+      이미지경로6: 'imagePath6',
+      이미지경로7: 'imagePath7',
+      이미지경로8: 'imagePath8',
+      이미지경로9: 'imagePath9',
+      이미지경로10: 'imagePath10',
       로그인ID: 'loginId',
       로그인비번: 'loginPassword',
       말머리: 'headtext',
@@ -60,7 +74,7 @@ export class DcinsideWorkflowService {
       Object.entries(colMap).forEach(([kor, eng]) => {
         if (row[kor as keyof ExcelRow] !== undefined) mappedRow[eng] = row[kor as keyof ExcelRow]
       })
-      // 이미지경로1,2,3... 배열로 합치기
+      // 이미지경로1~n 배열로 합치기
       mappedRow.imagePaths = []
       Object.keys(mappedRow).forEach(key => {
         if (key !== 'imagePaths' && key.startsWith('imagePath') && mappedRow[key]) {
@@ -75,10 +89,17 @@ export class DcinsideWorkflowService {
       if (mappedRow.password !== undefined) {
         mappedRow.password = String(mappedRow.password)
       }
-      // imagePath1~3 키 제거
+      // imagePath1~10 키 제거
       delete mappedRow.imagePath1
       delete mappedRow.imagePath2
       delete mappedRow.imagePath3
+      delete mappedRow.imagePath4
+      delete mappedRow.imagePath5
+      delete mappedRow.imagePath6
+      delete mappedRow.imagePath7
+      delete mappedRow.imagePath8
+      delete mappedRow.imagePath9
+      delete mappedRow.imagePath10
       return mappedRow as DcinsidePostParams
     })
 
