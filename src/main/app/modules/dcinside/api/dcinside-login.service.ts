@@ -19,8 +19,7 @@ export class DcinsideLoginService {
   private validateLoginParams(rawParams: any): DcinsideLoginDto {
     try {
       return DcinsideLoginSchema.parse(rawParams)
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
         throw new Error(`로그인 파라미터 검증 실패: ${zodErrors.join(', ')}`)
@@ -29,7 +28,7 @@ export class DcinsideLoginService {
     }
   }
 
-  async login(rawParams: any): Promise<{ success: boolean, message: string }> {
+  async login(rawParams: any): Promise<{ success: boolean; message: string }> {
     let browser = null
     try {
       // 파라미터 검증
@@ -60,18 +59,14 @@ export class DcinsideLoginService {
         const cookies = await browser.cookies()
         this.cookieService.saveCookies('dcinside', params.id, cookies)
         return { success: true, message: '로그인 성공' }
-      }
-      else {
+      } else {
         return { success: false, message: '로그인 실패' }
       }
-    }
-    catch (e) {
+    } catch (e) {
       this.logger.error(`로그인 실패: ${e.message}`)
       return { success: false, message: e.message }
-    }
-    finally {
-      if (browser)
-        await browser.close()
+    } finally {
+      if (browser) await browser.close()
     }
   }
 
@@ -81,8 +76,7 @@ export class DcinsideLoginService {
       await page.waitForSelector('#login_box', { timeout: 10000 })
       const userNameExists = await page.$eval('#login_box .user_name', el => !!el)
       return !!userNameExists
-    }
-    catch {
+    } catch {
       return false
     }
   }

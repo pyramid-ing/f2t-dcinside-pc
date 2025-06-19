@@ -21,15 +21,10 @@ export class ScheduledPostCronService implements OnModuleInit {
     try {
       const processingJobs = await this.postJobService.findByStatus('processing')
       for (const job of processingJobs) {
-        await this.postJobService.updateStatus(
-          job.id,
-          'failed',
-          '시스템 재시작으로 인한 작업 중단',
-        )
+        await this.postJobService.updateStatus(job.id, 'failed', '시스템 재시작으로 인한 작업 중단')
       }
       this.logger.log(`처리 중이던 ${processingJobs.length}개 작업을 실패 처리했습니다.`)
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('처리 중이던 작업 정리 실패:', error)
     }
   }
@@ -53,8 +48,7 @@ export class ScheduledPostCronService implements OnModuleInit {
           await this.postQueueService.enqueueJob(job)
         }
       }
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('스케줄 처리 중 오류:', error)
     }
   }

@@ -16,8 +16,7 @@ export class SettingsController {
     try {
       const setting = await this.settingsService.findByKey('global')
       return { success: true, data: setting?.data || {} }
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('글로벌 설정 조회 실패:', error)
       return { success: false, error: error.message }
     }
@@ -28,8 +27,7 @@ export class SettingsController {
     try {
       await this.settingsService.saveByKey('global', data)
       return { success: true }
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('글로벌 설정 저장 실패:', error)
       return { success: false, error: error.message }
     }
@@ -44,8 +42,7 @@ export class SettingsController {
         taskDelay: 10, // 기본값: 10초
       }
       return { success: true, data: setting?.data || defaultSettings }
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('앱 설정 조회 실패:', error)
       return { success: false, error: error.message }
     }
@@ -56,8 +53,7 @@ export class SettingsController {
     try {
       await this.settingsService.saveByKey('app', data)
       return { success: true }
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.error('앱 설정 저장 실패:', error)
       return { success: false, error: error.message }
     }

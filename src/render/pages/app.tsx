@@ -10,9 +10,8 @@ const App: React.FC = () => {
     // 백엔드 포트 확인
     window.electronAPI
       .getBackendPort()
-      .then((port) => {
-      })
-      .catch((error) => {
+      .then(port => {})
+      .catch(error => {
         console.error('백엔드 포트 확인 실패:', error)
       })
   }, [])

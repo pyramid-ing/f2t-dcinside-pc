@@ -27,8 +27,7 @@ export class DcinsidePostingService {
   private validateParams(rawParams: any): DcinsidePostDto {
     try {
       return DcinsidePostSchema.parse(rawParams)
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
         throw new Error(`포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`)
@@ -39,14 +38,12 @@ export class DcinsidePostingService {
 
   private async solveCapcha(page: Page): Promise<void> {
     const captchaImg = await page.$('#kcaptcha')
-    if (!captchaImg)
-      return
+    if (!captchaImg) return
 
     const captchaBase64 = await captchaImg.screenshot({ encoding: 'base64' })
     const globalSettings = await this.settingsService.findByKey('global')
     const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
-    if (!openAIApiKey)
-      throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
+    if (!openAIApiKey) throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
 
     const openai = new OpenAI({ apiKey: openAIApiKey })
 
@@ -66,7 +63,10 @@ export class DcinsidePostingService {
             {
               role: 'user',
               content: [
-                { type: 'text', text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }' },
+                {
+                  type: 'text',
+                  text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }',
+                },
                 {
                   type: 'image_url',
                   image_url: { url: `data:image/png;base64,${captchaBase64}` },
@@ -90,12 +90,10 @@ export class DcinsidePostingService {
 
           answer = parsed.answer
           break // 성공하면 루프 탈출
-        }
-        catch (parseError) {
+        } catch (parseError) {
           throw new Error(`OpenAI 응답 파싱 오류: ${response.choices[0]?.message?.content || 'No content'}`)
         }
-      }
-      catch (error) {
+      } catch (error) {
         openaiTryCount += 1
         this.logger.warn(`OpenAI 캡챠 해제 시도 ${openaiTryCount}/3 실패: ${error.message}`)
 
@@ -111,8 +109,7 @@ export class DcinsidePostingService {
     // 기존 입력값을 지우고 새로 입력
     await page.evaluate(() => {
       const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
-      if (el)
-        el.value = ''
+      if (el) el.value = ''
     })
     await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
   }
@@ -129,18 +126,15 @@ export class DcinsidePostingService {
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
-    if (!headtext)
-      return
+    if (!headtext) return
 
     try {
       await page.waitForSelector('.subject_list li', { timeout: 5000 })
-      const found = await page.evaluate((headtext) => {
+      const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.subject_list li'))
-        const target = items.find(
-          li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
-        )
+        const target = items.find(li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext)
         if (target) {
-          (target as HTMLElement).click()
+          ;(target as HTMLElement).click()
           return true
         }
         return false
@@ -151,8 +145,7 @@ export class DcinsidePostingService {
       }
 
       await sleep(300)
-    }
-    catch (error) {
+    } catch (error) {
       this.logger.warn(`말머리 선택 중 오류 발생, 기본값으로 처리: ${headtext} - ${error.message}`)
     }
   }
@@ -167,7 +160,7 @@ export class DcinsidePostingService {
     }
     // textarea.note-codable에 HTML 입력
     await page.waitForSelector('.note-codable', { timeout: 5000 })
-    await page.evaluate((html) => {
+    await page.evaluate(html => {
       const textarea = document.querySelector('.note-codable') as HTMLTextAreaElement
       if (textarea) {
         textarea.value = html
@@ -188,25 +181,140 @@ export class DcinsidePostingService {
   private async uploadImages(page: Page, browser: any, imagePaths: string[]): Promise<void> {
     // 1. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
     await page.click('button[aria-label="이미지"]')
+
     // 2. 팝업 window 감지 (input.file_add)
     const popup = await new Promise<Page>(async (resolve, reject) => {
       browser.once('targetcreated', async (target: any) => {
         const popupPage = await target.page()
-        if (popupPage)
-          resolve(popupPage)
+        if (popupPage) resolve(popupPage)
         else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
       })
     })
+
     await popup.waitForSelector('input.file_add', { timeout: 10000 })
-    // 3. 파일 업로드 (여러 파일 한 번에)
-    await sleep(3000)
+
+    // 3. 파일 업로드
+    await sleep(2000) // 팝업 안정화 대기
     const input = await popup.$('input.file_add')
-    if (!input)
-      throw new Error('이미지 업로드 input을 찾을 수 없습니다.')
+    if (!input) throw new Error('이미지 업로드 input을 찾을 수 없습니다.')
+
     await input.uploadFile(...imagePaths)
+    this.logger.log(`${imagePaths.length}개 이미지 업로드 시작`)
+
+    // 4. 업로드 완료 대기 - 로딩 상태 확인
+    await this.waitForImageUploadComplete(popup, imagePaths.length)
+
+    // 5. 적용 버튼 클릭 (여러 방법으로 시도)
+    await this.clickApplyButtonSafely(popup)
+  }
+
+  private async waitForImageUploadComplete(popup: Page, expectedImageCount: number): Promise<void> {
+    this.logger.log('이미지 업로드 완료 대기 중...')
+
+    const maxWaitTime = 60000 // 최대 60초 대기
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < maxWaitTime) {
+      try {
+        // 로딩 박스가 있는지 확인
+        const loadingBox = await popup.$('.loding_box')
+        if (loadingBox) {
+          this.logger.log('이미지 업로드 진행 중...')
+          await sleep(2000)
+          continue
+        }
+
+        // 업로드된 이미지 리스트 확인
+        const uploadedImages = await popup.$$('ul#sortable li[data-key]')
+        this.logger.log(`업로드된 이미지 수: ${uploadedImages.length}/${expectedImageCount}`)
+
+        if (uploadedImages.length >= expectedImageCount) {
+          // 모든 이미지가 data-key를 가지고 있는지 확인
+          const allHaveDataKey = await popup.evaluate(() => {
+            const items = document.querySelectorAll('ul#sortable li')
+            return Array.from(items).every(item => item.hasAttribute('data-key'))
+          })
+
+          if (allHaveDataKey) {
+            this.logger.log('모든 이미지 업로드 완료!')
+            break
+          }
+        }
+
+        await sleep(1000)
+      } catch (error) {
+        this.logger.warn(`업로드 상태 확인 중 오류: ${error.message}`)
+        await sleep(1000)
+      }
+    }
+
+    // 추가 안정화 대기
+    await sleep(2000)
+  }
+
+  private async clickApplyButtonSafely(popup: Page): Promise<void> {
+    this.logger.log('적용 버튼 클릭 시도...')
+
+    const maxRetries = 5
+    let retryCount = 0
+
+    while (retryCount < maxRetries) {
+      try {
+        // 적용 버튼 존재 확인
+        await popup.waitForSelector('.btn_apply', { timeout: 5000 })
+
+        // 버튼이 클릭 가능한 상태인지 확인
+        const isClickable = await popup.evaluate(() => {
+          const btn = document.querySelector('.btn_apply') as HTMLButtonElement
+          if (!btn) return false
+
+          const computedStyle = window.getComputedStyle(btn)
+          return (
+            !btn.disabled &&
+            computedStyle.display !== 'none' &&
+            computedStyle.visibility !== 'hidden' &&
+            computedStyle.pointerEvents !== 'none'
+          )
+        })
+
+        if (!isClickable) {
+          this.logger.warn(`적용 버튼이 클릭 불가능 상태 (시도 ${retryCount + 1}/${maxRetries})`)
+          retryCount++
+          await sleep(1000)
+          continue
+        }
+
+        // 버튼 클릭 시도 (여러 방법)
+        try {
+          // 방법 1: 일반 클릭
+          await popup.click('.btn_apply')
+          this.logger.log('적용 버튼 클릭 성공 (일반 클릭)')
+          break
+        } catch (clickError) {
+          this.logger.warn('일반 클릭 실패, JavaScript 클릭 시도')
+
+          // 방법 2: JavaScript 클릭
+          await popup.evaluate(() => {
+            const btn = document.querySelector('.btn_apply') as HTMLButtonElement
+            if (btn) btn.click()
+          })
+          this.logger.log('적용 버튼 클릭 성공 (JavaScript 클릭)')
+          break
+        }
+      } catch (error) {
+        retryCount++
+        this.logger.warn(`적용 버튼 클릭 실패 (시도 ${retryCount}/${maxRetries}): ${error.message}`)
+
+        if (retryCount >= maxRetries) {
+          throw new Error('적용 버튼 클릭 실패 (5회 시도)')
+        }
+
+        await sleep(2000)
+      }
+    }
+
+    // 팝업 닫힘 대기
     await sleep(3000)
-    const btnApply = await popup.$('.btn_apply')
-    await btnApply.click()
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
@@ -225,8 +333,7 @@ export class DcinsidePostingService {
       // 닉네임 입력란이 활성화되었으면 입력
       await page.evaluate(() => {
         const el = document.getElementById('gall_nick_name')
-        if (el)
-          el.removeAttribute('readonly')
+        if (el) el.removeAttribute('readonly')
       })
       await page.click('#name', { clickCount: 3 })
       await page.type('#name', nickname, { delay: 30 })
@@ -234,10 +341,7 @@ export class DcinsidePostingService {
   }
 
   private async submitPostAndHandleErrors(page: Page): Promise<void> {
-    const captchaErrorMessages = [
-      '자동입력 방지코드가 일치하지 않습니다.',
-      'code은(는) 영문-숫자 조합이어야 합니다.',
-    ]
+    const captchaErrorMessages = ['자동입력 방지코드가 일치하지 않습니다.', 'code은(는) 영문-숫자 조합이어야 합니다.']
     let captchaTryCount = 0
 
     while (true) {
@@ -247,7 +351,7 @@ export class DcinsidePostingService {
       await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
 
       // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
-      const dialogPromise: Promise<string | null> = new Promise((resolve) => {
+      const dialogPromise: Promise<string | null> = new Promise(resolve => {
         const handler = async (dialog: any) => {
           const msg = dialog.message()
           await dialog.accept()
@@ -262,7 +366,10 @@ export class DcinsidePostingService {
       // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
       const dialogMessage = await Promise.race([
         dialogPromise,
-        page.waitForNavigation({ timeout: 10000 }).then(() => null).catch(() => null),
+        page
+          .waitForNavigation({ timeout: 10000 })
+          .then(() => null)
+          .catch(() => null),
       ])
 
       // 알림창이 떴을 경우 처리
@@ -270,23 +377,19 @@ export class DcinsidePostingService {
         // 캡챠 오류 메시지일 경우에만 재시도
         if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
           captchaTryCount += 1
-          if (captchaTryCount >= 3)
-            throw new Error('캡챠 해제 실패(3회 시도)')
+          if (captchaTryCount >= 3) throw new Error('캡챠 해제 실패(3회 시도)')
 
           // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
           try {
             await page.evaluate(() => {
               const img = document.getElementById('kcaptcha') as HTMLImageElement | null
-              if (img)
-                img.click()
+              if (img) img.click()
             })
-          }
-          catch {}
+          } catch {}
 
           await sleep(1000)
           continue // while – 다시 등록 버튼 클릭 시도
-        }
-        else {
+        } else {
           // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
           throw new Error(`글 등록 실패: ${dialogMessage}`)
         }
@@ -303,15 +406,13 @@ export class DcinsidePostingService {
     try {
       // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
       await page.waitForSelector('table.gall_list', { timeout: 10000 })
-      postUrl = await page.evaluate((title) => {
+      postUrl = await page.evaluate(title => {
         const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
         for (const row of rows) {
           const titTd = row.querySelector('td.gall_tit.ub-word')
-          if (!titTd)
-            continue
+          if (!titTd) continue
           const a = titTd.querySelector('a')
-          if (!a)
-            continue
+          if (!a) continue
           // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
           const text = a.textContent?.replace(/\s+/g, ' ').trim()
           if (text === title) {
@@ -320,14 +421,12 @@ export class DcinsidePostingService {
         }
         return null
       }, title)
-    }
-    catch {}
+    } catch {}
 
     if (postUrl) {
       if (postUrl.startsWith('/')) {
         return `https://gall.dcinside.com${postUrl}`
-      }
-      else {
+      } else {
         return postUrl
       }
     }
@@ -343,7 +442,7 @@ export class DcinsidePostingService {
     await sleep(4000)
   }
 
-  async postArticle(rawParams: any): Promise<{ success: boolean, message: string, url?: string }> {
+  async postArticle(rawParams: any): Promise<{ success: boolean; message: string; url?: string }> {
     let browser = null
     try {
       // 0. 파라미터 검증
@@ -351,8 +450,7 @@ export class DcinsidePostingService {
 
       // 1. 갤러리 id 추출
       const match = params.galleryUrl.match(/id=(\w+)/)
-      if (!match)
-        throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
+      if (!match) throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
       const galleryId = match[1]
 
       const launchOptions: any = {
@@ -375,10 +473,8 @@ export class DcinsidePostingService {
           await browser.setCookie(...cookies)
           // 로그인 상태 확인 (공통 서비스 활용)
           const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
-          if (!isLoggedIn)
-            throw new Error('로그인 필요')
-        }
-        else {
+          if (!isLoggedIn) throw new Error('로그인 필요')
+        } else {
           throw new Error('로그인 필요')
         }
       }
@@ -411,17 +507,14 @@ export class DcinsidePostingService {
       const finalUrl = await this.extractPostUrl(page, params.title)
 
       return { success: true, message: '글 등록 성공', url: finalUrl }
-    }
-    catch (e) {
+    } catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
       throw new Error(e.message)
-    }
-    finally {
+    } finally {
       if (browser) {
         try {
           await browser.close()
-        }
-        catch {}
+        } catch {}
       }
     }
   }

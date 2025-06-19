@@ -44,8 +44,7 @@ function extractGalleryId(galleryUrl: string): string {
     }
 
     return galleryUrl
-  }
-  catch {
+  } catch {
     return galleryUrl
   }
 }
@@ -80,8 +79,7 @@ const ScheduledPostsTable: React.FC = () => {
         order: sortOrder,
       })
       setData(json)
-    }
-    catch {}
+    } catch {}
     setLoading(false)
   }
 
@@ -91,12 +89,10 @@ const ScheduledPostsTable: React.FC = () => {
       if (json.success) {
         message.success('재시도 요청 완료')
         fetchData()
-      }
-      else {
+      } else {
         message.error(json.message || '재시도 실패')
       }
-    }
-    catch {
+    } catch {
       message.error('재시도 실패')
     }
   }
@@ -107,12 +103,10 @@ const ScheduledPostsTable: React.FC = () => {
       if (json.success) {
         message.success('작업이 삭제되었습니다')
         fetchData()
-      }
-      else {
+      } else {
         message.error(json.message || '삭제 실패')
       }
-    }
-    catch {
+    } catch {
       message.error('삭제 실패')
     }
   }
@@ -130,12 +124,7 @@ const ScheduledPostsTable: React.FC = () => {
         <Space size="middle" wrap>
           <Space>
             <span>상태 필터:</span>
-            <Select
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={statusOptions}
-              style={{ width: 120 }}
-            />
+            <Select value={statusFilter} onChange={setStatusFilter} options={statusOptions} style={{ width: 120 }} />
           </Space>
           <Space>
             <span>검색:</span>
@@ -225,13 +214,14 @@ const ScheduledPostsTable: React.FC = () => {
             sorter: true,
             align: 'center',
             render: (url: string) => (
-              <span style={{
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                background: '#f5f5f5',
-                padding: '2px 6px',
-                borderRadius: '4px',
-              }}
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  background: '#f5f5f5',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
               >
                 {extractGalleryId(url)}
               </span>
@@ -242,9 +232,7 @@ const ScheduledPostsTable: React.FC = () => {
             dataIndex: 'scheduledAt',
             width: 160,
             render: (v: string) => (
-              <span style={{ fontSize: '12px', color: '#666' }}>
-                {new Date(v).toLocaleString('ko-KR')}
-              </span>
+              <span style={{ fontSize: '12px', color: '#666' }}>{new Date(v).toLocaleString('ko-KR')}</span>
             ),
             sorter: true,
           },
@@ -254,11 +242,14 @@ const ScheduledPostsTable: React.FC = () => {
             width: 100,
             sorter: true,
             align: 'center',
-            render: (text: string) => text
-              ? (
-                  <Tag color="blue" style={{ fontSize: '11px' }}>{text}</Tag>
-                )
-              : '-',
+            render: (text: string) =>
+              text ? (
+                <Tag color="blue" style={{ fontSize: '11px' }}>
+                  {text}
+                </Tag>
+              ) : (
+                '-'
+              ),
           },
           {
             title: '액션',
@@ -269,12 +260,7 @@ const ScheduledPostsTable: React.FC = () => {
             render: (_: any, row: PostJob) => (
               <Space size="small">
                 {row.status === 'failed' && (
-                  <Button
-                    type="primary"
-                    size="small"
-                    onClick={() => handleRetry(row.id)}
-                    style={{ fontSize: '11px' }}
-                  >
+                  <Button type="primary" size="small" onClick={() => handleRetry(row.id)} style={{ fontSize: '11px' }}>
                     재시도
                   </Button>
                 )}
@@ -285,11 +271,7 @@ const ScheduledPostsTable: React.FC = () => {
                     okText="삭제"
                     cancelText="취소"
                   >
-                    <Button
-                      danger
-                      size="small"
-                      style={{ fontSize: '11px' }}
-                    >
+                    <Button danger size="small" style={{ fontSize: '11px' }}>
                       삭제
                     </Button>
                   </Popconfirm>

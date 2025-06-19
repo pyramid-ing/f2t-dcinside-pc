@@ -42,11 +42,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
       dataIndex: 'success',
       key: 'status',
       width: 80,
-      render: (success: boolean) => (
-        <Tag color={success ? 'success' : 'error'}>
-          {success ? '성공' : '실패'}
-        </Tag>
-      ),
+      render: (success: boolean) => <Tag color={success ? 'success' : 'error'}>{success ? '성공' : '실패'}</Tag>,
     },
     {
       title: '결과 메시지',
@@ -83,15 +79,12 @@ const UploadDcinsideExcelForm: React.FC = () => {
 
             if (successCount === totalCount) {
               message.success(`모든 ${totalCount}개 항목이 성공적으로 처리되었습니다.`)
-            }
-            else {
+            } else {
               message.warning(`${totalCount}개 중 ${successCount}개 성공, ${totalCount - successCount}개 실패`)
             }
-          }
-          catch (e: any) {
+          } catch (e: any) {
             message.error(e.message || '업로드에 실패했습니다.')
-          }
-          finally {
+          } finally {
             setLoading(false)
           }
         }}
@@ -99,7 +92,10 @@ const UploadDcinsideExcelForm: React.FC = () => {
       >
         <Form.Item label="엑셀 파일 업로드" required>
           <Upload
-            beforeUpload={(file) => { setFile(file); return false }}
+            beforeUpload={file => {
+              setFile(file)
+              return false
+            }}
             maxCount={1}
             accept=".xlsx"
             showUploadList={!!file}
@@ -126,10 +122,9 @@ const UploadDcinsideExcelForm: React.FC = () => {
               pageSize: 10,
               showSizeChanger: true,
               showQuickJumper: true,
-              showTotal: (total, range) =>
-                `${range[0]}-${range[1]} / 총 ${total}개 항목`,
+              showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개 항목`,
             }}
-            summary={(pageData) => {
+            summary={pageData => {
               const successCount = pageData.filter(item => item.success).length
               const failureCount = pageData.length - successCount
 

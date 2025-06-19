@@ -22,12 +22,9 @@ const AppSidebar: React.FC = () => {
   const location = useLocation()
 
   const getSelectedKey = () => {
-    if (location.pathname === '/')
-      return '1'
-    if (location.pathname === '/scheduled-posts')
-      return '2'
-    if (location.pathname === '/settings')
-      return '3'
+    if (location.pathname === '/') return '1'
+    if (location.pathname === '/scheduled-posts') return '2'
+    if (location.pathname === '/settings') return '3'
     return '1'
   }
 

@@ -9,8 +9,7 @@ import axios from 'axios'
 const API_BASE_URL = 'http://localhost:3554'
 
 // 에러 코드 enum
-export enum ErrorCode {
-}
+export enum ErrorCode {}
 
 // 정규화된 에러 응답 타입
 export interface ErrorResponse {
@@ -69,8 +68,7 @@ export function getErrorDetails(error: any): string | undefined {
     for (const [key, value] of Object.entries(details)) {
       if (typeof value === 'boolean') {
         detailStrings.push(`${key}: ${value ? '있음' : '없음'}`)
-      }
-      else if (typeof value === 'string' || typeof value === 'number') {
+      } else if (typeof value === 'string' || typeof value === 'number') {
         detailStrings.push(`${key}: ${value}`)
       }
     }

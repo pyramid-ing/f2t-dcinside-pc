@@ -55,15 +55,14 @@ export class DcinsideWorkflowService {
     }
 
     // 각 행을 posting params로 변환
-    const postList: DcinsidePostParams[] = rows.map((row) => {
+    const postList: DcinsidePostParams[] = rows.map(row => {
       const mappedRow: any = {}
       Object.entries(colMap).forEach(([kor, eng]) => {
-        if (row[kor as keyof ExcelRow] !== undefined)
-          mappedRow[eng] = row[kor as keyof ExcelRow]
+        if (row[kor as keyof ExcelRow] !== undefined) mappedRow[eng] = row[kor as keyof ExcelRow]
       })
       // 이미지경로1,2,3... 배열로 합치기
       mappedRow.imagePaths = []
-      Object.keys(mappedRow).forEach((key) => {
+      Object.keys(mappedRow).forEach(key => {
         if (key !== 'imagePaths' && key.startsWith('imagePath') && mappedRow[key]) {
           let imgPath = mappedRow[key]
           if (!path.isAbsolute(imgPath)) {
@@ -127,8 +126,7 @@ export class DcinsideWorkflowService {
         const isScheduled = row.scheduledAt && dayjs(row.scheduledAt).isAfter(dayjs())
         const messageType = isScheduled ? '예약 등록' : '즉시 등록'
         results.push({ ...row, success: true, message: messageType, postJobId: scheduled.id })
-      }
-      catch (e) {
+      } catch (e) {
         results.push({ ...row, success: false, message: `등록 실패: ${e.message}` })
       }
     }

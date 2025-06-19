@@ -13,7 +13,9 @@ export class EnvConfig {
   public static isPackaged = app?.isPackaged || false
   public static userDataPath = EnvConfig.isPackaged ? app.getPath('userData') : process.cwd()
   public static resourcePath = EnvConfig.isPackaged ? process.resourcesPath : process.cwd()
-  public static dbPath = EnvConfig.isPackaged ? path.join(EnvConfig.resourcePath, 'resources', 'initial.sqlite') : './db.sqlite'
+  public static dbPath = EnvConfig.isPackaged
+    ? path.join(EnvConfig.resourcePath, 'resources', 'initial.sqlite')
+    : './db.sqlite'
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
   private static engineName = ''

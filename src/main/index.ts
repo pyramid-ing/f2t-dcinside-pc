@@ -32,18 +32,15 @@ function setupIpcHandlers() {
 async function electronAppInit() {
   const isDev = !app.isPackaged
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin')
-      app.quit()
+    if (process.platform !== 'darwin') app.quit()
   })
 
   if (isDev) {
     if (process.platform === 'win32') {
-      process.on('message', (data) => {
-        if (data === 'graceful-exit')
-          app.quit()
+      process.on('message', data => {
+        if (data === 'graceful-exit') app.quit()
       })
-    }
-    else {
+    } else {
       process.on('SIGTERM', () => {
         app.quit()
       })
@@ -105,8 +102,7 @@ async function bootstrap() {
     await app.listen(3554)
 
     console.log('NestJS HTTP server is running on port 3554')
-  }
-  catch (error) {
+  } catch (error) {
     console.log(error)
     app.quit()
   }

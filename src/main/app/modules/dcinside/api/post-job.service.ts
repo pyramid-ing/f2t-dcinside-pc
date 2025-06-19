@@ -9,10 +9,9 @@ import { PostJobSchema } from './dto/schemas'
 @Injectable()
 export class PostJobService {
   private readonly logger = new Logger(PostJobService.name)
-  constructor(private readonly prismaService: PrismaService) {
-  }
+  constructor(private readonly prismaService: PrismaService) {}
 
-  private validateImagePaths(imagePaths: string[]): { valid: string[], errors: string[] } {
+  private validateImagePaths(imagePaths: string[]): { valid: string[]; errors: string[] } {
     const valid: string[] = []
     const errors: string[] = []
 
@@ -33,8 +32,7 @@ export class PostJobService {
         }
 
         valid.push(imagePath)
-      }
-      catch (error) {
+      } catch (error) {
         errors.push(`파일 접근 오류: ${imagePath} - ${error.message}`)
       }
     }
@@ -42,7 +40,7 @@ export class PostJobService {
     return { valid, errors }
   }
 
-  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: PostJobDto, errors: string[] } {
+  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: PostJobDto; errors: string[] } {
     const errors: string[] = []
 
     try {
@@ -60,13 +58,11 @@ export class PostJobService {
       }
 
       return { sanitizedDto, errors }
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
         errors.push(...zodErrors)
-      }
-      else {
+      } else {
         errors.push(`검증 오류: ${error.message}`)
       }
       return { sanitizedDto: null as any, errors }
@@ -100,12 +96,7 @@ export class PostJobService {
   }
 
   // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
-  async getPostJobs(options?: {
-    status?: string
-    search?: string
-    orderBy?: string
-    order?: 'asc' | 'desc'
-  }) {
+  async getPostJobs(options?: { status?: string; search?: string; orderBy?: string; order?: 'asc' | 'desc' }) {
     const where: any = {}
 
     // 상태 필터

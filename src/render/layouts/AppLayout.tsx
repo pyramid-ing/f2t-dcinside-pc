@@ -31,9 +31,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <AppSidebar />
       <Layout>
         <AppHeader />
-        <StyledContent>
-          {children}
-        </StyledContent>
+        <StyledContent>{children}</StyledContent>
       </Layout>
     </StyledLayout>
   )

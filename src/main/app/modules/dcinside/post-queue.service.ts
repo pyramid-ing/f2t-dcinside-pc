@@ -23,7 +23,7 @@ export class PostQueueService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  private async getAppSettings(): Promise<{ showBrowserWindow: boolean, taskDelay: number }> {
+  private async getAppSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
     try {
       const setting = await this.settingsService.findByKey('app')
       const data = setting?.data as any
@@ -31,8 +31,7 @@ export class PostQueueService {
         showBrowserWindow: data?.showBrowserWindow ?? true,
         taskDelay: data?.taskDelay ?? 10,
       }
-    }
-    catch {
+    } catch {
       return { showBrowserWindow: true, taskDelay: 10 }
     }
   }
@@ -57,8 +56,7 @@ export class PostQueueService {
     try {
       // Zod로 검증 및 변환
       return DcinsidePostSchema.parse(rawParams)
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
         throw new Error(`큐 파라미터 검증 실패: ${zodErrors.join(', ')}`)
@@ -101,15 +99,9 @@ export class PostQueueService {
           ...queueItem.params,
           headless,
         })
-        await this.postJobService.updateStatusWithUrl(
-          queueItem.id,
-          'completed',
-          result.message,
-          result.url,
-        )
+        await this.postJobService.updateStatusWithUrl(queueItem.id, 'completed', result.message, result.url)
         this.logger.log(`포스팅 완료: ID ${queueItem.id}, URL: ${result.url}`)
-      }
-      catch (error) {
+      } catch (error) {
         await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)
         this.logger.error(`포스팅 실패: ID ${queueItem.id} - ${error.message}`)
       }

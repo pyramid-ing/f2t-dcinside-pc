@@ -6,12 +6,12 @@ import SettingsTabs from '../features/settings/SettingsTabs'
 const Settings: React.FC = () => {
   return (
     <PageContainer
-      title={(
+      title={
         <span>
           <SettingOutlined style={{ marginRight: 8 }} />
           설정
         </span>
-      )}
+      }
       maxWidth="1000px"
       centered
     >

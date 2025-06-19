@@ -28,15 +28,13 @@ export class CookieService {
 
   loadCookies(serviceName: string, id: string): any[] | null {
     const filePath = this.getCookiePath(serviceName, id)
-    if (!fs.existsSync(filePath))
-      return null
+    if (!fs.existsSync(filePath)) return null
     const data = fs.readFileSync(filePath, 'utf-8')
     return JSON.parse(data)
   }
 
   deleteCookies(serviceName: string, id: string): void {
     const filePath = this.getCookiePath(serviceName, id)
-    if (fs.existsSync(filePath))
-      fs.unlinkSync(filePath)
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
   }
 }

@@ -24,12 +24,9 @@ export class SettingsService {
   // key를 id로 변환 (간단 매핑, 실제 운영시 key 컬럼 추가 권장)
   private keyToId(key: string): number {
     // 예시: 'instagram' -> 100, 필요시 매핑 확장
-    if (key === 'instagram')
-      return 100
-    if (key === 'global')
-      return 2
-    if (key === 'app')
-      return 1
+    if (key === 'instagram') return 100
+    if (key === 'global') return 2
+    if (key === 'app') return 1
     return 9999 // 기타
   }
 }

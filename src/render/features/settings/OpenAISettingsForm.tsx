@@ -6,7 +6,7 @@ const OpenAISettingsForm: React.FC = () => {
   const [form] = Form.useForm()
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const key = await getOpenAIApiKeyFromServer()
       form.setFieldsValue({ openAIApiKey: key })
     })()
@@ -16,8 +16,7 @@ const OpenAISettingsForm: React.FC = () => {
     try {
       await saveOpenAIApiKeyToServer(values.openAIApiKey)
       message.success('OpenAI API 키가 저장되었습니다.')
-    }
-    catch {
+    } catch {
       message.error('저장에 실패했습니다.')
     }
   }
@@ -25,12 +24,7 @@ const OpenAISettingsForm: React.FC = () => {
   return (
     <div>
       <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>OpenAI 설정</h3>
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={onFinish}
-        style={{ maxWidth: 400 }}
-      >
+      <Form form={form} layout="vertical" onFinish={onFinish} style={{ maxWidth: 400 }}>
         <Form.Item
           label="OpenAI API 키"
           name="openAIApiKey"

@@ -1,8 +1,6 @@
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common'
 import type { HttpAdapterHost } from '@nestjs/core'
-import type {
-  ErrorResponse,
-} from './error.types'
+import type { ErrorResponse } from './error.types'
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common'
 import { AxiosError } from 'axios'
 import {
@@ -71,8 +69,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof GoogleTokenError) {
+    } else if (exception instanceof GoogleTokenError) {
       statusCode = exception.details.additionalInfo?.isExpired ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN
       message = exception.message
       error = 'Google 토큰 오류'
@@ -83,8 +80,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof GoogleIndexerError) {
+    } else if (exception instanceof GoogleIndexerError) {
       statusCode = HttpStatus.BAD_GATEWAY
       message = exception.message
       error = 'Google 인덱싱 실패'
@@ -95,8 +91,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof GoogleBloggerError) {
+    } else if (exception instanceof GoogleBloggerError) {
       statusCode = HttpStatus.BAD_GATEWAY
       message = exception.message
       error = 'Google Blogger API 오류'
@@ -107,8 +102,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof GoogleConfigError) {
+    } else if (exception instanceof GoogleConfigError) {
       statusCode = HttpStatus.BAD_REQUEST
       message = exception.message
       error = 'Google 설정 오류'
@@ -132,8 +126,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof BingSubmissionError) {
+    } else if (exception instanceof BingSubmissionError) {
       statusCode = HttpStatus.BAD_GATEWAY
       message = exception.message
       error = 'Bing 제출 실패'
@@ -144,8 +137,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof BingConfigError) {
+    } else if (exception instanceof BingConfigError) {
       statusCode = HttpStatus.BAD_REQUEST
       message = exception.message
       error = 'Bing 설정 오류'
@@ -169,8 +161,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof NaverLoginError) {
+    } else if (exception instanceof NaverLoginError) {
       statusCode = HttpStatus.UNAUTHORIZED
       message = exception.message
       error = 'Naver 로그인 필요'
@@ -181,8 +172,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof NaverSubmissionError) {
+    } else if (exception instanceof NaverSubmissionError) {
       statusCode = HttpStatus.BAD_GATEWAY
       message = exception.message
       error = 'Naver 제출 실패'
@@ -193,8 +183,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof NaverBrowserError) {
+    } else if (exception instanceof NaverBrowserError) {
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR
       message = exception.message
       error = 'Naver 브라우저 오류'
@@ -218,8 +207,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof DaumSubmissionError) {
+    } else if (exception instanceof DaumSubmissionError) {
       statusCode = HttpStatus.BAD_GATEWAY
       message = exception.message
       error = 'Daum 제출 실패'
@@ -230,8 +218,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ...exception.details,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof DaumConfigError) {
+    } else if (exception instanceof DaumConfigError) {
       statusCode = HttpStatus.BAD_REQUEST
       message = exception.message
       error = 'Daum 설정 오류'
@@ -253,8 +240,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         category: exception.category,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof BlogPostError) {
+    } else if (exception instanceof BlogPostError) {
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR
       message = exception.message
       error = exception.name
@@ -263,8 +249,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         postData: exception.postData,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof VideoGenerationError) {
+    } else if (exception instanceof VideoGenerationError) {
       statusCode = HttpStatus.INTERNAL_SERVER_ERROR
       message = exception.message
       error = exception.name
@@ -273,19 +258,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         inputData: exception.inputData,
         stack: this.formatStackTrace(exception.stack),
       }
-    }
-    else if (exception instanceof HttpException) {
+    } else if (exception instanceof HttpException) {
       statusCode = exception.getStatus()
       const response = exception.getResponse()
       if (typeof response === 'object') {
         message = (response as any).message || message
         error = (response as any).error || error
-      }
-      else {
+      } else {
         message = response
       }
-    }
-    else if (exception instanceof AxiosError) {
+    } else if (exception instanceof AxiosError) {
       statusCode = exception.response?.status || HttpStatus.BAD_GATEWAY
       message = this.getAxiosErrorMessage(exception)
       error = 'External API Error'
@@ -295,8 +277,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         response: exception.response?.data,
         code: exception.code,
       }
-    }
-    else if (exception instanceof Error) {
+    } else if (exception instanceof Error) {
       message = exception.message
       error = exception.name
       details = {
@@ -389,27 +370,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (error.response) {
       // 서버가 2xx 범위를 벗어난 상태 코드로 응답한 경우
       return `External API responded with status ${error.response.status}: ${error.message}`
-    }
-    else if (error.request) {
+    } else if (error.request) {
       // 요청은 보냈지만 응답을 받지 못한 경우
       return 'No response received from external API'
-    }
-    else {
+    } else {
       // 요청 설정 중에 문제가 발생한 경우
       return `Error setting up the request: ${error.message}`
     }
   }
 
   private formatStackTrace(stack: string | undefined): string[] | undefined {
-    if (!stack)
-      return undefined
+    if (!stack) return undefined
 
     return stack
       .split('\n')
       .slice(1) // 첫 번째 줄(에러 메시지) 제외
       .map(line => line.trim())
       .filter(line => !line.includes('node_modules')) // node_modules 경로 제외
-      .map((line) => {
+      .map(line => {
         // 파일 경로에서 프로젝트 루트 기준 상대 경로만 표시
         const match = line.match(/\((.+)\)/)
         if (match) {
