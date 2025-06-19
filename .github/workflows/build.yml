@@ -4,94 +4,62 @@ on:
   push:
     branches:
       - master
-    tags:
-      - 'v*.*.*' # v1.0.0, v1.2.3 등의 태그가 푸시될 때 실행
-  workflow_dispatch: # 수동 실행 가능
-
-# GitHub Actions 워크플로우에 명시적 권한 부여
-permissions:
-  contents: write  # 릴리즈 생성 및 파일 업로드 권한
-  issues: write    # 이슈 생성/수정 권한 (선택사항)
-  pull-requests: write  # PR 생성/수정 권한 (선택사항)
 
 jobs:
   build:
-    # 윈도우만 실행하도록 변경
     runs-on: windows-latest
 
     steps:
       # 1. 리포지토리 클론
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       # 2. Node.js 환경 설정
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # 3. pnpm 설치 - 타임아웃 및 재시도 설정
+      # 3. pnpm 설치
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v2
         with:
           version: 10.12.1
-          run_install: false # 자동 설치 비활성화
 
-      # 4. pnpm 캐시 설정
-      - name: Get pnpm store directory
-        shell: pwsh
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
+      # 4. 캐시 활성화
+      - name: Cache pnpm modules
+        uses: actions/cache@v3
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            ${{ runner.os }}-pnpm-
 
-      # 5. pnpm 의존성 설치 - 타임아웃 및 재시도 설정
+      # 5. pnpm 의존성 설치 (루트)
       - name: Install dependencies
-        shell: pwsh
         run: |
-          pnpm config set network-timeout 300000
-          pnpm config set fetch-retries 5
-          pnpm config set fetch-retry-factor 2
-          pnpm config set fetch-retry-mintimeout 10000
-          pnpm config set fetch-retry-maxtimeout 60000
-          pnpm install --frozen-lockfile --prefer-offline
+          pnpm install
 
       # 6. Prisma Client 생성
       - name: Generate Prisma Client
         run: pnpm prisma generate
 
-      # 7. 초기 DB 빌드
-      - name: Build initial database
-        shell: pwsh
-        run: |
-          $tmpDbPath = "$(Get-Location)\prisma\tmp-initial.sqlite"
-          $env:DATABASE_URL = "file:$tmpDbPath"
-          node scripts/build-initial-db.js
+      # 7. (필요시) Prisma 마이그레이션/시드
+      # - name: Run Prisma Migrate
+      #   run: pnpm prisma migrate deploy
+      # - name: Seed Database
+      #   run: pnpm prisma db seed
 
-      # 8. Electron 앱 빌드 및 배포
-      - name: Build and Release
+      # 8. Electron 빌드 (스크립트명에 맞게 수정)
+      - name: Build Windows App
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: pnpm build
         shell: pwsh
-        run: |
-          if ($env:GITHUB_REF -like "refs/tags/*") {
-            Write-Host "Tag detected, building and publishing release..."
-            pnpm build
-          } else {
-            Write-Host "No tag detected, building without publishing..."
-            pnpm build --publish=never
-          }
 
-      # 9. 빌드된 파일 업로드 (태그가 아닌 경우)
+      # 9. 빌드된 파일 업로드
       - name: Upload Artifacts
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: f2t-dcinside-pc-windows
+          name: f2t-dcinside-pc
           path: dist/electron
