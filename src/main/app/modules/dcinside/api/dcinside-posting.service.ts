@@ -10,11 +10,18 @@ import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-import { ZodError } from 'zod'
+import { ZodError } from 'zod/v4'
 
 puppeteer.use(StealthPlugin())
 
 export type DcinsidePostParams = DcinsidePostDto
+
+type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
+
+interface GalleryInfo {
+  id: string
+  type: GalleryType
+}
 
 @Injectable()
 export class DcinsidePostingService {
@@ -30,10 +37,51 @@ export class DcinsidePostingService {
       return DcinsidePostSchema.parse(rawParams)
     } catch (error) {
       if (error instanceof ZodError) {
-        const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
+        const zodErrors = error.issues.map(err => `${err.path.join('.')}: ${err.message}`)
         throw new Error(`포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`)
       }
       throw new Error(`포스팅 파라미터 검증 실패: ${error.message}`)
+    }
+  }
+
+  private extractGalleryInfo(galleryUrl: string): GalleryInfo {
+    // URL에서 id 파라미터 추출
+    const urlMatch = galleryUrl.match(/[?&]id=([^&]+)/)
+    if (!urlMatch) {
+      throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
+    }
+    const id = urlMatch[1]
+
+    // 갤러리 타입 판별
+    let type: GalleryType
+    if (galleryUrl.includes('/mgallery/')) {
+      type = 'mgallery'
+    } else if (galleryUrl.includes('/mini/')) {
+      type = 'mini'
+    } else if (galleryUrl.includes('/person/')) {
+      type = 'person'
+    } else {
+      type = 'board' // 일반갤러리
+    }
+
+    this.logger.log(`갤러리 정보 추출: ID=${id}, Type=${type}`)
+    return { id, type }
+  }
+
+  private buildGalleryUrl(galleryInfo: GalleryInfo): string {
+    const { id, type } = galleryInfo
+
+    switch (type) {
+      case 'board':
+        return `https://gall.dcinside.com/board/lists/?id=${id}`
+      case 'mgallery':
+        return `https://gall.dcinside.com/mgallery/board/lists/?id=${id}`
+      case 'mini':
+        return `https://gall.dcinside.com/mini/board/lists/?id=${id}`
+      case 'person':
+        return `https://gall.dcinside.com/person/board/lists/?id=${id}`
+      default:
+        throw new Error(`지원하지 않는 갤러리 타입: ${type}`)
     }
   }
 
@@ -422,11 +470,11 @@ export class DcinsidePostingService {
     return currentUrl
   }
 
-  private async navigateToWritePage(page: Page, galleryId: string): Promise<void> {
+  private async navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
     const success = await retry(
       async () => {
-        const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
-        this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl}`)
+        const listUrl = this.buildGalleryUrl(galleryInfo)
+        this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
 
         await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
 
@@ -461,10 +509,8 @@ export class DcinsidePostingService {
       // 0. 파라미터 검증
       const params = this.validateParams(rawParams)
 
-      // 1. 갤러리 id 추출
-      const match = params.galleryUrl.match(/id=(\w+)/)
-      if (!match) throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
-      const galleryId = match[1]
+      // 1. 갤러리 정보 추출 (id와 타입)
+      const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
 
       const launchOptions: any = {
         headless: params.headless ?? true,
@@ -493,7 +539,7 @@ export class DcinsidePostingService {
       }
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
-      await this.navigateToWritePage(page, galleryId)
+      await this.navigateToWritePage(page, galleryInfo)
 
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
