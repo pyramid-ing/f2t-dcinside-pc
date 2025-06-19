@@ -16,11 +16,8 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    
-    runs-on: ${{ matrix.os }}
+    # 윈도우만 실행하도록 변경
+    runs-on: windows-latest
 
     steps:
       # 1. 리포지토리 클론
@@ -33,24 +30,37 @@ jobs:
         with:
           node-version: 20
 
-      # 3. pnpm 설치
+      # 3. pnpm 설치 - 타임아웃 및 재시도 설정
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.12.1
+          run_install: false # 자동 설치 비활성화
 
-      # 4. 캐시 활성화
-      - name: Cache pnpm modules
+      # 4. pnpm 캐시 설정
+      - name: Get pnpm store directory
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
+
+      - name: Setup pnpm cache
         uses: actions/cache@v4
         with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-
+            ${{ runner.os }}-pnpm-store-
 
-      # 5. pnpm 의존성 설치
+      # 5. pnpm 의존성 설치 - 타임아웃 및 재시도 설정
       - name: Install dependencies
-        run: pnpm install
+        shell: pwsh
+        run: |
+          pnpm config set network-timeout 300000
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-retry-factor 2
+          pnpm config set fetch-retry-mintimeout 10000
+          pnpm config set fetch-retry-maxtimeout 60000
+          pnpm install --frozen-lockfile --prefer-offline
 
       # 6. Prisma Client 생성
       - name: Generate Prisma Client
@@ -64,20 +74,20 @@ jobs:
       - name: Build and Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "Tag detected, building and publishing release..."
+          if ($env:GITHUB_REF -like "refs/tags/*") {
+            Write-Host "Tag detected, building and publishing release..."
             pnpm build
-          else
-            echo "No tag detected, building without publishing..."
+          } else {
+            Write-Host "No tag detected, building without publishing..."
             pnpm build --publish=never
-          fi
-        shell: bash
+          }
 
       # 9. 빌드된 파일 업로드 (태그가 아닌 경우)
       - name: Upload Artifacts
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: f2t-dcinside-pc-${{ matrix.os }}
+          name: f2t-dcinside-pc-windows
           path: dist/electron
