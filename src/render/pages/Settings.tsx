@@ -1,13 +1,14 @@
 import { SettingOutlined } from '@ant-design/icons'
 import { Card, message, Tabs, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
+import AppSettingsForm from '../components/settings/AppSettingsForm'
 import OpenAISettingsForm from '../components/settings/OpenAISettingsForm'
 
 const { Title } = Typography
 
 const Settings: React.FC = () => {
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('openai')
+  const [activeTab, setActiveTab] = useState('app')
 
   useEffect(() => {
     loadSettings()
@@ -42,6 +43,11 @@ const Settings: React.FC = () => {
           type="card"
           size="large"
           items={[
+            {
+              key: 'app',
+              label: '앱 설정',
+              children: <AppSettingsForm />,
+            },
             {
               key: 'openai',
               label: 'OpenAI',

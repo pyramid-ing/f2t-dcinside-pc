@@ -34,4 +34,32 @@ export class SettingsController {
       return { success: false, error: error.message }
     }
   }
+
+  @Get('app')
+  async getAppSettings() {
+    try {
+      const setting = await this.settingsService.findByKey('app')
+      const defaultSettings = {
+        showBrowserWindow: true, // 기본값: 창보임
+        taskDelay: 10, // 기본값: 10초
+      }
+      return { success: true, data: setting?.data || defaultSettings }
+    }
+    catch (error) {
+      this.logger.error('앱 설정 조회 실패:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  @Post('app')
+  async saveAppSettings(@Body() data: any) {
+    try {
+      await this.settingsService.saveByKey('app', data)
+      return { success: true }
+    }
+    catch (error) {
+      this.logger.error('앱 설정 저장 실패:', error)
+      return { success: false, error: error.message }
+    }
+  }
 }

@@ -95,6 +95,22 @@ export async function getOpenAIApiKeyFromServer(): Promise<string> {
 }
 
 // ------------------------------
+// App Settings API
+// ------------------------------
+
+import type { AppSettings } from './types/settings'
+
+export async function saveAppSettingsToServer(settings: AppSettings) {
+  const res = await axios.post(`${API_BASE_URL}/settings/app`, settings)
+  return res.data
+}
+
+export async function getAppSettingsFromServer(): Promise<AppSettings> {
+  const res = await axios.get(`${API_BASE_URL}/settings/app`)
+  return res.data?.data || { showBrowserWindow: true, taskDelay: 10 }
+}
+
+// ------------------------------
 // PostJob (예약/작업) API
 // ------------------------------
 
