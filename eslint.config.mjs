@@ -16,14 +16,13 @@ export default [
       'js_test',
       'local-data',
       'prisma/**',
-      'tailwind.config.js',
       'electron-builder.config.cjs',
       'scripts/**',
     ],
   },
   {
     files: ['**/*.{js,ts,tsx}'],
-    ignores: ['**/*.d.ts', 'prisma/**', 'tailwind.config.js', 'scripts/**'],
+    ignores: ['**/*.d.ts', 'prisma/**', 'scripts/**'],
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {
