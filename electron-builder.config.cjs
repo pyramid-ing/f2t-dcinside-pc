@@ -3,8 +3,8 @@
  * @see https://www.electron.build/configuration/configuration
  */
 const config = {
-  appId: 'com.f2t.insta',
-  productName: 'winsoft-insta',
+  appId: 'com.winsoft.dcinside',
+  productName: 'winsoft-dcinside',
   directories: {
     output: 'dist/electron',
   },
@@ -13,7 +13,7 @@ const config = {
     {
       provider: 'github',
       owner: 'pyramid-ing',
-      repo: 'f2t-insta-pc',
+      repo: 'f2t-dcinside-pc',
       releaseType: 'release',
     },
   ],

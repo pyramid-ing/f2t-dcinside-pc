@@ -1,9 +1,9 @@
 {
-  "name": "winsoft-insta",
+  "name": "winsoft-dcinside",
   "type": "module",
   "version": "1.0.1",
   "packageManager": "pnpm@10.12.1",
-  "description": "인스타 관련 자동 프로그램입니다.",
+  "description": "DC 관련 자동 포스팅 프로그램입니다.",
   "main": "dist/main/index.cjs",
   "scripts": {
     "dev": "rimraf dist && vite",
