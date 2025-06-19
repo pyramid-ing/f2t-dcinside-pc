@@ -47,6 +47,8 @@ node_modules/
 tasks.json
 tasks/
 
+resources/initial.sqlite
+
 # Prisma Studio cache
 .prisma/
 
