@@ -74,6 +74,216 @@ export class DcinsidePostingService {
     await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
   }
 
+  private async inputPassword(page: Page, password: string): Promise<void> {
+    if (await page.$('#password')) {
+      await page.type('#password', password.toString(), { delay: 30 })
+    }
+  }
+
+  private async inputTitle(page: Page, title: string): Promise<void> {
+    await page.waitForSelector('#subject', { timeout: 10000 })
+    await page.type('#subject', title, { delay: 30 })
+  }
+
+  private async selectHeadtext(page: Page, headtext: string): Promise<void> {
+    await page.waitForSelector('.subject_list li', { timeout: 5000 })
+    await page.evaluate((headtext) => {
+      const items = Array.from(document.querySelectorAll('.subject_list li'))
+      const target = items.find(
+        li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
+      )
+      if (target)
+        (target as HTMLElement).click()
+    }, headtext)
+    await sleep(300)
+  }
+
+  private async inputContent(page: Page, contentHtml: string): Promise<void> {
+    await page.waitForSelector('#chk_html', { timeout: 10000 })
+    // 코드뷰(HTML) 모드로 전환
+    const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
+    if (!htmlChecked) {
+      await page.click('#chk_html')
+      await new Promise(res => setTimeout(res, 300))
+    }
+    // textarea.note-codable에 HTML 입력
+    await page.waitForSelector('.note-codable', { timeout: 5000 })
+    await page.evaluate((html) => {
+      const textarea = document.querySelector('.note-codable') as HTMLTextAreaElement
+      if (textarea) {
+        textarea.value = html
+        // input 이벤트 트리거
+        const event = new Event('input', { bubbles: true })
+        textarea.dispatchEvent(event)
+      }
+    }, contentHtml)
+    await new Promise(res => setTimeout(res, 300))
+    // 코드뷰 해제 (WYSIWYG로 복귀)
+    const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
+    if (htmlChecked2) {
+      await page.click('#chk_html')
+      await new Promise(res => setTimeout(res, 300))
+    }
+  }
+
+  private async uploadImages(page: Page, browser: any, imagePaths: string[]): Promise<void> {
+    // 1. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
+    await page.click('button[aria-label="이미지"]')
+    // 2. 팝업 window 감지 (input.file_add)
+    const popup = await new Promise<Page>(async (resolve, reject) => {
+      browser.once('targetcreated', async (target: any) => {
+        const popupPage = await target.page()
+        if (popupPage)
+          resolve(popupPage)
+        else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
+      })
+    })
+    await popup.waitForSelector('input.file_add', { timeout: 10000 })
+    // 3. 파일 업로드 (여러 파일 한 번에)
+    await sleep(3000)
+    const input = await popup.$('input.file_add')
+    if (!input)
+      throw new Error('이미지 업로드 input을 찾을 수 없습니다.')
+    await input.uploadFile(...imagePaths)
+    await sleep(3000)
+    const btnApply = await popup.$('.btn_apply')
+    await btnApply.click()
+  }
+
+  private async inputNickname(page: Page, nickname: string): Promise<void> {
+    if (await page.$('#gall_nick_name')) {
+      // 닉네임 input이 readonly인지 확인
+      await page.waitForSelector('#gall_nick_name', { timeout: 10000 })
+      const isReadonly = await page.$eval('#gall_nick_name', el => el.hasAttribute('readonly'))
+      if (isReadonly) {
+        // x버튼 클릭해서 닉네임 입력란 활성화
+        const xBtn = await page.$('#btn_gall_nick_name_x')
+        if (xBtn) {
+          await xBtn.click()
+          await new Promise(res => setTimeout(res, 300))
+        }
+      }
+      // 닉네임 입력란이 활성화되었으면 입력
+      await page.evaluate(() => {
+        const el = document.getElementById('gall_nick_name')
+        if (el)
+          el.removeAttribute('readonly')
+      })
+      await page.click('#name', { clickCount: 3 })
+      await page.type('#name', nickname, { delay: 30 })
+    }
+  }
+
+  private async submitPostAndHandleErrors(page: Page): Promise<void> {
+    const captchaErrorMessages = [
+      '자동입력 방지코드가 일치하지 않습니다.',
+      'code은(는) 영문-숫자 조합이어야 합니다.',
+    ]
+    let captchaTryCount = 0
+
+    while (true) {
+      await this.solveCapcha(page)
+
+      // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
+      await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
+
+      // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
+      const dialogPromise: Promise<string | null> = new Promise((resolve) => {
+        const handler = async (dialog: any) => {
+          const msg = dialog.message()
+          await dialog.accept()
+          resolve(msg)
+        }
+        page.once('dialog', handler)
+        setTimeout(() => resolve(null), 8000)
+      })
+
+      await page.click('button.btn_blue.btn_svc.write')
+
+      // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
+      const dialogMessage = await Promise.race([
+        dialogPromise,
+        page.waitForNavigation({ timeout: 10000 }).then(() => null).catch(() => null),
+      ])
+
+      // 알림창이 떴을 경우 처리
+      if (dialogMessage) {
+        // 캡챠 오류 메시지일 경우에만 재시도
+        if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
+          captchaTryCount += 1
+          if (captchaTryCount >= 3)
+            throw new Error('캡챠 해제 실패(3회 시도)')
+
+          // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
+          try {
+            await page.evaluate(() => {
+              const img = document.getElementById('kcaptcha') as HTMLImageElement | null
+              if (img)
+                img.click()
+            })
+          }
+          catch {}
+
+          await sleep(1000)
+          continue // while – 다시 등록 버튼 클릭 시도
+        }
+        else {
+          // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
+          throw new Error(`글 등록 실패: ${dialogMessage}`)
+        }
+      }
+
+      // dialog가 없으면 성공으로 간주하고 루프 탈출
+      break
+    }
+  }
+
+  private async extractPostUrl(page: Page, title: string): Promise<string> {
+    const currentUrl = page.url()
+    let postUrl = null
+    try {
+      // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
+      await page.waitForSelector('table.gall_list', { timeout: 10000 })
+      postUrl = await page.evaluate((title) => {
+        const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
+        for (const row of rows) {
+          const titTd = row.querySelector('td.gall_tit.ub-word')
+          if (!titTd)
+            continue
+          const a = titTd.querySelector('a')
+          if (!a)
+            continue
+          // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
+          const text = a.textContent?.replace(/\s+/g, ' ').trim()
+          if (text === title) {
+            return a.getAttribute('href')
+          }
+        }
+        return null
+      }, title)
+    }
+    catch {}
+
+    if (postUrl) {
+      if (postUrl.startsWith('/')) {
+        return `https://gall.dcinside.com${postUrl}`
+      }
+      else {
+        return postUrl
+      }
+    }
+    return currentUrl
+  }
+
+  private async navigateToWritePage(page: Page, galleryId: string): Promise<void> {
+    const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
+    await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+    // 글쓰기 버튼 클릭 (goWrite)
+    await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
+    await page.click('a.btn_write.txt')
+    await sleep(4000)
+  }
+
   async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
     let browser = null
     let scheduledPostId: number | null = null
@@ -120,210 +330,27 @@ export class DcinsidePostingService {
       }
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
-      const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
-      await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      // 글쓰기 버튼 클릭 (goWrite)
-      await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
-      await page.click('a.btn_write.txt')
-      await sleep(4000)
+      await this.navigateToWritePage(page, galleryId)
 
       // 3. 입력폼 채우기
-      // 비번 (로그인 상태면 입력란이 없을 수 있음)
-      if (await page.$('#password')) {
-        await page.type('#password', params.password.toString(), { delay: 30 })
-      }
+      await this.inputTitle(page, params.title)
+      await this.selectHeadtext(page, params.headtext)
+      await this.inputContent(page, params.contentHtml)
 
-      // 제목
-      await page.waitForSelector('#subject', { timeout: 10000 })
-      await page.type('#subject', params.title, { delay: 30 })
-
-      // 말머리 선택 (headtext가 있을 때만)
-      if (params.headtext) {
-        await page.waitForSelector('.subject_list li', { timeout: 5000 })
-        await page.evaluate((headtext) => {
-          const items = Array.from(document.querySelectorAll('.subject_list li'))
-          const target = items.find(
-            li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
-          )
-          if (target)
-            (target as HTMLElement).click()
-        }, params.headtext)
-        await sleep(300)
-      }
-
-      // 내용 (summernote 에디터, HTML 입력)
-      await page.waitForSelector('#chk_html', { timeout: 10000 })
-      // 코드뷰(HTML) 모드로 전환
-      const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
-      if (!htmlChecked) {
-        await page.click('#chk_html')
-        await new Promise(res => setTimeout(res, 300))
-      }
-      // textarea.note-codable에 HTML 입력
-      await page.waitForSelector('.note-codable', { timeout: 5000 })
-      await page.evaluate((html) => {
-        const textarea = document.querySelector('.note-codable') as HTMLTextAreaElement
-        if (textarea) {
-          textarea.value = html
-          // input 이벤트 트리거
-          const event = new Event('input', { bubbles: true })
-          textarea.dispatchEvent(event)
-        }
-      }, params.contentHtml)
-      await new Promise(res => setTimeout(res, 300))
-      // 코드뷰 해제 (WYSIWYG로 복귀)
-      const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
-      if (htmlChecked2) {
-        await page.click('#chk_html')
-        await new Promise(res => setTimeout(res, 300))
-      }
+      await this.inputNickname(page, params.nickname)
+      await this.inputPassword(page, params.password)
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (params.imagePaths && params.imagePaths.length > 0) {
-        // 1. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
-        await page.click('button[aria-label="이미지"]')
-        // 2. 팝업 window 감지 (input.file_add)
-        const popup = await new Promise<Page>(async (resolve, reject) => {
-          browser.once('targetcreated', async (target) => {
-            const popupPage = await target.page()
-            if (popupPage)
-              resolve(popupPage)
-            else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
-          })
-        })
-        await popup.waitForSelector('input.file_add', { timeout: 10000 })
-        // 3. 파일 업로드 (여러 파일 한 번에)
-        await sleep(3000)
-        const input = await popup.$('input.file_add')
-        if (!input)
-          throw new Error('이미지 업로드 input을 찾을 수 없습니다.')
-        await input.uploadFile(...params.imagePaths)
-        await sleep(3000)
-        const btnApply = await popup.$('.btn_apply')
-        await btnApply.click()
-      }
-
-      // 닉네임 입력 처리 (로그인 상태면 입력란이 없을 수 있음)
-      if (params.nickname && (await page.$('#gall_nick_name'))) {
-        // 닉네임 input이 readonly인지 확인
-        await page.waitForSelector('#gall_nick_name', { timeout: 10000 })
-        const isReadonly = await page.$eval('#gall_nick_name', el => el.hasAttribute('readonly'))
-        if (isReadonly) {
-          // x버튼 클릭해서 닉네임 입력란 활성화
-          const xBtn = await page.$('#btn_gall_nick_name_x')
-          if (xBtn) {
-            await xBtn.click()
-            await new Promise(res => setTimeout(res, 300))
-          }
-        }
-        // 닉네임 입력란이 활성화되었으면 입력
-        await page.evaluate(() => {
-          const el = document.getElementById('gall_nick_name')
-          if (el)
-            el.removeAttribute('readonly')
-        })
-        await page.click('#name', { clickCount: 3 })
-        await page.type('#name', params.nickname, { delay: 30 })
+        await this.uploadImages(page, browser, params.imagePaths)
       }
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
-      const captchaErrorMessages = [
-        '자동입력 방지코드가 일치하지 않습니다.',
-        'code은(는) 영문-숫자 조합이어야 합니다.',
-      ]
-      let captchaTryCount = 0
-      while (true) {
-        // 1) 캡챠가 존재하면 해결 시도 (매 반복마다 새로 캡쳐해야 함)
-        await this.solveCapcha(page)
-
-        // 2) 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-        await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
-
-        // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
-        const dialogPromise: Promise<string | null> = new Promise((resolve) => {
-          const handler = async (dialog: any) => {
-            const msg = dialog.message()
-            await dialog.accept()
-            resolve(msg)
-          }
-          page.once('dialog', handler)
-          setTimeout(() => resolve(null), 8000)
-        })
-
-        await page.click('button.btn_blue.btn_svc.write')
-
-        // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
-        const dialogMessage = await Promise.race([
-          dialogPromise,
-          page.waitForNavigation({ timeout: 10000 }).then(() => null).catch(() => null),
-        ])
-
-        // 알림창이 떴을 경우 처리
-        if (dialogMessage) {
-          // 캡챠 오류 메시지일 경우에만 재시도
-          if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
-            captchaTryCount += 1
-            if (captchaTryCount >= 3)
-              throw new Error('캡챠 해제 실패(3회 시도)')
-
-            // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
-            try {
-              await page.evaluate(() => {
-                const img = document.getElementById('kcaptcha') as HTMLImageElement | null
-                if (img)
-                  img.click()
-              })
-            }
-            catch {}
-
-            await sleep(1000)
-            continue // while – 다시 등록 버튼 클릭 시도
-          }
-          else {
-            // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
-            throw new Error(`글 등록 실패: ${dialogMessage}`)
-          }
-        }
-
-        // dialog가 없으면 성공으로 간주하고 루프 탈출
-        break
-      }
+      await this.submitPostAndHandleErrors(page)
 
       // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
-      const currentUrl = page.url()
-      let postUrl = null
-      try {
-        // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
-        await page.waitForSelector('table.gall_list', { timeout: 10000 })
-        postUrl = await page.evaluate((title) => {
-          const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
-          for (const row of rows) {
-            const titTd = row.querySelector('td.gall_tit.ub-word')
-            if (!titTd)
-              continue
-            const a = titTd.querySelector('a')
-            if (!a)
-              continue
-            // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
-            const text = a.textContent?.replace(/\s+/g, ' ').trim()
-            if (text === title) {
-              return a.getAttribute('href')
-            }
-          }
-          return null
-        }, params.title)
-      }
-      catch {}
-      let finalUrl = currentUrl
-      if (postUrl) {
-        if (postUrl.startsWith('/')) {
-          finalUrl = `https://gall.dcinside.com${postUrl}`
-        }
-        else {
-          finalUrl = postUrl
-        }
-      }
+      const finalUrl = await this.extractPostUrl(page, params.title)
 
       // 성공시 상태 갱신
       if (scheduledPostId) {
