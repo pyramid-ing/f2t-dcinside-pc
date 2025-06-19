@@ -4,13 +4,13 @@ import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/schemas'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
+import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { ZodError } from 'zod'
-import pRetry from 'p-retry'
 
 puppeteer.use(StealthPlugin())
 
@@ -411,7 +411,7 @@ export class DcinsidePostingService {
   }
 
   private async navigateToWritePage(page: Page, galleryId: string): Promise<void> {
-    await pRetry(
+    const success = await retry(
       async () => {
         const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl}`)
@@ -426,21 +426,21 @@ export class DcinsidePostingService {
         // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
         if (!currentUrl.includes('/write')) {
-          throw new Error('글쓰기 페이지로 이동하지 못했습니다.')
+          this.logger.warn('글쓰기 페이지로 이동하지 못했습니다.')
+          return false
         }
 
         this.logger.log('글쓰기 페이지 이동 성공')
+        return true
       },
-      {
-        retries: 2,
-        minTimeout: 1000,
-        onFailedAttempt: error => {
-          this.logger.warn(
-            `글쓰기 페이지 이동 실패 (${error.attemptNumber}/${error.retriesLeft + error.attemptNumber}): ${error.message}`,
-          )
-        },
-      },
+      1000,
+      3,
+      'linear',
     )
+
+    if (!success) {
+      throw new Error('글쓰기 페이지 이동 실패 (3회 시도)')
+    }
   }
 
   async postArticle(rawParams: any): Promise<{ success: boolean; message: string; url?: string }> {
