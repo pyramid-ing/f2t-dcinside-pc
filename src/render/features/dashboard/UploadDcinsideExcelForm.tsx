@@ -1,7 +1,7 @@
 import { UploadOutlined } from '@ant-design/icons'
+import { uploadDcinsideExcel } from '@render/api'
 import { Button, Form, message, Table, Tag, Typography, Upload } from 'antd'
 import React, { useState } from 'react'
-import { uploadDcinsideExcel } from '../api'
 
 const { Title } = Typography
 
