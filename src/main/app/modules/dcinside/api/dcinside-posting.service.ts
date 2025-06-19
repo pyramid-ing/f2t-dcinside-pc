@@ -24,6 +24,56 @@ export class DcinsidePostingService {
     private readonly postJobService: PostJobService,
   ) {}
 
+  private async solveCapcha(page: Page): Promise<void> {
+    const captchaImg = await page.$('#kcaptcha')
+    if (!captchaImg)
+      return
+
+    const captchaBase64 = await captchaImg.screenshot({ encoding: 'base64' })
+    const globalSettings = await this.settingsService.findByKey('global')
+    const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
+    if (!openAIApiKey)
+      throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
+
+    const openai = new OpenAI({ apiKey: openAIApiKey })
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a helpful assistant that only responds with a JSON object like: { "answer": "value" }.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '이건 캡챠 이미지야. 반드시 아래 형식으로만 대답해: { "answer": "정답" }' },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${captchaBase64}` },
+            },
+          ],
+        },
+      ],
+      temperature: 0,
+    })
+
+    let answer = ''
+    try {
+      answer = JSON.parse(response.choices[0].message.content).answer
+    }
+    catch {
+      throw new Error('캡챠 해제 실패(OpenAI 응답 파싱 오류)')
+    }
+
+    // 기존 입력값을 지우고 새로 입력
+    await page.evaluate(() => {
+      const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
+      if (el)
+        el.value = ''
+    })
+    await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
+  }
+
   async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
     let browser = null
     let scheduledPostId: number | null = null
@@ -176,58 +226,70 @@ export class DcinsidePostingService {
         await page.type('#name', params.nickname, { delay: 30 })
       }
 
-      // 캡챠(자동등록방지) 감지 및 해제
-      const captchaImg = await page.$('#kcaptcha')
-      if (captchaImg) {
-        // 1. 이미지 base64 추출
-        const captchaBase64 = await captchaImg.screenshot({ encoding: 'base64' })
-        // 2. OpenAI Vision API로 답 얻기
-        const globalSettings = await this.settingsService.findByKey('global')
-        const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
-        if (!openAIApiKey) {
-          throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
-        }
-        const openai = new OpenAI({ apiKey: openAIApiKey })
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a helpful assistant that only responds with a JSON object like: { "answer": "value" }.',
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: '이건 캡챠 이미지야. 반드시 아래 형식으로만 대답해: { "answer": "정답" }' },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${captchaBase64}`,
-                  },
-                },
-              ],
-            },
-          ],
-          temperature: 0,
+      // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
+      const captchaErrorMessages = [
+        '자동입력 방지코드가 일치하지 않습니다.',
+        'code은(는) 영문-숫자 조합이어야 합니다.',
+      ]
+      let captchaTryCount = 0
+      while (true) {
+        // 1) 캡챠가 존재하면 해결 시도 (매 반복마다 새로 캡쳐해야 함)
+        await this.solveCapcha(page)
+
+        // 2) 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
+        await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
+
+        // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
+        const dialogPromise: Promise<string | null> = new Promise((resolve) => {
+          const handler = async (dialog: any) => {
+            const msg = dialog.message()
+            await dialog.accept()
+            resolve(msg)
+          }
+          page.once('dialog', handler)
+          setTimeout(() => resolve(null), 8000)
         })
-        // 3. 답 추출 및 입력
-        let answer = ''
-        try {
-          answer = JSON.parse(response.choices[0].message.content).answer
+
+        await page.click('button.btn_blue.btn_svc.write')
+
+        // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
+        const dialogMessage = await Promise.race([
+          dialogPromise,
+          page.waitForNavigation({ timeout: 10000 }).then(() => null).catch(() => null),
+        ])
+
+        // 알림창이 떴을 경우 처리
+        if (dialogMessage) {
+          // 캡챠 오류 메시지일 경우에만 재시도
+          if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
+            captchaTryCount += 1
+            if (captchaTryCount >= 3)
+              throw new Error('캡챠 해제 실패(3회 시도)')
+
+            // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
+            try {
+              await page.evaluate(() => {
+                const img = document.getElementById('kcaptcha') as HTMLImageElement | null
+                if (img)
+                  img.click()
+              })
+            }
+            catch {}
+
+            await sleep(1000)
+            continue // while – 다시 등록 버튼 클릭 시도
+          }
+          else {
+            // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
+            throw new Error(`글 등록 실패: ${dialogMessage}`)
+          }
         }
-        catch {
-          throw new Error('캡챠 해제 실패(OpenAI 응답 파싱 오류)')
-        }
-        await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
+
+        // dialog가 없으면 성공으로 간주하고 루프 탈출
+        break
       }
 
-      // 4. 등록 버튼 클릭
-      await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
-      await page.click('button.btn_blue.btn_svc.write')
-
-      // 5. 등록 성공 대기 (최대 10초, 글 목록 이동 감지)
-      await page.waitForNavigation({ timeout: 10000 })
-
+      // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
       const currentUrl = page.url()
       let postUrl = null
