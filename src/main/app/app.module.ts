@@ -22,7 +22,7 @@ import { PrismaService } from './shared/prisma.service'
           autoHideMenuBar: true,
           webPreferences: {
             contextIsolation: true,
-            preload: join(__dirname, '../preload/index.js'),
+            preload: join(__dirname, '../preload/index.cjs'),
           },
         })
 
