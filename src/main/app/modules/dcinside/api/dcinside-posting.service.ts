@@ -8,7 +8,6 @@ import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
 
 puppeteer.use(StealthPlugin())
 
@@ -21,7 +20,6 @@ export class DcinsidePostingService {
     private readonly cookieService: CookieService,
     private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
-    private readonly postJobService: PostJobService,
   ) {}
 
   private async solveCapcha(page: Page): Promise<void> {
@@ -46,7 +44,7 @@ export class DcinsidePostingService {
         {
           role: 'user',
           content: [
-            { type: 'text', text: '이건 캡챠 이미지야. 반드시 아래 형식으로만 대답해: { "answer": "정답" }' },
+            { type: 'text', text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }' },
             {
               type: 'image_url',
               image_url: { url: `data:image/png;base64,${captchaBase64}` },
@@ -62,7 +60,7 @@ export class DcinsidePostingService {
       answer = JSON.parse(response.choices[0].message.content).answer
     }
     catch {
-      throw new Error('캡챠 해제 실패(OpenAI 응답 파싱 오류)')
+      throw new Error(`캡챠 해제 실패(OpenAI 응답 파싱 오류) 응답: ${response.choices[0].message.content}`)
     }
 
     // 기존 입력값을 지우고 새로 입력
@@ -302,15 +300,7 @@ export class DcinsidePostingService {
 
   async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
     let browser = null
-    let scheduledPostId: number | null = null
     try {
-      // 0. DB에 작업 등록 (status: pending)
-      const scheduled = await this.postJobService.createPostJob({
-        ...params,
-        scheduledAt: new Date().toISOString(),
-      })
-      scheduledPostId = scheduled.id
-
       // 1. 갤러리 id 추출
       const match = params.galleryUrl.match(/id=(\w+)/)
       if (!match)
@@ -350,10 +340,14 @@ export class DcinsidePostingService {
 
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
-      await this.selectHeadtext(page, params.headtext)
+      if (params.headtext) {
+        await this.selectHeadtext(page, params.headtext)
+      }
       await this.inputContent(page, params.contentHtml)
 
-      await this.inputNickname(page, params.nickname)
+      if (params.nickname) {
+        await this.inputNickname(page, params.nickname)
+      }
       await this.inputPassword(page, params.password)
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
@@ -368,18 +362,10 @@ export class DcinsidePostingService {
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
       const finalUrl = await this.extractPostUrl(page, params.title)
 
-      // 성공시 상태 갱신
-      if (scheduledPostId) {
-        await this.postJobService.updateStatus(scheduledPostId, 'completed', '글 등록 성공')
-      }
       return { success: true, message: '글 등록 성공', url: finalUrl }
     }
     catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
-      // 실패시 상태 갱신
-      if (scheduledPostId) {
-        await this.postJobService.updateStatus(scheduledPostId, 'failed', e.message)
-      }
       throw new Error(e.message)
     }
     finally {

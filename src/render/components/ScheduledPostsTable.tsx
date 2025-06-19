@@ -1,6 +1,7 @@
+import type { PostJob } from '../api'
 import { Button, message, Select, Space, Table, Tag, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
-import { getPostJobs, retryPostJob, PostJob } from '../api'
+import { getPostJobs, retryPostJob } from '../api'
 
 const statusColor: Record<string, string> = {
   pending: 'blue',

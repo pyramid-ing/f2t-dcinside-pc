@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsDateString, IsOptional, IsString } from 'class-validator'
 
 export class PostJobDto {
   @IsString()
@@ -18,10 +18,6 @@ export class PostJobDto {
   nickname?: string
 
   @IsOptional()
-  @IsBoolean()
-  headless?: boolean
-
-  @IsOptional()
   @IsArray()
   imagePaths?: string[]
 
@@ -32,4 +28,12 @@ export class PostJobDto {
   @IsOptional()
   @IsDateString()
   scheduledAt?: string
+
+  @IsOptional()
+  @IsString()
+  loginId?: string
+
+  @IsOptional()
+  @IsString()
+  loginPassword?: string
 }

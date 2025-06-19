@@ -95,7 +95,6 @@ export class DcinsideWorkflowService {
           row.scheduledAt = parsed.toISOString()
         }
       }
-      const isScheduled = row.scheduledAt && row.scheduledAt !== ''
 
       // 로그인 필요 체크 및 로그인
       if (row.loginId && row.loginPassword) {
@@ -106,47 +105,27 @@ export class DcinsideWorkflowService {
         }
       }
 
-      if (isScheduled) {
-        // 예약 등록만 수행
-        try {
-          const scheduled = await this.postJobService.createPostJob({
-            galleryUrl: row.galleryUrl,
-            title: row.title,
-            contentHtml: row.contentHtml,
-            password: String(row.password),
-            nickname: row.nickname,
-            headless: row.headless,
-            imagePaths: row.imagePaths,
-            scheduledAt: row.scheduledAt,
-            headtext: row.headtext,
-          })
-          results.push({ ...row, success: true, message: '예약 등록', postJobId: scheduled.id })
-        }
-        catch (e) {
-          results.push({ ...row, success: false, message: `예약 등록 실패: ${e.message}` })
-        }
+      // 모든 포스팅을 예약 등록으로 통일 처리 (즉시 실행도 현재 시간으로 예약)
+      try {
+        const scheduled = await this.postJobService.createPostJob({
+          galleryUrl: row.galleryUrl,
+          title: row.title,
+          contentHtml: row.contentHtml,
+          password: String(row.password),
+          nickname: row.nickname,
+          imagePaths: row.imagePaths,
+          scheduledAt: row.scheduledAt, // undefined면 createPostJob에서 현재 시간으로 설정됨
+          headtext: row.headtext,
+          loginId: row.loginId,
+          loginPassword: row.loginPassword,
+        })
+
+        const isScheduled = row.scheduledAt && dayjs(row.scheduledAt).isAfter(dayjs())
+        const messageType = isScheduled ? '예약 등록' : '즉시 등록'
+        results.push({ ...row, success: true, message: messageType, postJobId: scheduled.id })
       }
-      else {
-        // 즉시 포스팅
-        try {
-          const postResult = await this.postingService.postArticle({
-            galleryUrl: String(row.galleryUrl),
-            title: String(row.title),
-            contentHtml: String(row.contentHtml),
-            password: String(row.password),
-            nickname: String(row.nickname),
-            headless: false,
-            imagePaths: row.imagePaths,
-            scheduledAt: row.scheduledAt,
-            loginId: String(row.loginId),
-            loginPassword: String(row.loginPassword),
-            headtext: String(row.headtext),
-          })
-          results.push({ ...row, ...postResult })
-        }
-        catch (e) {
-          results.push({ ...row, success: false, message: e.message })
-        }
+      catch (e) {
+        results.push({ ...row, success: false, message: `등록 실패: ${e.message}` })
       }
     }
     return results
