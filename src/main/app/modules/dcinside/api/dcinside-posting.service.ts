@@ -172,27 +172,46 @@ export class DcinsidePostingService {
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
-    if (!headtext) return
-
     try {
       await page.waitForSelector('.subject_list li', { timeout: 5000 })
+
       const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.subject_list li'))
-        const target = items.find(li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext)
-        if (target) {
-          ;(target as HTMLElement).click()
-          return true
+
+        // headtext가 있으면 해당 말머리 찾기
+        if (headtext) {
+          const target = items.find(
+            li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
+          )
+          if (target) {
+            ;(target as HTMLElement).click()
+            return { success: true, selected: headtext }
+          }
         }
-        return false
+
+        // headtext가 없거나 찾을 수 없으면 첫 번째 말머리 선택
+        if (items.length > 0) {
+          ;(items[0] as HTMLElement).click()
+          const firstHeadtext = items[0].textContent?.trim() || items[0].getAttribute('data-val') || '첫 번째 말머리'
+          return { success: true, selected: firstHeadtext }
+        }
+
+        return { success: false, selected: null }
       }, headtext)
 
-      if (!found) {
-        this.logger.warn(`말머리를 찾을 수 없습니다. 기본값으로 처리: ${headtext}`)
+      if (found.success) {
+        if (headtext && found.selected === headtext) {
+          this.logger.log(`말머리 선택 성공: ${found.selected}`)
+        } else {
+          this.logger.log(`말머리를 찾을 수 없어 첫 번째 말머리로 대체: ${found.selected}`)
+        }
+      } else {
+        this.logger.warn('사용 가능한 말머리가 없습니다.')
       }
 
       await sleep(300)
     } catch (error) {
-      this.logger.warn(`말머리 선택 중 오류 발생, 기본값으로 처리: ${headtext} - ${error.message}`)
+      this.logger.warn(`말머리 선택 중 오류 발생: ${error.message}`)
     }
   }
 
