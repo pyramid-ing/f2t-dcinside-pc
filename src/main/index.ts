@@ -2,7 +2,8 @@ import type { ValidationError } from '@nestjs/common'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
-import { app, ipcMain, shell } from 'electron'
+import { app, ipcMain, shell, BrowserWindow } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { WinstonModule } from 'nest-winston'
 import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
 import winston from 'winston'
@@ -21,11 +22,129 @@ LoggerConfig.info(process.env.COOKIE_DIR)
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
+// AutoUpdater 설정
+function setupAutoUpdater() {
+  // 개발 환경에서는 업데이트 비활성화
+  if (!app.isPackaged) {
+    console.log('개발 환경에서는 자동 업데이트가 비활성화됩니다.')
+    return
+  }
+
+  // 업데이트 로그 설정
+  autoUpdater.logger = {
+    info: message => console.log('[AutoUpdater]', message),
+    warn: message => console.warn('[AutoUpdater]', message),
+    error: message => console.error('[AutoUpdater]', message),
+    debug: message => console.debug('[AutoUpdater]', message),
+  }
+
+  // 업데이트 이벤트 핸들러
+  autoUpdater.on('checking-for-update', () => {
+    console.log('업데이트를 확인 중입니다...')
+  })
+
+  autoUpdater.on('update-available', info => {
+    console.log('업데이트가 사용 가능합니다:', info.version)
+  })
+
+  autoUpdater.on('update-not-available', info => {
+    console.log('현재 최신 버전입니다:', info.version)
+  })
+
+  autoUpdater.on('error', err => {
+    console.error('업데이트 오류:', err.message)
+  })
+
+  autoUpdater.on('download-progress', progressObj => {
+    const logMessage = `다운로드 진행률: ${progressObj.percent.toFixed(1)}% (${progressObj.transferred}/${progressObj.total})`
+    console.log(logMessage)
+
+    // 모든 창에 진행률 전송
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('download-progress', {
+        percent: progressObj.percent,
+        transferred: progressObj.transferred,
+        total: progressObj.total,
+      })
+    })
+  })
+
+  autoUpdater.on('update-downloaded', info => {
+    console.log('업데이트 다운로드 완료:', info.version)
+
+    // 모든 창에 업데이트 완료 알림
+    BrowserWindow.getAllWindows().forEach(window => {
+      window.webContents.send('update-downloaded', {
+        version: info.version,
+        releaseNotes: info.releaseNotes,
+      })
+    })
+  })
+
+  // 앱 시작 후 5초 뒤에 업데이트 확인
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify()
+  }, 5000)
+
+  // 1시간마다 업데이트 확인
+  setInterval(
+    () => {
+      autoUpdater.checkForUpdatesAndNotify()
+    },
+    60 * 60 * 1000,
+  ) // 1시간
+}
+
 // IPC 핸들러 설정
 function setupIpcHandlers() {
   ipcMain.handle('get-backend-port', () => null)
   ipcMain.handle('open-external', async (_, url) => {
     await shell.openExternal(url)
+  })
+
+  // 업데이트 관련 IPC 핸들러
+  ipcMain.handle('check-for-updates', async () => {
+    if (!app.isPackaged) {
+      return { message: '개발 환경에서는 업데이트를 확인할 수 없습니다.' }
+    }
+
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      return {
+        updateInfo: result?.updateInfo,
+        message: '업데이트 확인 완료',
+      }
+    } catch (error) {
+      return {
+        error: error.message,
+        message: '업데이트 확인 중 오류가 발생했습니다.',
+      }
+    }
+  })
+
+  ipcMain.handle('download-update', async () => {
+    if (!app.isPackaged) {
+      return { message: '개발 환경에서는 업데이트를 다운로드할 수 없습니다.' }
+    }
+
+    try {
+      await autoUpdater.downloadUpdate()
+      return { message: '업데이트 다운로드를 시작했습니다.' }
+    } catch (error) {
+      return {
+        error: error.message,
+        message: '업데이트 다운로드 중 오류가 발생했습니다.',
+      }
+    }
+  })
+
+  ipcMain.handle('install-update', () => {
+    if (!app.isPackaged) {
+      return { message: '개발 환경에서는 업데이트를 설치할 수 없습니다.' }
+    }
+
+    autoUpdater.quitAndInstall()
+    return { message: '업데이트를 설치하고 앱을 재시작합니다.' }
   })
 }
 
@@ -49,6 +168,7 @@ async function electronAppInit() {
 
   await app.whenReady()
   setupIpcHandlers()
+  setupAutoUpdater()
 }
 
 async function bootstrap() {

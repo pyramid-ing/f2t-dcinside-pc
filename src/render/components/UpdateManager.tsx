@@ -1,0 +1,227 @@
+import React, { useEffect, useState } from 'react'
+import { Button, Progress, Modal, Typography, Space, notification } from 'antd'
+import { DownloadOutlined, ReloadOutlined, CheckOutlined } from '@ant-design/icons'
+import type { UpdateInfo, DownloadProgress, UpdateResult } from '../types/electron'
+
+const { Text, Paragraph } = Typography
+
+interface UpdateManagerProps {
+  autoCheck?: boolean
+}
+
+export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }) => {
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isChecking, setIsChecking] = useState(false)
+  const [updateDownloaded, setUpdateDownloaded] = useState(false)
+  const [showUpdateModal, setShowUpdateModal] = useState(false)
+
+  useEffect(() => {
+    // 업데이트 다운로드 진행률 리스너
+    window.electronAPI?.onDownloadProgress((progress: DownloadProgress) => {
+      setDownloadProgress(progress)
+      if (progress.percent === 100) {
+        setIsDownloading(false)
+      }
+    })
+
+    // 업데이트 다운로드 완료 리스너
+    window.electronAPI?.onUpdateDownloaded((info: UpdateInfo) => {
+      setUpdateDownloaded(true)
+      setUpdateInfo(info)
+      setShowUpdateModal(true)
+      notification.success({
+        message: '업데이트 다운로드 완료',
+        description: `버전 ${info.version} 업데이트가 다운로드되었습니다. 설치하려면 앱을 재시작하세요.`,
+        duration: 0,
+      })
+    })
+
+    // 자동 업데이트 확인
+    if (autoCheck) {
+      checkForUpdates()
+    }
+
+    return () => {
+      window.electronAPI?.removeAllListeners('download-progress')
+      window.electronAPI?.removeAllListeners('update-downloaded')
+    }
+  }, [autoCheck])
+
+  const checkForUpdates = async () => {
+    if (!window.electronAPI?.checkForUpdates) {
+      console.log('Electron API not available')
+      return
+    }
+
+    setIsChecking(true)
+    try {
+      const result: UpdateResult = await window.electronAPI.checkForUpdates()
+
+      if (result.error) {
+        notification.error({
+          message: '업데이트 확인 실패',
+          description: result.error,
+        })
+      } else if (result.updateInfo) {
+        setUpdateAvailable(true)
+        setUpdateInfo({
+          version: result.updateInfo.version,
+          releaseNotes: result.updateInfo.releaseNotes,
+        })
+        setShowUpdateModal(true)
+      } else {
+        notification.info({
+          message: '최신 버전',
+          description: '현재 최신 버전을 사용 중입니다.',
+        })
+      }
+    } catch (error) {
+      console.error('업데이트 확인 중 오류:', error)
+      notification.error({
+        message: '업데이트 확인 오류',
+        description: '업데이트 확인 중 오류가 발생했습니다.',
+      })
+    } finally {
+      setIsChecking(false)
+    }
+  }
+
+  const downloadUpdate = async () => {
+    if (!window.electronAPI?.downloadUpdate) return
+
+    setIsDownloading(true)
+    setDownloadProgress({ percent: 0, transferred: 0, total: 0 })
+
+    try {
+      const result: UpdateResult = await window.electronAPI.downloadUpdate()
+
+      if (result.error) {
+        notification.error({
+          message: '업데이트 다운로드 실패',
+          description: result.error,
+        })
+        setIsDownloading(false)
+      } else {
+        notification.success({
+          message: '업데이트 다운로드 시작',
+          description: result.message,
+        })
+      }
+    } catch (error) {
+      console.error('업데이트 다운로드 중 오류:', error)
+      notification.error({
+        message: '업데이트 다운로드 오류',
+        description: '업데이트 다운로드 중 오류가 발생했습니다.',
+      })
+      setIsDownloading(false)
+    }
+  }
+
+  const installUpdate = async () => {
+    if (!window.electronAPI?.installUpdate) return
+
+    try {
+      await window.electronAPI.installUpdate()
+    } catch (error) {
+      console.error('업데이트 설치 중 오류:', error)
+      notification.error({
+        message: '업데이트 설치 오류',
+        description: '업데이트 설치 중 오류가 발생했습니다.',
+      })
+    }
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  return (
+    <>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        {updateDownloaded ? (
+          <Button type="primary" icon={<ReloadOutlined />} onClick={installUpdate} block>
+            재시작 및 설치
+          </Button>
+        ) : updateAvailable ? (
+          <Button type="primary" icon={<DownloadOutlined />} onClick={downloadUpdate} loading={isDownloading} block>
+            업데이트 다운로드
+          </Button>
+        ) : (
+          <Button icon={<CheckOutlined />} onClick={checkForUpdates} loading={isChecking} block>
+            업데이트 확인
+          </Button>
+        )}
+
+        {isDownloading && downloadProgress && (
+          <div style={{ marginTop: 8 }}>
+            <Progress
+              percent={Math.round(downloadProgress.percent)}
+              status="active"
+              size="small"
+              format={() => `${Math.round(downloadProgress.percent)}%`}
+              strokeColor="#69c0ff"
+            />
+            <Text style={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.6)', marginTop: 4, display: 'block' }}>
+              {formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}
+            </Text>
+          </div>
+        )}
+      </Space>
+
+      <Modal
+        title="업데이트 사용 가능"
+        open={showUpdateModal}
+        onCancel={() => setShowUpdateModal(false)}
+        footer={[
+          <Button key="later" onClick={() => setShowUpdateModal(false)}>
+            나중에
+          </Button>,
+          updateDownloaded ? (
+            <Button key="install" type="primary" onClick={installUpdate}>
+              지금 설치
+            </Button>
+          ) : (
+            <Button key="download" type="primary" onClick={downloadUpdate} loading={isDownloading}>
+              다운로드
+            </Button>
+          ),
+        ]}
+      >
+        {updateInfo && (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Text strong>버전: {updateInfo.version}</Text>
+
+            {updateInfo.releaseNotes && (
+              <div>
+                <Text strong>업데이트 내용:</Text>
+                <Paragraph style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{updateInfo.releaseNotes}</Paragraph>
+              </div>
+            )}
+
+            {updateDownloaded ? (
+              <Text type="success">업데이트가 다운로드되었습니다. 설치하려면 앱을 재시작하세요.</Text>
+            ) : isDownloading && downloadProgress ? (
+              <div>
+                <Progress percent={Math.round(downloadProgress.percent)} status="active" />
+                <Text type="secondary">
+                  {formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}
+                </Text>
+              </div>
+            ) : (
+              <Text>새로운 업데이트를 다운로드하시겠습니까?</Text>
+            )}
+          </Space>
+        )}
+      </Modal>
+    </>
+  )
+}
+
+export default UpdateManager
