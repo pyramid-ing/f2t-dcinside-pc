@@ -10,6 +10,7 @@ import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { ZodError } from 'zod'
+import pRetry from 'p-retry'
 
 puppeteer.use(StealthPlugin())
 
@@ -410,12 +411,36 @@ export class DcinsidePostingService {
   }
 
   private async navigateToWritePage(page: Page, galleryId: string): Promise<void> {
-    const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
-    await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
-    // 글쓰기 버튼 클릭 (goWrite)
-    await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
-    await page.click('a.btn_write.txt')
-    await sleep(4000)
+    await pRetry(
+      async () => {
+        const listUrl = `https://gall.dcinside.com/mgallery/board/lists?id=${galleryId}`
+        this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl}`)
+
+        await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
+
+        // 글쓰기 버튼 클릭 (goWrite)
+        await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
+        await page.click('a.btn_write.txt')
+        await sleep(4000)
+
+        // 글쓰기 페이지로 정상 이동했는지 확인
+        const currentUrl = page.url()
+        if (!currentUrl.includes('/write')) {
+          throw new Error('글쓰기 페이지로 이동하지 못했습니다.')
+        }
+
+        this.logger.log('글쓰기 페이지 이동 성공')
+      },
+      {
+        retries: 2,
+        minTimeout: 1000,
+        onFailedAttempt: error => {
+          this.logger.warn(
+            `글쓰기 페이지 이동 실패 (${error.attemptNumber}/${error.retriesLeft + error.attemptNumber}): ${error.message}`,
+          )
+        },
+      },
+    )
   }
 
   async postArticle(rawParams: any): Promise<{ success: boolean; message: string; url?: string }> {

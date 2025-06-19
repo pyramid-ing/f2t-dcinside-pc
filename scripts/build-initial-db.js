@@ -1,6 +1,10 @@
-const { execSync } = require('node:child_process')
-const fs = require('node:fs')
-const path = require('node:path')
+import { execSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const tmpDbPath = path.join(__dirname, '../prisma/tmp-initial.sqlite')
 const resourcesDbPath = path.join(__dirname, '../resources/initial.sqlite')
@@ -21,8 +25,7 @@ if (fs.existsSync(tmpDbPath)) {
   console.log('초기 DB를 resources/initial.sqlite로 복사 완료')
   // 4. 임시 DB 삭제(선택)
   fs.unlinkSync(tmpDbPath)
-}
-else {
+} else {
   console.error('임시 DB 파일이 생성되지 않았습니다!')
   process.exit(1)
 }

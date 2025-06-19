@@ -18,7 +18,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "db:init": "prisma generate && prisma migrate deploy && npm run db:seed",
-    "build-initial-db": "node scripts/build-initial-db.cjs",
+    "build-initial-db": "node scripts/build-initial-db.js",
     "dev:front": "vite --config src/render/vite.config.mts",
     "dev:server": "tsx src/main/index.ts",
     "dev:electron": "tsc -p tsconfig.json && cross-env ELECTRON_DEBUG=true electron --inspect=9228 ."
@@ -53,6 +53,7 @@
     "multer": "2.0.1",
     "nest-winston": "^1.10.2",
     "openai": "^5.5.1",
+    "p-retry": "^6.2.1",
     "prisma": "^6.9.0",
     "puppeteer-core": "^24.10.1",
     "puppeteer-extra": "^3.3.6",
