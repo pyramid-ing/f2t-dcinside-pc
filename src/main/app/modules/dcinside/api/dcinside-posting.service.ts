@@ -49,33 +49,63 @@ export class DcinsidePostingService {
       throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
 
     const openai = new OpenAI({ apiKey: openAIApiKey })
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant that only responds with a JSON object like: { "answer": "value" }.',
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }' },
+
+    // OpenAI 호출 재시도 로직 (최대 3회)
+    let openaiTryCount = 0
+    let answer = ''
+
+    while (openaiTryCount < 3) {
+      try {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
             {
-              type: 'image_url',
-              image_url: { url: `data:image/png;base64,${captchaBase64}` },
+              role: 'system',
+              content: 'You are a helpful assistant that only responds with a JSON object like: { "answer": "value" }.',
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }' },
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:image/png;base64,${captchaBase64}` },
+                },
+              ],
             },
           ],
-        },
-      ],
-      temperature: 0,
-    })
+          temperature: 0,
+        })
 
-    let answer = ''
-    try {
-      answer = JSON.parse(response.choices[0].message.content).answer
-    }
-    catch {
-      throw new Error(`캡챠 해제 실패(OpenAI 응답 파싱 오류) 응답: ${response.choices[0].message.content}`)
+        try {
+          const responseContent = response.choices[0]?.message?.content
+          if (!responseContent) {
+            throw new Error('OpenAI 응답이 비어있습니다.')
+          }
+
+          const parsed = JSON.parse(responseContent)
+          if (!parsed.answer || typeof parsed.answer !== 'string') {
+            throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
+          }
+
+          answer = parsed.answer
+          break // 성공하면 루프 탈출
+        }
+        catch (parseError) {
+          throw new Error(`OpenAI 응답 파싱 오류: ${response.choices[0]?.message?.content || 'No content'}`)
+        }
+      }
+      catch (error) {
+        openaiTryCount += 1
+        this.logger.warn(`OpenAI 캡챠 해제 시도 ${openaiTryCount}/3 실패: ${error.message}`)
+
+        if (openaiTryCount >= 3) {
+          throw new Error(`OpenAI 캡챠 해제 실패 (3회 시도): ${error.message}`)
+        }
+
+        // 재시도 전 잠시 대기
+        await sleep(1000)
+      }
     }
 
     // 기존 입력값을 지우고 새로 입력
