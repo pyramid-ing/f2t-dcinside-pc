@@ -1,8 +1,13 @@
 import path from 'node:path'
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { Injectable } from '@nestjs/common'
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
 import * as XLSX from 'xlsx'
 import { DcinsidePostingService, DcinsidePostParams } from '../api/dcinside-posting.service'
+
+dayjs.extend(customParseFormat)
 
 // 엑셀 한 행의 타입 명확화
 interface ExcelRow {
@@ -17,6 +22,7 @@ interface ExcelRow {
   로그인ID?: string
   로그인비번?: string
   말머리?: string // headtext
+  예약날짜?: string // publishAt (YYYY-MM-DD HH:mm or ISO format)
 }
 
 @Injectable()
@@ -24,9 +30,10 @@ export class DcinsideWorkflowService {
   constructor(
     private readonly postingService: DcinsidePostingService,
     private readonly loginService: DcinsideLoginService,
+    private readonly postJobService: PostJobService,
   ) {}
 
-  async handleExcelUpload(file: Express.Multer.File) {
+  async handleExcelUpload(file: any) {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json<ExcelRow>(sheet, { defval: '' })
@@ -44,6 +51,7 @@ export class DcinsideWorkflowService {
       로그인ID: 'loginId',
       로그인비번: 'loginPassword',
       말머리: 'headtext',
+      예약날짜: 'scheduledAt',
     }
 
     // 각 행을 posting params로 변환
@@ -64,12 +72,31 @@ export class DcinsideWorkflowService {
           mappedRow.imagePaths.push(imgPath)
         }
       })
+      // password를 문자열로 변환
+      if (mappedRow.password !== undefined) {
+        mappedRow.password = String(mappedRow.password)
+      }
+      // imagePath1~3 키 제거
+      delete mappedRow.imagePath1
+      delete mappedRow.imagePath2
+      delete mappedRow.imagePath3
       return mappedRow as DcinsidePostParams
     })
 
-    // postList 순회하며 포스팅
     const results = []
+
     for (const row of postList) {
+      if (row.scheduledAt) {
+        let parsed = dayjs(row.scheduledAt.toString().trim(), 'YYYY-MM-DD HH:mm', true)
+        if (!parsed.isValid()) {
+          parsed = dayjs(row.scheduledAt)
+        }
+        if (parsed.isValid()) {
+          row.scheduledAt = parsed.toISOString()
+        }
+      }
+      const isScheduled = row.scheduledAt && row.scheduledAt !== ''
+
       // 로그인 필요 체크 및 로그인
       if (row.loginId && row.loginPassword) {
         const loginResult = await this.loginService.login(row.loginId, row.loginPassword, false)
@@ -78,16 +105,48 @@ export class DcinsideWorkflowService {
           continue
         }
       }
-      // 포스팅
-      try {
-        const postResult = await this.postingService.postArticle({
-          ...row,
-          headless: false,
-        })
-        results.push({ ...row, ...postResult })
+
+      if (isScheduled) {
+        // 예약 등록만 수행
+        try {
+          const scheduled = await this.postJobService.createPostJob({
+            galleryUrl: row.galleryUrl,
+            title: row.title,
+            contentHtml: row.contentHtml,
+            password: String(row.password),
+            nickname: row.nickname,
+            headless: row.headless,
+            imagePaths: row.imagePaths,
+            scheduledAt: row.scheduledAt,
+            headtext: row.headtext,
+          })
+          results.push({ ...row, success: true, message: '예약 등록', postJobId: scheduled.id })
+        }
+        catch (e) {
+          results.push({ ...row, success: false, message: `예약 등록 실패: ${e.message}` })
+        }
       }
-      catch (e) {
-        results.push({ ...row, success: false, message: e.message })
+      else {
+        // 즉시 포스팅
+        try {
+          const postResult = await this.postingService.postArticle({
+            galleryUrl: String(row.galleryUrl),
+            title: String(row.title),
+            contentHtml: String(row.contentHtml),
+            password: String(row.password),
+            nickname: String(row.nickname),
+            headless: false,
+            imagePaths: row.imagePaths,
+            scheduledAt: row.scheduledAt,
+            loginId: String(row.loginId),
+            loginPassword: String(row.loginPassword),
+            headtext: String(row.headtext),
+          })
+          results.push({ ...row, ...postResult })
+        }
+        catch (e) {
+          results.push({ ...row, success: false, message: e.message })
+        }
       }
     }
     return results

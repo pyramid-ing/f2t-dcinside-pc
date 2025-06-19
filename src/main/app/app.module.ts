@@ -4,6 +4,7 @@ import { DcinsideModule } from '@main/app/modules/dcinside/dcinside.module'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER, HttpAdapterHost } from '@nestjs/core'
+import { ScheduleModule } from '@nestjs/schedule'
 import { app, BrowserWindow } from 'electron'
 import { GlobalExceptionFilter } from '../filters/global-exception.filter'
 import customConfig from './config/custom-config'
@@ -44,6 +45,7 @@ import { PrismaService } from './shared/prisma.service'
     }),
     SettingsModule,
     DcinsideModule,
+    ScheduleModule.forRoot(),
   ],
   providers: [
     {

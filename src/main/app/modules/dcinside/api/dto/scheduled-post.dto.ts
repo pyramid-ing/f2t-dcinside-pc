@@ -1,6 +1,6 @@
-import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator'
 
-export class DcinsidePostDto {
+export class PostJobDto {
   @IsString()
   galleryUrl: string
 
@@ -27,17 +27,9 @@ export class DcinsidePostDto {
 
   @IsOptional()
   @IsString()
-  scheduledAt?: string
-
-  @IsOptional()
-  @IsString()
-  loginId?: string
-
-  @IsOptional()
-  @IsString()
-  loginPassword?: string
-
-  @IsOptional()
-  @IsString()
   headtext?: string
+
+  @IsOptional()
+  @IsDateString()
+  scheduledAt?: string
 }

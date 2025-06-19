@@ -13,3 +13,20 @@ model Settings {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model PostJob {
+  id          Int      @id @default(autoincrement())
+  galleryUrl  String
+  title       String
+  contentHtml String
+  password    String
+  nickname    String?
+  headtext    String?
+  headless    Boolean?
+  imagePaths  String?  // JSON stringified array
+  scheduledAt DateTime
+  status      String   // "pending" | "completed" | "failed"
+  resultMsg   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

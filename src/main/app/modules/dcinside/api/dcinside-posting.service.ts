@@ -8,6 +8,7 @@ import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
 
 puppeteer.use(StealthPlugin())
 
@@ -20,11 +21,20 @@ export class DcinsidePostingService {
     private readonly cookieService: CookieService,
     private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
+    private readonly postJobService: PostJobService,
   ) {}
 
   async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
     let browser = null
+    let scheduledPostId: number | null = null
     try {
+      // 0. DB에 작업 등록 (status: pending)
+      const scheduled = await this.postJobService.createPostJob({
+        ...params,
+        scheduledAt: new Date().toISOString(),
+      })
+      scheduledPostId = scheduled.id
+
       // 1. 갤러리 id 추출
       const match = params.galleryUrl.match(/id=(\w+)/)
       if (!match)
@@ -252,10 +262,19 @@ export class DcinsidePostingService {
           finalUrl = postUrl
         }
       }
+
+      // 성공시 상태 갱신
+      if (scheduledPostId) {
+        await this.postJobService.updateStatus(scheduledPostId, 'completed', '글 등록 성공')
+      }
       return { success: true, message: '글 등록 성공', url: finalUrl }
     }
     catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
+      // 실패시 상태 갱신
+      if (scheduledPostId) {
+        await this.postJobService.updateStatus(scheduledPostId, 'failed', e.message)
+      }
       throw new Error(e.message)
     }
     finally {

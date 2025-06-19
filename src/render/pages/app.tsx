@@ -4,6 +4,7 @@ import React, { useEffect } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import styled from 'styled-components'
 import UploadDcinsideExcelForm from '../components/UploadDcinsideExcelForm'
+import ScheduledPostsPage from './ScheduledPosts'
 import SettingsPage from './Settings'
 
 const { Sider, Content } = Layout
@@ -67,6 +68,11 @@ const App: React.FC = () => {
               icon: <SettingOutlined />,
               label: <NavLink to="/settings">설정</NavLink>,
             },
+            {
+              key: '3',
+              icon: <HomeOutlined />,
+              label: <NavLink to="/scheduled-posts">작업 관리</NavLink>,
+            },
           ]}
         />
       </Sider>
@@ -92,6 +98,7 @@ const App: React.FC = () => {
               )}
             />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/scheduled-posts" element={<ScheduledPostsPage />} />
           </Routes>
         </StyledContent>
       </Layout>

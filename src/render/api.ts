@@ -93,3 +93,31 @@ export async function getOpenAIApiKeyFromServer(): Promise<string> {
   const res = await axios.get(`${API_BASE_URL}/settings/global`)
   return res.data?.data?.openAIApiKey || ''
 }
+
+// ------------------------------
+// PostJob (예약/작업) API
+// ------------------------------
+
+export interface PostJob {
+  id: number
+  galleryUrl: string
+  title: string
+  scheduledAt: string
+  status: string
+  resultMsg?: string
+  createdAt: string
+  updatedAt: string
+  headtext?: string
+}
+
+// 목록 가져오기
+export async function getPostJobs(): Promise<PostJob[]> {
+  const res = await axios.get(`${API_BASE_URL}/dcinside/api/post-jobs`)
+  return res.data
+}
+
+// 실패/대기중 Job 재시도
+export async function retryPostJob(id: number): Promise<any> {
+  const res = await axios.post(`${API_BASE_URL}/dcinside/api/post-jobs/${id}/retry`)
+  return res.data
+}
