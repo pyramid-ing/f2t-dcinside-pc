@@ -23,25 +23,29 @@ const OpenAISettingsForm: React.FC = () => {
   }
 
   return (
-    <Form
-      form={form}
-      layout="vertical"
-      onFinish={onFinish}
-      style={{ maxWidth: 400 }}
-    >
-      <Form.Item
-        label="OpenAI API 키"
-        name="openAIApiKey"
-        rules={[{ required: true, message: 'API 키를 입력하세요.' }]}
+    <div>
+      <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>OpenAI 설정</h3>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={onFinish}
+        style={{ maxWidth: 400 }}
       >
-        <Input.Password placeholder="sk-..." autoComplete="off" />
-      </Form.Item>
-      <Form.Item>
-        <Button type="primary" htmlType="submit" block>
-          저장
-        </Button>
-      </Form.Item>
-    </Form>
+        <Form.Item
+          label="OpenAI API 키"
+          name="openAIApiKey"
+          rules={[{ required: true, message: 'API 키를 입력하세요.' }]}
+          extra="ChatGPT API를 사용하기 위한 OpenAI API 키를 입력하세요."
+        >
+          <Input.Password placeholder="sk-..." autoComplete="off" />
+        </Form.Item>
+        <Form.Item>
+          <Button type="primary" htmlType="submit">
+            저장
+          </Button>
+        </Form.Item>
+      </Form>
+    </div>
   )
 }
 

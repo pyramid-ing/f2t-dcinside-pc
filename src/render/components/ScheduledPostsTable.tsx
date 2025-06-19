@@ -25,6 +25,30 @@ const statusOptions = [
   { value: 'failed', label: '실패' },
 ]
 
+// 갤러리 URL에서 ID 추출하는 함수
+function extractGalleryId(galleryUrl: string): string {
+  try {
+    const url = new URL(galleryUrl)
+    const pathParts = url.pathname.split('/')
+    const idParam = url.searchParams.get('id')
+
+    if (idParam) {
+      return idParam
+    }
+
+    // URL 경로에서 갤러리 ID 추출 시도
+    const galleryIndex = pathParts.findIndex(part => part === 'board' || part === 'mgallery')
+    if (galleryIndex !== -1 && pathParts[galleryIndex + 1]) {
+      return pathParts[galleryIndex + 1]
+    }
+
+    return galleryUrl
+  }
+  catch {
+    return galleryUrl
+  }
+}
+
 const ScheduledPostsTable: React.FC = () => {
   const [data, setData] = useState<PostJob[]>([])
   const [loading, setLoading] = useState(false)
@@ -100,134 +124,192 @@ const ScheduledPostsTable: React.FC = () => {
   }
 
   return (
-    <div>
-      <Typography.Title level={4}>예약 등록/작업 관리</Typography.Title>
-      <Space style={{ marginBottom: 16 }}>
-        <span>상태 필터:</span>
-        <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={statusOptions}
-          style={{ width: 120 }}
-        />
-        <span>검색:</span>
-        <Input.Search
-          placeholder="제목, 갤러리, 말머리, 결과 검색"
-          value={searchText}
-          onChange={e => setSearchText(e.target.value)}
-          onSearch={fetchData}
-          style={{ width: 300 }}
-          allowClear
-        />
-      </Space>
-      <Table
-        rowKey="id"
-        dataSource={data}
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-        onChange={handleTableChange}
-        columns={[
-          {
-            title: 'ID',
-            dataIndex: 'id',
-            width: 60,
-            sorter: true,
-          },
-          {
-            title: '갤러리',
-            dataIndex: 'galleryUrl',
-            width: 180,
-            sorter: true,
-          },
-          {
-            title: '제목',
-            dataIndex: 'title',
-            width: 200,
-            sorter: true,
-          },
-          {
-            title: '예정시간',
-            dataIndex: 'scheduledAt',
-            width: 160,
-            render: (v: string) => new Date(v).toLocaleString(),
-            sorter: true,
-          },
-          {
-            title: '상태',
-            dataIndex: 'status',
-            width: 100,
-            render: (v: string) => <Tag color={statusColor[v] || 'default'}>{statusLabels[v] || v}</Tag>,
-            sorter: true,
-          },
-          {
-            title: '결과',
-            dataIndex: 'resultMsg',
-            width: 200,
-            render: (v: string, row: PostJob) => {
-              if (row.status === 'completed' && row.resultUrl) {
-                return (
-                  <div>
-                    <div>{v || '완료'}</div>
-                    <a href={row.resultUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#1890ff' }}>
-                      등록된 글 보기
-                    </a>
-                  </div>
-                )
-              }
-              return v || '-'
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '8px',
+        padding: '24px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      }}
+      >
+        <Typography.Title level={4} style={{ marginBottom: '24px' }}>
+          예약 등록/작업 관리
+        </Typography.Title>
+
+        <div style={{ marginBottom: '20px' }}>
+          <Space size="middle" wrap>
+            <Space>
+              <span>상태 필터:</span>
+              <Select
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={statusOptions}
+                style={{ width: 120 }}
+              />
+            </Space>
+            <Space>
+              <span>검색:</span>
+              <Input.Search
+                placeholder="제목, 갤러리, 말머리, 결과 검색"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                onSearch={fetchData}
+                style={{ width: 300 }}
+                allowClear
+              />
+            </Space>
+          </Space>
+        </div>
+
+        <Table
+          rowKey="id"
+          dataSource={data}
+          loading={loading}
+          pagination={{
+            pageSize: 15,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
+          }}
+          onChange={handleTableChange}
+          size="middle"
+          bordered
+          style={{ background: '#fff' }}
+          scroll={{ x: 'max-content' }}
+          columns={[
+            {
+              title: 'ID',
+              dataIndex: 'id',
+              width: 80,
+              sorter: true,
+              align: 'center',
             },
-            sorter: true,
-          },
-          {
-            title: '말머리',
-            dataIndex: 'headtext',
-            width: 120,
-            sorter: true,
-          },
-          {
-            title: '생성시간',
-            dataIndex: 'createdAt',
-            width: 160,
-            render: (v: string) => new Date(v).toLocaleString(),
-            sorter: true,
-          },
-          {
-            title: '수정시간',
-            dataIndex: 'updatedAt',
-            width: 160,
-            render: (v: string) => new Date(v).toLocaleString(),
-            sorter: true,
-            defaultSortOrder: 'descend',
-          },
-          {
-            title: '액션',
-            dataIndex: 'action',
-            width: 150,
-            render: (_: any, row: PostJob) => (
-              <Space>
-                {row.status === 'failed' && (
-                  <Button size="small" onClick={() => handleRetry(row.id)}>
-                    재시도
-                  </Button>
-                )}
-                {row.status !== 'processing' && (
-                  <Popconfirm
-                    title="정말 삭제하시겠습니까?"
-                    onConfirm={() => handleDelete(row.id)}
-                    okText="삭제"
-                    cancelText="취소"
-                  >
-                    <Button size="small" danger>
-                      삭제
+            {
+              title: '제목',
+              dataIndex: 'title',
+              width: 300,
+              sorter: true,
+              ellipsis: { showTitle: false },
+              render: (text: string) => (
+                <span title={text} style={{ cursor: 'default' }}>
+                  {text}
+                </span>
+              ),
+            },
+            {
+              title: '상태',
+              dataIndex: 'status',
+              width: 100,
+              render: (v: string) => <Tag color={statusColor[v] || 'default'}>{statusLabels[v] || v}</Tag>,
+              sorter: true,
+              align: 'center',
+            },
+            {
+              title: '결과',
+              dataIndex: 'resultMsg',
+              width: 250,
+              render: (v: string, row: PostJob) => {
+                if (row.status === 'completed' && row.resultUrl) {
+                  return (
+                    <div>
+                      <div style={{ marginBottom: '4px' }}>{v || '완료'}</div>
+                      <a
+                        href={row.resultUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#1890ff', fontSize: '12px' }}
+                      >
+                        등록된 글 보기 →
+                      </a>
+                    </div>
+                  )
+                }
+                return <span style={{ color: '#666' }}>{v || '-'}</span>
+              },
+              sorter: true,
+            },
+            {
+              title: '갤러리',
+              dataIndex: 'galleryUrl',
+              width: 120,
+              sorter: true,
+              align: 'center',
+              render: (url: string) => (
+                <span style={{
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  background: '#f5f5f5',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
+                >
+                  {extractGalleryId(url)}
+                </span>
+              ),
+            },
+            {
+              title: '예정시간',
+              dataIndex: 'scheduledAt',
+              width: 160,
+              render: (v: string) => (
+                <span style={{ fontSize: '12px', color: '#666' }}>
+                  {new Date(v).toLocaleString('ko-KR')}
+                </span>
+              ),
+              sorter: true,
+            },
+            {
+              title: '말머리',
+              dataIndex: 'headtext',
+              width: 100,
+              sorter: true,
+              align: 'center',
+              render: (text: string) => text
+                ? (
+                    <Tag color="blue" style={{ fontSize: '11px' }}>{text}</Tag>
+                  )
+                : '-',
+            },
+            {
+              title: '액션',
+              dataIndex: 'action',
+              width: 120,
+              fixed: 'right',
+              align: 'center',
+              render: (_: any, row: PostJob) => (
+                <Space size="small">
+                  {row.status === 'failed' && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleRetry(row.id)}
+                      style={{ fontSize: '11px' }}
+                    >
+                      재시도
                     </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-        scroll={{ x: 1400 }}
-      />
+                  )}
+                  {row.status !== 'processing' && (
+                    <Popconfirm
+                      title="정말 삭제하시겠습니까?"
+                      onConfirm={() => handleDelete(row.id)}
+                      okText="삭제"
+                      cancelText="취소"
+                    >
+                      <Button
+                        danger
+                        size="small"
+                        style={{ fontSize: '11px' }}
+                      >
+                        삭제
+                      </Button>
+                    </Popconfirm>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </div>
     </div>
   )
 }

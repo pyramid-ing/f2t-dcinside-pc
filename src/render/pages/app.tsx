@@ -17,12 +17,10 @@ const StyledLayout = styled(Layout)`
 const StyledContent = styled(Content)`
   margin: 0;
   padding: 0;
-  background: #fff;
+  background: #f5f5f5;
   min-height: 100vh;
   height: 100vh;
-  display: flex;
-  align-items: start;
-  justify-content: start;
+  overflow: auto;
 `
 
 const Logo = styled.div`
@@ -65,13 +63,13 @@ const App: React.FC = () => {
             },
             {
               key: '2',
-              icon: <SettingOutlined />,
-              label: <NavLink to="/settings">설정</NavLink>,
+              icon: <HomeOutlined />,
+              label: <NavLink to="/scheduled-posts">작업 관리</NavLink>,
             },
             {
               key: '3',
-              icon: <HomeOutlined />,
-              label: <NavLink to="/scheduled-posts">작업 관리</NavLink>,
+              icon: <SettingOutlined />,
+              label: <NavLink to="/settings">설정</NavLink>,
             },
           ]}
         />
@@ -82,18 +80,36 @@ const App: React.FC = () => {
             <Route
               path="/"
               element={(
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Tabs
-                    defaultActiveKey="send-dm"
-                    style={{ width: 500, maxWidth: '90vw' }}
-                    items={[
-                      {
-                        key: 'dcinside-excel-upload',
-                        label: '디씨 엑셀 업로드',
-                        children: <UploadDcinsideExcelForm />,
-                      },
-                    ]}
-                  />
+                <div style={{
+                  padding: '24px',
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '100vh',
+                }}
+                >
+                  <div style={{
+                    background: '#fff',
+                    borderRadius: '8px',
+                    padding: '32px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    width: '100%',
+                    maxWidth: '600px',
+                  }}
+                  >
+                    <Tabs
+                      defaultActiveKey="dcinside-excel-upload"
+                      size="large"
+                      items={[
+                        {
+                          key: 'dcinside-excel-upload',
+                          label: '디씨 엑셀 업로드',
+                          children: <UploadDcinsideExcelForm />,
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
               )}
             />

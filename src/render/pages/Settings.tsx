@@ -1,5 +1,5 @@
 import { SettingOutlined } from '@ant-design/icons'
-import { Card, message, Tabs, Typography } from 'antd'
+import { message, Tabs, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import AppSettingsForm from '../components/settings/AppSettingsForm'
 import OpenAISettingsForm from '../components/settings/OpenAISettingsForm'
@@ -28,15 +28,23 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={2}>
-          <SettingOutlined style={{ marginRight: 8 }} />
-          설정
-        </Title>
-      </div>
+    <div style={{ padding: '24px', background: '#f5f5f5', minHeight: '100vh' }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '8px',
+        padding: '24px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        maxWidth: '1000px',
+        margin: '0 auto',
+      }}
+      >
+        <div style={{ marginBottom: 24 }}>
+          <Title level={2}>
+            <SettingOutlined style={{ marginRight: 8 }} />
+            설정
+          </Title>
+        </div>
 
-      <Card>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
@@ -55,7 +63,7 @@ const Settings: React.FC = () => {
             },
           ]}
         />
-      </Card>
+      </div>
     </div>
   )
 }

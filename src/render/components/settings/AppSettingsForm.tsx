@@ -1,5 +1,5 @@
 import type { AppSettings } from '../../types/settings'
-import { Button, Card, Form, InputNumber, message, Space, Switch } from 'antd'
+import { Button, Form, InputNumber, message, Space, Switch } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { getAppSettingsFromServer, saveAppSettingsToServer } from '../../api'
 
@@ -49,7 +49,8 @@ const AppSettingsForm: React.FC = () => {
   }
 
   return (
-    <Card title="앱 설정" loading={loading}>
+    <div>
+      <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>앱 설정</h3>
       <Form
         form={form}
         layout="vertical"
@@ -68,6 +69,7 @@ const AppSettingsForm: React.FC = () => {
           <Switch
             checkedChildren="창 보임"
             unCheckedChildren="창 숨김"
+            loading={loading}
           />
         </Form.Item>
 
@@ -85,6 +87,7 @@ const AppSettingsForm: React.FC = () => {
             max={300}
             addonAfter="초"
             style={{ width: 150 }}
+            disabled={loading}
           />
         </Form.Item>
 
@@ -93,13 +96,13 @@ const AppSettingsForm: React.FC = () => {
             <Button type="primary" htmlType="submit" loading={saving}>
               저장
             </Button>
-            <Button onClick={loadSettings} disabled={saving}>
+            <Button onClick={loadSettings} disabled={saving || loading}>
               초기화
             </Button>
           </Space>
         </Form.Item>
       </Form>
-    </Card>
+    </div>
   )
 }
 
