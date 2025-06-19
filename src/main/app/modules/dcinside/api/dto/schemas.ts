@@ -20,10 +20,27 @@ export const PostJobSchema = z.object({
   headtext: z.string().optional(),
   scheduledAt: z.preprocess(
     (v) => {
-      if (v instanceof Date)
-        return v
-      if (typeof v === 'string')
-        return new Date(v)
+      // 빈 값 처리
+      if (!v || v === '' || v === null || v === undefined) {
+        return undefined
+      }
+      
+      // 이미 Date 객체인 경우
+      if (v instanceof Date) {
+        return isNaN(v.getTime()) ? undefined : v
+      }
+      
+      // 문자열인 경우
+      if (typeof v === 'string') {
+        const trimmed = v.trim()
+        if (trimmed === '') {
+          return undefined
+        }
+        
+        const date = new Date(trimmed)
+        return isNaN(date.getTime()) ? undefined : date
+      }
+      
       return undefined
     },
     z.date().optional(),
@@ -63,10 +80,27 @@ export const DcinsidePostSchema = z.object({
   ),
   scheduledAt: z.preprocess(
     (v) => {
-      if (v instanceof Date)
-        return v
-      if (typeof v === 'string')
-        return new Date(v)
+      // 빈 값 처리
+      if (!v || v === '' || v === null || v === undefined) {
+        return undefined
+      }
+      
+      // 이미 Date 객체인 경우
+      if (v instanceof Date) {
+        return isNaN(v.getTime()) ? undefined : v
+      }
+      
+      // 문자열인 경우
+      if (typeof v === 'string') {
+        const trimmed = v.trim()
+        if (trimmed === '') {
+          return undefined
+        }
+        
+        const date = new Date(trimmed)
+        return isNaN(date.getTime()) ? undefined : date
+      }
+      
       return undefined
     },
     z.date().optional(),
