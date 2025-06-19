@@ -1,39 +1,42 @@
-type RetryFn = () => boolean | Promise<boolean>
+type RetryFn<T> = () => T | Promise<T>
 
 /**
- * A utility that retries a function every `interval` milliseconds
- * until the function returns true or the maximum number of retries is reached.
+ * A utility that retries a function until it succeeds or the maximum number of retries is reached.
  *
- * @param fn - A function that returns a boolean or a Promise resolving to a boolean.
+ * @param fn - A function to execute and retry on failure.
  * @param interval - The time interval (in milliseconds) between each retry. Defaults to 1000.
  * @param maxRetries - The maximum number of retry attempts. Defaults to 3.
  * @param backoff - The backoff strategy to use: 'linear', 'exponential', or null.
- * @returns {Promise<boolean>} - A promise that resolves to:
- *   - true: If the function returns true before reaching maxRetries.
- *   - false: If the function never returns true or if an error occurs.
+ * @returns {Promise<T>} - A promise that resolves to the result of the function.
+ * @throws {Error} - Throws the last error if all retry attempts fail.
  */
-export async function retry(
-  fn: RetryFn,
+export async function retry<T>(
+  fn: RetryFn<T>,
   interval: number = 1000,
   maxRetries: number = 3,
   backoff: 'exponential' | 'linear' | null = 'linear',
-): Promise<boolean> {
+): Promise<T> {
   let attempt = 0
+  let lastError: any = null
 
   while (attempt < maxRetries) {
     attempt++
     try {
+      console.log(`Retry attempt ${attempt}/${maxRetries}`)
       const result = await fn()
-      if (result) {
-        return true
-      }
+      console.log(`Success on attempt ${attempt}`)
+      return result
     } catch (error) {
-      console.error('Error during retry:', error)
-      throw error
-    }
+      console.error(`Error on attempt ${attempt}:`, error)
+      lastError = error
 
-    // Wait for the specified interval before the next attempt, if any attempts remain.
-    if (attempt < maxRetries) {
+      // 마지막 시도에서 에러가 발생하면 에러를 던짐
+      if (attempt === maxRetries) {
+        console.error(`All ${maxRetries} attempts failed. Throwing last error.`)
+        throw error
+      }
+
+      // Wait for the specified interval before the next attempt
       let computedInterval = interval
 
       if (backoff === 'linear') {
@@ -43,9 +46,11 @@ export async function retry(
         computedInterval = Math.min(computedInterval, 30000) // Cap the maximum interval to 30 seconds
       }
 
+      console.log(`Waiting ${computedInterval}ms before next attempt...`)
       await new Promise<void>(resolve => setTimeout(resolve, computedInterval))
     }
   }
 
-  return false
+  // 이 코드에는 도달하지 않지만 TypeScript를 위해 추가
+  throw lastError || new Error('All retry attempts failed')
 }
