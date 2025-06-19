@@ -59,14 +59,25 @@ export class DcinsidePostingService {
           messages: [
             {
               role: 'system',
-              content: 'You are a helpful assistant that only responds with a JSON object like: { "answer": "value" }.',
+              content:
+                'You are a CAPTCHA solver that ONLY responds with JSON format: { "answer": "captcha_text" }. Never provide explanations or additional text.',
             },
             {
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: '이건 캡챠 이미지야. 캡챠 구성은 영문 소문자와 숫자로만 이뤄졌어. 반드시 다음 형식으로만 대답해: { "answer": "정답" }',
+                  text: `이 이미지는 CAPTCHA입니다. 
+규칙:
+- 캡챠는 영어 소문자(a-z)와 숫자(0-9)로만 구성됩니다
+- 대문자는 절대 포함되지 않습니다
+- 특수문자나 공백은 없습니다
+- 보통 4-6자리입니다
+
+이미지를 정확히 읽고 반드시 다음 JSON 형식으로만 응답하세요:
+{ "answer": "정답" }
+
+정답은 이미지에 보이는 문자를 정확히 입력하세요.`,
                 },
                 {
                   type: 'image_url',
@@ -76,6 +87,7 @@ export class DcinsidePostingService {
             },
           ],
           temperature: 0,
+          max_completion_tokens: 50,
         })
 
         try {
