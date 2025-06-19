@@ -2,7 +2,9 @@ import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
 import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
+import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
+import { DcinsidePostSchema } from './api/dto/schemas'
 
 interface PostQueueItem {
   id: number
@@ -37,10 +39,31 @@ export class PostQueueService {
 
   private async convertJobToParams(job: any): Promise<DcinsidePostParams> {
     const appSettings = await this.getAppSettings()
-    return {
-      ...job,
+
+    // 기본 포스팅 파라미터 구성
+    const rawParams = {
+      galleryUrl: job.galleryUrl,
+      title: job.title,
+      contentHtml: job.contentHtml,
+      password: job.password,
+      nickname: job.nickname,
+      headtext: job.headtext,
       imagePaths: job.imagePaths ? JSON.parse(job.imagePaths) : [],
+      loginId: job.loginId,
+      loginPassword: job.loginPassword,
       headless: !appSettings.showBrowserWindow, // 창보임 설정의 반대가 headless
+    }
+
+    try {
+      // Zod로 검증 및 변환
+      return DcinsidePostSchema.parse(rawParams)
+    }
+    catch (error) {
+      if (error instanceof ZodError) {
+        const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
+        throw new Error(`큐 파라미터 검증 실패: ${zodErrors.join(', ')}`)
+      }
+      throw new Error(`큐 파라미터 검증 실패: ${error.message}`)
     }
   }
 

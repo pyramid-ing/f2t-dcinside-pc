@@ -1,5 +1,6 @@
+import type { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
-import { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
+import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/schemas'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
@@ -8,10 +9,11 @@ import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { ZodError } from 'zod'
 
 puppeteer.use(StealthPlugin())
 
-export type DcinsidePostParams = Omit<DcinsidePostDto, never>
+export type DcinsidePostParams = DcinsidePostDto
 
 @Injectable()
 export class DcinsidePostingService {
@@ -21,6 +23,19 @@ export class DcinsidePostingService {
     private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
   ) {}
+
+  private validateParams(rawParams: any): DcinsidePostDto {
+    try {
+      return DcinsidePostSchema.parse(rawParams)
+    }
+    catch (error) {
+      if (error instanceof ZodError) {
+        const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
+        throw new Error(`포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`)
+      }
+      throw new Error(`포스팅 파라미터 검증 실패: ${error.message}`)
+    }
+  }
 
   private async solveCapcha(page: Page): Promise<void> {
     const captchaImg = await page.$('#kcaptcha')
@@ -298,9 +313,12 @@ export class DcinsidePostingService {
     await sleep(4000)
   }
 
-  async postArticle(params: DcinsidePostParams): Promise<{ success: boolean, message: string, url?: string }> {
+  async postArticle(rawParams: any): Promise<{ success: boolean, message: string, url?: string }> {
     let browser = null
     try {
+      // 0. 파라미터 검증
+      const params = this.validateParams(rawParams)
+
       // 1. 갤러리 id 추출
       const match = params.galleryUrl.match(/id=(\w+)/)
       if (!match)

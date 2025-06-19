@@ -92,13 +92,17 @@ export class DcinsideWorkflowService {
           parsed = dayjs(row.scheduledAt)
         }
         if (parsed.isValid()) {
-          row.scheduledAt = parsed.toISOString()
+          row.scheduledAt = parsed.toDate()
         }
       }
 
       // 로그인 필요 체크 및 로그인
       if (row.loginId && row.loginPassword) {
-        const loginResult = await this.loginService.login(row.loginId, row.loginPassword, false)
+        const loginResult = await this.loginService.login({
+          id: row.loginId,
+          password: row.loginPassword,
+          headless: false,
+        })
         if (!loginResult.success) {
           results.push({ ...row, success: false, message: '로그인 실패' })
           continue

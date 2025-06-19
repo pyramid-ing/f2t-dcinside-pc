@@ -1,5 +1,5 @@
+import type { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
 import { Body, Controller, Post } from '@nestjs/common'
 
 @Controller('posting')

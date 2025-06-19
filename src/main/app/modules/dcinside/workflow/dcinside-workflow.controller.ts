@@ -8,7 +8,7 @@ export class DcinsideWorkflowController {
 
   @Post('excel-upload')
   @UseInterceptors(FileInterceptor('file'))
-  async excelUpload(@UploadedFile() file: Express.Multer.File) {
+  async excelUpload(@UploadedFile() file: any) {
     return await this.workflowService.handleExcelUpload(file)
   }
 }

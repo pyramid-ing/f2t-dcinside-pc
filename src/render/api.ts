@@ -1,3 +1,9 @@
+import type { AppSettings } from './types/settings'
+
+// ------------------------------
+// App Settings API
+// ------------------------------
+
 import axios from 'axios'
 
 const API_BASE_URL = 'http://localhost:3554'
@@ -93,12 +99,6 @@ export async function getOpenAIApiKeyFromServer(): Promise<string> {
   const res = await axios.get(`${API_BASE_URL}/settings/global`)
   return res.data?.data?.openAIApiKey || ''
 }
-
-// ------------------------------
-// App Settings API
-// ------------------------------
-
-import type { AppSettings } from './types/settings'
 
 export async function saveAppSettingsToServer(settings: AppSettings) {
   const res = await axios.post(`${API_BASE_URL}/settings/app`, settings)

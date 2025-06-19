@@ -1,4 +1,5 @@
-import { BadRequestException, type ValidationError, ValidationPipe } from '@nestjs/common'
+import type { ValidationError } from '@nestjs/common'
+import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell } from 'electron'

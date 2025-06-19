@@ -10,7 +10,7 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "baseUrl": "./",
-    "module": "commonjs",
+    "module": "esnext",
     "moduleResolution": "node",
     "paths": {
       "@render/*": [
@@ -23,7 +23,7 @@
     "resolveJsonModule": true,
     "types": [
       "vite/client",
-      "./src/preload"
+      "node"
     ],
     "strict": false,
     "noImplicitAny": false,

@@ -21,7 +21,7 @@ export class AuthExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message: exception.message,
-      errors: exception instanceof HttpException ? exception.getResponse().errors : null, // errors를 포함한 응답
+      errors: exception instanceof HttpException ? (exception.getResponse() as any)?.errors : null, // errors를 포함한 응답
       timestamp: new Date().toISOString(),
       path: request.url,
     })

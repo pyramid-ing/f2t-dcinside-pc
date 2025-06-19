@@ -1,8 +1,10 @@
+import type { PostJobDto } from './dto/scheduled-post.dto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
-import { PostJobDto } from './dto/scheduled-post.dto'
+import { ZodError } from 'zod'
+import { PostJobSchema } from './dto/schemas'
 
 @Injectable()
 export class PostJobService {
@@ -40,59 +42,41 @@ export class PostJobService {
     return { valid, errors }
   }
 
-  private validateAndSanitizeDto(dto: PostJobDto): { sanitizedDto: Partial<PostJobDto>, errors: string[] } {
+  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: PostJobDto, errors: string[] } {
     const errors: string[] = []
-    const sanitizedDto: Partial<PostJobDto> = { ...dto }
 
-    // 1. 필수 필드 검증
-    if (!dto.galleryUrl || !dto.title || !dto.contentHtml) {
-      errors.push('필수 필드가 누락되었습니다 (galleryUrl, title, contentHtml)')
+    try {
+      // Zod로 검증 및 변환
+      const sanitizedDto = PostJobSchema.parse(rawDto)
+
+      // 추가 이미지 파일 검증
+      if (sanitizedDto.imagePaths && sanitizedDto.imagePaths.length > 0) {
+        const validation = this.validateImagePaths(sanitizedDto.imagePaths)
+        if (validation.errors.length > 0) {
+          errors.push(...validation.errors)
+          return { sanitizedDto, errors }
+        }
+        sanitizedDto.imagePaths = validation.valid
+      }
+
       return { sanitizedDto, errors }
     }
-
-    // 2. 예정시간 검증 및 정리
-    if (dto.scheduledAt) {
-      const date = new Date(dto.scheduledAt)
-      if (Number.isNaN(date.getTime())) {
-        this.logger.warn(`잘못된 예정시간 형식, 현재 시간으로 변경: ${dto.scheduledAt}`)
-        sanitizedDto.scheduledAt = new Date().toISOString()
+    catch (error) {
+      if (error instanceof ZodError) {
+        const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
+        errors.push(...zodErrors)
       }
       else {
-        sanitizedDto.scheduledAt = date.toISOString()
+        errors.push(`검증 오류: ${error.message}`)
       }
+      return { sanitizedDto: null as any, errors }
     }
-    else {
-      sanitizedDto.scheduledAt = new Date().toISOString()
-    }
-
-    // 3. 말머리 검증 및 정리
-    if (dto.headtext && typeof dto.headtext !== 'string') {
-      this.logger.warn(`잘못된 말머리 형식, 제거됨: ${dto.headtext}`)
-      sanitizedDto.headtext = undefined
-    }
-
-    // 4. 이미지 경로 검증 및 정리
-    if (dto.imagePaths && dto.imagePaths.length > 0) {
-      const validation = this.validateImagePaths(dto.imagePaths)
-      if (validation.errors.length > 0) {
-        errors.push(...validation.errors)
-        return { sanitizedDto, errors }
-      }
-      sanitizedDto.imagePaths = validation.valid
-    }
-
-    // 5. 비밀번호 검증
-    if (!dto.password) {
-      errors.push('비밀번호는 필수입니다')
-    }
-
-    return { sanitizedDto, errors }
   }
 
   // 예약 등록 추가 (검증 포함)
-  async createPostJob(dto: PostJobDto) {
+  async createPostJob(rawDto: any) {
     // 데이터 검증 및 정리
-    const { sanitizedDto, errors } = this.validateAndSanitizeDto(dto)
+    const { sanitizedDto, errors } = this.validateAndSanitizeDto(rawDto)
 
     if (errors.length > 0) {
       throw new Error(`데이터 검증 실패: ${errors.join(', ')}`)
@@ -109,7 +93,7 @@ export class PostJobService {
         imagePaths: sanitizedDto.imagePaths ? JSON.stringify(sanitizedDto.imagePaths) : null,
         loginId: sanitizedDto.loginId ?? null,
         loginPassword: sanitizedDto.loginPassword ?? null,
-        scheduledAt: new Date(sanitizedDto.scheduledAt),
+        scheduledAt: sanitizedDto.scheduledAt || new Date(),
         status: 'pending',
       },
     })
