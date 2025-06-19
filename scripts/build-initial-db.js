@@ -15,9 +15,23 @@ if (fs.existsSync(tmpDbPath)) {
   console.log('기존 tmp-initial.sqlite 삭제 완료')
 }
 
-// 2. DATABASE_URL을 임시 DB로 지정해서 초기화
+// 2. DATABASE_URL을 임시 DB로 지정해서 초기화 (크로스 플랫폼 지원)
 console.log('임시 DB로 초기화(pnpm db:init) 실행...')
-execSync(`DATABASE_URL="file:${tmpDbPath}" pnpm db:init`, { stdio: 'inherit' })
+
+// Windows와 Unix 환경 모두 지원하는 방식
+const isWindows = process.platform === 'win32'
+const databaseUrl = `file:${tmpDbPath}`
+
+if (isWindows) {
+  // Windows: PowerShell 환경변수 설정 방식
+  execSync(`$env:DATABASE_URL="${databaseUrl}"; pnpm db:init`, { 
+    stdio: 'inherit',
+    shell: 'powershell'
+  })
+} else {
+  // Unix/Linux/macOS: 기존 방식
+  execSync(`DATABASE_URL="${databaseUrl}" pnpm db:init`, { stdio: 'inherit' })
+}
 
 // 3. 임시 DB를 resources/initial.sqlite로 복사
 if (fs.existsSync(tmpDbPath)) {

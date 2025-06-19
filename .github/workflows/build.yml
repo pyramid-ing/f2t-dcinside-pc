@@ -68,7 +68,11 @@ jobs:
 
       # 7. 초기 DB 빌드
       - name: Build initial database
-        run: node scripts/build-initial-db.js
+        shell: pwsh
+        run: |
+          $tmpDbPath = "$(Get-Location)\prisma\tmp-initial.sqlite"
+          $env:DATABASE_URL = "file:$tmpDbPath"
+          node scripts/build-initial-db.js
 
       # 8. Electron 앱 빌드 및 배포
       - name: Build and Release
