@@ -1,3 +1,4 @@
+import { PostingQueueService } from '@main/app/modules/dcinside/api/post-queue.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { Module } from '@nestjs/common'
 import { PostJobController } from 'src/main/app/modules/dcinside/api/post-job.controller'
@@ -12,7 +13,7 @@ import { DcinsidePostingService } from './dcinside-posting.service'
 @Module({
   imports: [SettingsModule],
   controllers: [DcinsidePostingController, DcinsideLoginController, PostJobController],
-  providers: [DcinsidePostingService, DcinsideLoginService, CookieService, PostJobService, PrismaService],
-  exports: [DcinsidePostingService, DcinsideLoginService, PostJobService],
+  providers: [DcinsidePostingService, DcinsideLoginService, CookieService, PostJobService, PrismaService, PostingQueueService],
+  exports: [DcinsidePostingService, DcinsideLoginService, PostJobService, PostingQueueService],
 })
 export class DcinsideApiModule {}

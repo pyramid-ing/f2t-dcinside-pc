@@ -86,16 +86,32 @@ export class DcinsidePostingService {
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
-    await page.waitForSelector('.subject_list li', { timeout: 5000 })
-    await page.evaluate((headtext) => {
-      const items = Array.from(document.querySelectorAll('.subject_list li'))
-      const target = items.find(
-        li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
-      )
-      if (target)
-        (target as HTMLElement).click()
-    }, headtext)
-    await sleep(300)
+    if (!headtext)
+      return
+
+    try {
+      await page.waitForSelector('.subject_list li', { timeout: 5000 })
+      const found = await page.evaluate((headtext) => {
+        const items = Array.from(document.querySelectorAll('.subject_list li'))
+        const target = items.find(
+          li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
+        )
+        if (target) {
+          (target as HTMLElement).click()
+          return true
+        }
+        return false
+      }, headtext)
+
+      if (!found) {
+        this.logger.warn(`말머리를 찾을 수 없습니다. 기본값으로 처리: ${headtext}`)
+      }
+
+      await sleep(300)
+    }
+    catch (error) {
+      this.logger.warn(`말머리 선택 중 오류 발생, 기본값으로 처리: ${headtext} - ${error.message}`)
+    }
   }
 
   private async inputContent(page: Page, contentHtml: string): Promise<void> {

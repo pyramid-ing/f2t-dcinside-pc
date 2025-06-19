@@ -20,6 +20,49 @@ LoggerConfig.info(process.env.COOKIE_DIR)
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
+
+class JobQueue {
+  private queue: (() => Promise<void>)[] = []
+  private isRunning = false
+
+  async enqueue(job: () => Promise<void>) {
+    this.queue.push(job)
+    this.runQueue()
+  }
+
+  private async runQueue() {
+    if (this.isRunning)
+      return
+    this.isRunning = true
+
+    while (this.queue.length > 0) {
+      const job = this.queue.shift()
+      if (job) {
+        await job() // ✨ 여기서 다음 작업을 기다림
+      }
+    }
+
+    this.isRunning = false
+  }
+}
+
+// 테스트용 비동기 작업
+function createJob(id: number, delay: number): () => Promise<void> {
+  return async () => {
+    console.log(`▶ 작업 ${id} 시작`)
+    await new Promise(resolve => setTimeout(resolve, delay))
+    console.log(`✅ 작업 ${id} 완료`)
+  }
+}
+
+// 실행 테스트
+(async () => {
+  const queue = new JobQueue()
+
+  queue.enqueue(createJob(1, 60000)) // 3초 걸리는 작업
+  queue.enqueue(createJob(2, 5000)) // 1초 걸리는 작업
+  queue.enqueue(createJob(3, 500)) // 0.5초 걸리는 작업
+})()
 // IPC 핸들러 설정
 function setupIpcHandlers() {
   ipcMain.handle('get-backend-port', () => null)

@@ -1,3 +1,4 @@
+import { PostingQueueService } from '@main/app/modules/dcinside/api/post-queue.service'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Module } from '@nestjs/common'
@@ -15,6 +16,7 @@ import { ScheduledPostCronService } from './scheduled-post-cron.service'
   providers: [
     DcinsideWorkflowService,
     ScheduledPostCronService,
+    PostingQueueService,
     DcinsidePostingService,
     DcinsideLoginService,
     PostJobService,
