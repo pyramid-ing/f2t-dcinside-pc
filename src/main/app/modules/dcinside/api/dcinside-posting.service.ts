@@ -97,11 +97,8 @@ export class DcinsidePostingService {
     const openai = new OpenAI({ apiKey: openAIApiKey })
 
     // OpenAI 호출 재시도 로직 (최대 3회)
-    let openaiTryCount = 0
-    let answer = ''
-
-    while (openaiTryCount < 3) {
-      try {
+    const answer = await retry(
+      async () => {
         const response = await openai.chat.completions.create({
           model: 'gpt-4o',
           messages: [
@@ -138,34 +135,22 @@ export class DcinsidePostingService {
           max_completion_tokens: 50,
         })
 
-        try {
-          const responseContent = response.choices[0]?.message?.content
-          if (!responseContent) {
-            throw new Error('OpenAI 응답이 비어있습니다.')
-          }
-
-          const parsed = JSON.parse(responseContent)
-          if (!parsed.answer || typeof parsed.answer !== 'string') {
-            throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
-          }
-
-          answer = parsed.answer
-          break // 성공하면 루프 탈출
-        } catch (parseError) {
-          throw new Error(`OpenAI 응답 파싱 오류: ${response.choices[0]?.message?.content || 'No content'}`)
-        }
-      } catch (error) {
-        openaiTryCount += 1
-        this.logger.warn(`OpenAI 캡챠 해제 시도 ${openaiTryCount}/3 실패: ${error.message}`)
-
-        if (openaiTryCount >= 3) {
-          throw new Error(`OpenAI 캡챠 해제 실패 (3회 시도): ${error.message}`)
+        const responseContent = response.choices[0]?.message?.content
+        if (!responseContent) {
+          throw new Error('OpenAI 응답이 비어있습니다.')
         }
 
-        // 재시도 전 잠시 대기
-        await sleep(1000)
-      }
-    }
+        const parsed = JSON.parse(responseContent)
+        if (!parsed.answer || typeof parsed.answer !== 'string') {
+          throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
+        }
+
+        return parsed.answer
+      },
+      1000,
+      3,
+      'linear',
+    )
 
     // 기존 입력값을 지우고 새로 입력
     await page.evaluate(() => {
@@ -316,42 +301,31 @@ export class DcinsidePostingService {
   private async clickApplyButtonSafely(popup: Page): Promise<void> {
     this.logger.log('적용 버튼 클릭 시도...')
 
-    const maxRetries = 10
-    let retryCount = 0
-
-    while (retryCount < maxRetries) {
-      try {
+    await retry(
+      async () => {
         // 적용 버튼 존재 확인
         await popup.waitForSelector('.btn_apply', { timeout: 5000 })
 
-        // 적용 버튼 클릭
-        this.logger.log(`${retryCount + 1}차 적용 버튼 클릭 시도`)
-        // 방법 1: 일반 클릭
-        await popup.click('.btn_apply')
+        // JavaScript로 직접 클릭
+        await popup.evaluate(() => {
+          const btn = document.querySelector('.btn_apply') as HTMLElement
+          if (btn) btn.click()
+        })
 
         // 클릭 후 팝업 닫힘 확인 (1초 대기)
         await sleep(1000)
 
         if (popup.isClosed()) {
           this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
-          return
+          return true
         }
 
-        retryCount++
-      } catch (error) {
-        retryCount++
-        this.logger.warn(`적용 버튼 클릭 실패 (시도 ${retryCount}/${maxRetries}): ${error.message}`)
-
-        if (retryCount >= maxRetries) {
-          throw new Error(`이미지 업로드 실패: 적용 버튼 클릭 실패 (${maxRetries}회 시도)`)
-        }
-
-        await sleep(1000)
-      }
-    }
-
-    // 최대 횟수 초과 시 에러 처리
-    throw new Error(`이미지 업로드 실패: 적용 버튼 클릭 실패 (${maxRetries}회 시도 후 팝업이 닫히지 않음)`)
+        throw new Error('팝업이 아직 닫히지 않았습니다.')
+      },
+      1000,
+      10,
+      'linear',
+    )
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
