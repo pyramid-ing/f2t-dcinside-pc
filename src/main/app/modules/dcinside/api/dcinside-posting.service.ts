@@ -255,7 +255,7 @@ export class DcinsidePostingService {
   private async clickApplyButtonSafely(popup: Page): Promise<void> {
     this.logger.log('적용 버튼 클릭 시도...')
 
-    const maxRetries = 5
+    const maxRetries = 10
     let retryCount = 0
 
     while (retryCount < maxRetries) {
@@ -263,58 +263,34 @@ export class DcinsidePostingService {
         // 적용 버튼 존재 확인
         await popup.waitForSelector('.btn_apply', { timeout: 5000 })
 
-        // 버튼이 클릭 가능한 상태인지 확인
-        const isClickable = await popup.evaluate(() => {
-          const btn = document.querySelector('.btn_apply') as HTMLButtonElement
-          if (!btn) return false
+        // 적용 버튼 클릭
+        this.logger.log(`${retryCount + 1}차 적용 버튼 클릭 시도`)
+        // 방법 1: 일반 클릭
+        await popup.click('.btn_apply')
 
-          const computedStyle = window.getComputedStyle(btn)
-          return (
-            !btn.disabled &&
-            computedStyle.display !== 'none' &&
-            computedStyle.visibility !== 'hidden' &&
-            computedStyle.pointerEvents !== 'none'
-          )
-        })
+        // 클릭 후 팝업 닫힘 확인 (1초 대기)
+        await sleep(1000)
 
-        if (!isClickable) {
-          this.logger.warn(`적용 버튼이 클릭 불가능 상태 (시도 ${retryCount + 1}/${maxRetries})`)
-          retryCount++
-          await sleep(1000)
-          continue
+        if (popup.isClosed()) {
+          this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
+          return
         }
 
-        // 버튼 클릭 시도 (여러 방법)
-        try {
-          // 방법 1: 일반 클릭
-          await popup.click('.btn_apply')
-          this.logger.log('적용 버튼 클릭 성공 (일반 클릭)')
-          break
-        } catch (clickError) {
-          this.logger.warn('일반 클릭 실패, JavaScript 클릭 시도')
-
-          // 방법 2: JavaScript 클릭
-          await popup.evaluate(() => {
-            const btn = document.querySelector('.btn_apply') as HTMLButtonElement
-            if (btn) btn.click()
-          })
-          this.logger.log('적용 버튼 클릭 성공 (JavaScript 클릭)')
-          break
-        }
+        retryCount++
       } catch (error) {
         retryCount++
         this.logger.warn(`적용 버튼 클릭 실패 (시도 ${retryCount}/${maxRetries}): ${error.message}`)
 
         if (retryCount >= maxRetries) {
-          throw new Error('적용 버튼 클릭 실패 (5회 시도)')
+          throw new Error(`이미지 업로드 실패: 적용 버튼 클릭 실패 (${maxRetries}회 시도)`)
         }
 
-        await sleep(2000)
+        await sleep(1000)
       }
     }
 
-    // 팝업 닫힘 대기
-    await sleep(3000)
+    // 최대 횟수 초과 시 에러 처리
+    throw new Error(`이미지 업로드 실패: 적용 버튼 클릭 실패 (${maxRetries}회 시도 후 팝업이 닫히지 않음)`)
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
