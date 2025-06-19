@@ -54,8 +54,13 @@ export class PostQueueService {
       try {
         this.logger.log(`포스팅 시작: ID ${queueItem.id}`)
         const result = await this.postingService.postArticle(queueItem.params)
-        await this.postJobService.updateStatus(queueItem.id, 'completed', result.message)
-        this.logger.log(`포스팅 완료: ID ${queueItem.id}`)
+        await this.postJobService.updateStatusWithUrl(
+          queueItem.id,
+          'completed',
+          result.message,
+          result.url,
+        )
+        this.logger.log(`포스팅 완료: ID ${queueItem.id}, URL: ${result.url}`)
       }
       catch (error) {
         await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)

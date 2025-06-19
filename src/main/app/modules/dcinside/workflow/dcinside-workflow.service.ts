@@ -114,7 +114,7 @@ export class DcinsideWorkflowService {
           password: String(row.password),
           nickname: row.nickname,
           imagePaths: row.imagePaths,
-          scheduledAt: row.scheduledAt, // undefined면 createPostJob에서 현재 시간으로 설정됨
+          scheduledAt: row.scheduledAt,
           headtext: row.headtext,
           loginId: row.loginId,
           loginPassword: row.loginPassword,

@@ -128,6 +128,14 @@ export class PostJobService {
     })
   }
 
+  // 예약 작업 상태/결과/URL 갱신 (포스팅 완료 시 사용)
+  async updateStatusWithUrl(id: number, status: string, resultMsg?: string, resultUrl?: string) {
+    return this.prismaService.postJob.update({
+      where: { id },
+      data: { status, resultMsg, resultUrl },
+    })
+  }
+
   // pending 작업 조회 (scheduledAt <= now)
   async findPending(now: Date) {
     return this.prismaService.postJob.findMany({

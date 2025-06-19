@@ -28,6 +28,7 @@ model PostJob {
   scheduledAt   DateTime
   status        String   // "pending" | "completed" | "failed"
   resultMsg     String?
+  resultUrl     String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
