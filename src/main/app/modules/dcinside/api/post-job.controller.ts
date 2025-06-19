@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
 import { PostJobDto } from './dto/scheduled-post.dto'
 import { PostJobService } from './post-job.service'
 
@@ -12,8 +12,18 @@ export class PostJobController {
   }
 
   @Get()
-  async findAll() {
-    return this.postJobService.getPostJobs()
+  async findAll(
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+    @Query('orderBy') orderBy?: string,
+    @Query('order') order?: 'asc' | 'desc',
+  ) {
+    return this.postJobService.getPostJobs({
+      status,
+      search,
+      orderBy: orderBy || 'updatedAt',
+      order: order || 'desc',
+    })
   }
 
   @Post(':id/retry')

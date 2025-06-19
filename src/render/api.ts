@@ -112,8 +112,29 @@ export interface PostJob {
 }
 
 // 목록 가져오기
-export async function getPostJobs(): Promise<PostJob[]> {
-  const res = await axios.get(`${API_BASE_URL}/dcinside/api/post-jobs`)
+export async function getPostJobs(params?: {
+  status?: string
+  search?: string
+  orderBy?: string
+  order?: 'asc' | 'desc'
+}): Promise<PostJob[]> {
+  const searchParams = new URLSearchParams()
+
+  if (params?.status) {
+    searchParams.append('status', params.status)
+  }
+  if (params?.search) {
+    searchParams.append('search', params.search)
+  }
+  if (params?.orderBy) {
+    searchParams.append('orderBy', params.orderBy)
+  }
+  if (params?.order) {
+    searchParams.append('order', params.order)
+  }
+
+  const url = `${API_BASE_URL}/dcinside/api/post-jobs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+  const res = await axios.get(url)
   return res.data
 }
 

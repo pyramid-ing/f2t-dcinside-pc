@@ -1,5 +1,5 @@
 import type { PostJob } from '../api'
-import { Button, message, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
+import { Button, Input, message, Popconfirm, Select, Space, Table, Tag, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { deletePostJob, getPostJobs, retryPostJob } from '../api'
 
@@ -29,17 +29,31 @@ const ScheduledPostsTable: React.FC = () => {
   const [data, setData] = useState<PostJob[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
+  const [searchText, setSearchText] = useState('')
+  const [sortField, setSortField] = useState('updatedAt')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     fetchData()
-    const timer = setInterval(fetchData, 5000)
+  }, [statusFilter, searchText, sortField, sortOrder])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // 자동 새로고침 시에는 현재 검색 조건 유지
+      fetchData()
+    }, 5000)
     return () => clearInterval(timer)
-  }, [])
+  }, [statusFilter, searchText, sortField, sortOrder])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const json = await getPostJobs()
+      const json = await getPostJobs({
+        status: statusFilter || undefined,
+        search: searchText || undefined,
+        orderBy: sortField,
+        order: sortOrder,
+      })
       setData(json)
     }
     catch {}
@@ -78,7 +92,12 @@ const ScheduledPostsTable: React.FC = () => {
     }
   }
 
-  const filteredData = statusFilter ? data.filter(d => d.status === statusFilter) : data
+  const handleTableChange = (pagination: any, filters: any, sorter: any) => {
+    if (sorter.field && sorter.order) {
+      setSortField(sorter.field)
+      setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
+    }
+  }
 
   return (
     <div>
@@ -91,44 +110,54 @@ const ScheduledPostsTable: React.FC = () => {
           options={statusOptions}
           style={{ width: 120 }}
         />
+        <span>검색:</span>
+        <Input.Search
+          placeholder="제목, 갤러리, 말머리, 결과 검색"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          onSearch={fetchData}
+          style={{ width: 300 }}
+          allowClear
+        />
       </Space>
       <Table
         rowKey="id"
-        dataSource={filteredData}
+        dataSource={data}
         loading={loading}
         pagination={{ pageSize: 10 }}
+        onChange={handleTableChange}
         columns={[
-          { 
-            title: 'ID', 
-            dataIndex: 'id', 
+          {
+            title: 'ID',
+            dataIndex: 'id',
             width: 60,
-            sorter: (a, b) => a.id - b.id,
+            sorter: true,
           },
-          { 
-            title: '갤러리', 
-            dataIndex: 'galleryUrl', 
+          {
+            title: '갤러리',
+            dataIndex: 'galleryUrl',
             width: 180,
-            sorter: (a, b) => a.galleryUrl.localeCompare(b.galleryUrl),
+            sorter: true,
           },
-          { 
-            title: '제목', 
-            dataIndex: 'title', 
+          {
+            title: '제목',
+            dataIndex: 'title',
             width: 200,
-            sorter: (a, b) => a.title.localeCompare(b.title),
+            sorter: true,
           },
           {
             title: '예정시간',
             dataIndex: 'scheduledAt',
             width: 160,
             render: (v: string) => new Date(v).toLocaleString(),
-            sorter: (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+            sorter: true,
           },
           {
             title: '상태',
             dataIndex: 'status',
             width: 100,
             render: (v: string) => <Tag color={statusColor[v] || 'default'}>{statusLabels[v] || v}</Tag>,
-            sorter: (a, b) => a.status.localeCompare(b.status),
+            sorter: true,
           },
           {
             title: '결과',
@@ -147,26 +176,27 @@ const ScheduledPostsTable: React.FC = () => {
               }
               return v || '-'
             },
+            sorter: true,
           },
           {
             title: '말머리',
             dataIndex: 'headtext',
             width: 120,
-            sorter: (a, b) => (a.headtext || '').localeCompare(b.headtext || ''),
+            sorter: true,
           },
           {
             title: '생성시간',
             dataIndex: 'createdAt',
             width: 160,
             render: (v: string) => new Date(v).toLocaleString(),
-            sorter: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+            sorter: true,
           },
           {
             title: '수정시간',
             dataIndex: 'updatedAt',
             width: 160,
             render: (v: string) => new Date(v).toLocaleString(),
-            sorter: (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
+            sorter: true,
             defaultSortOrder: 'descend',
           },
           {

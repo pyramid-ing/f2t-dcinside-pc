@@ -116,8 +116,39 @@ export class PostJobService {
   }
 
   // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
-  async getPostJobs() {
-    return this.prismaService.postJob.findMany({ orderBy: { updatedAt: 'desc' } })
+  async getPostJobs(options?: {
+    status?: string
+    search?: string
+    orderBy?: string
+    order?: 'asc' | 'desc'
+  }) {
+    const where: any = {}
+
+    // 상태 필터
+    if (options?.status) {
+      where.status = options.status
+    }
+
+    // 검색 필터 (제목, 갤러리URL, 말머리에서 검색)
+    if (options?.search) {
+      where.OR = [
+        { title: { contains: options.search } },
+        { galleryUrl: { contains: options.search } },
+        { headtext: { contains: options.search } },
+        { resultMsg: { contains: options.search } },
+      ]
+    }
+
+    // 정렬 설정
+    const orderBy: any = {}
+    const sortField = options?.orderBy || 'updatedAt'
+    const sortOrder = options?.order || 'desc'
+    orderBy[sortField] = sortOrder
+
+    return this.prismaService.postJob.findMany({
+      where,
+      orderBy,
+    })
   }
 
   // 예약 작업 상태/결과 갱신
