@@ -98,6 +98,16 @@ export async function getOpenAIApiKeyFromServer(): Promise<string> {
   return res.data?.data?.openAIApiKey || ''
 }
 
+// OpenAI API 키 검증
+export async function validateOpenAIApiKey(apiKey: string): Promise<{
+  valid: boolean
+  error?: string
+  model?: string
+}> {
+  const res = await axios.post(`${API_BASE_URL}/settings/validate-openai-key`, { apiKey })
+  return res.data
+}
+
 export async function saveAppSettingsToServer(settings: AppSettings) {
   const res = await axios.post(`${API_BASE_URL}/settings/app`, settings)
   return res.data

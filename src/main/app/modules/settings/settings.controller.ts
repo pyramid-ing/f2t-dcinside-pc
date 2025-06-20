@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Logger, Post } from '@nestjs/common'
+import { Body, Controller, Get, Logger, Post, Put, Param } from '@nestjs/common'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { PrismaService } from '../../shared/prisma.service'
 
@@ -57,5 +57,25 @@ export class SettingsController {
       this.logger.error('앱 설정 저장 실패:', error)
       return { success: false, error: error.message }
     }
+  }
+
+  @Get()
+  async getAllSettings() {
+    return this.settingsService.findAll()
+  }
+
+  @Get(':key')
+  async getSettingByKey(@Param('key') key: string) {
+    return this.settingsService.findByKey(key)
+  }
+
+  @Put(':key')
+  async updateSetting(@Param('key') key: string, @Body() data: any) {
+    return this.settingsService.upsert(key, data)
+  }
+
+  @Post('validate-openai-key')
+  async validateOpenAIKey(@Body() body: { apiKey: string }) {
+    return this.settingsService.validateOpenAIKey(body.apiKey)
   }
 }

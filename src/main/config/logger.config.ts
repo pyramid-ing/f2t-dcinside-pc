@@ -1,5 +1,4 @@
 // 파일 존재 여부 확인
-import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import electronLog from 'electron-log'
@@ -32,7 +31,7 @@ export class LoggerConfig {
     this.setupErrorHandlers()
   }
 
-   static logSystemInfo() {
+  static logSystemInfo() {
     this.logger.info('--- System Information ---')
     this.logger.info('App Version:', process.env.npm_package_version)
     this.logger.info('Environment:', process.env.NODE_ENV)
@@ -47,7 +46,7 @@ export class LoggerConfig {
     this.logger.info('User Data Path:', app.getPath('userData'))
   }
 
-   static logEnvironmentVariables() {
+  static logEnvironmentVariables() {
     this.logger.info('--- Environment Variables ---')
     Object.keys(process.env).forEach(key => {
       // 민감한 정보는 제외
