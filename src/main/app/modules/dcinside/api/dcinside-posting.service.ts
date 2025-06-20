@@ -24,6 +24,53 @@ interface GalleryInfo {
   type: GalleryType
 }
 
+// Assertion functions
+function assertElementExists<T>(element: T | null, errorMessage: string): asserts element is T {
+  if (!element) {
+    throw new Error(errorMessage)
+  }
+}
+
+function assertValidGalleryUrl(url: string): asserts url is string {
+  const urlMatch = url.match(/[?&]id=([^&]+)/)
+  if (!urlMatch) {
+    throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
+  }
+}
+
+function assertOpenAIResponse(response: any): asserts response is { answer: string } {
+  if (!response?.answer || typeof response.answer !== 'string') {
+    throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
+  }
+}
+
+function assertLoginRequired(loginId: string | undefined, cookies: any[] | null): asserts loginId is string {
+  if (!loginId) {
+    throw new Error('로그인 ID가 필요합니다.')
+  }
+  if (!cookies || cookies.length === 0) {
+    throw new Error('로그인 필요')
+  }
+}
+
+function assertIsLoggedIn(isLoggedIn: boolean): asserts isLoggedIn is true {
+  if (!isLoggedIn) {
+    throw new Error('로그인 필요')
+  }
+}
+
+function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
+  if (!popupPage) {
+    throw new Error('이미지 팝업 윈도우를 찾을 수 없습니다.')
+  }
+}
+
+function assertRetrySuccess(success: boolean, errorMessage: string): asserts success is true {
+  if (!success) {
+    throw new Error(errorMessage)
+  }
+}
+
 @Injectable()
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
@@ -47,10 +94,8 @@ export class DcinsidePostingService {
 
   private extractGalleryInfo(galleryUrl: string): GalleryInfo {
     // URL에서 id 파라미터 추출
-    const urlMatch = galleryUrl.match(/[?&]id=([^&]+)/)
-    if (!urlMatch) {
-      throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
-    }
+    assertValidGalleryUrl(galleryUrl)
+    const urlMatch = galleryUrl.match(/[?&]id=([^&]+)/)!
     const id = urlMatch[1]
 
     // 갤러리 타입 판별
@@ -142,10 +187,7 @@ export class DcinsidePostingService {
         }
 
         const parsed = JSON.parse(responseContent)
-        if (!parsed.answer || typeof parsed.answer !== 'string') {
-          throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
-        }
-
+        assertOpenAIResponse(parsed)
         return parsed.answer
       },
       1000,
@@ -255,8 +297,8 @@ export class DcinsidePostingService {
         clearTimeout(timeout)
         try {
           const popupPage = await target.page()
-          if (popupPage) resolve(popupPage)
-          else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
+          assertValidPopupPage(popupPage)
+          resolve(popupPage)
         } catch (error) {
           reject(error)
         }
@@ -274,7 +316,7 @@ export class DcinsidePostingService {
     // 3. 파일 업로드
     await sleep(2000) // 팝업 안정화 대기
     const input = await popup.$('input.file_add')
-    if (!input) throw new Error('이미지 업로드 input을 찾을 수 없습니다.')
+    assertElementExists(input, '이미지 업로드 input을 찾을 수 없습니다.')
 
     await input.uploadFile(...imagePaths)
     this.logger.log(`${imagePaths.length}개 이미지 업로드 시작`)
@@ -530,9 +572,7 @@ export class DcinsidePostingService {
       'linear',
     )
 
-    if (!success) {
-      throw new Error('글쓰기 페이지 이동 실패 (3회 시도)')
-    }
+    assertRetrySuccess(success, '글쓰기 페이지 이동 실패 (3회 시도)')
   }
 
   async postArticle(rawParams: any): Promise<{ success: boolean; message: string; url?: string }> {
@@ -560,14 +600,12 @@ export class DcinsidePostingService {
       // 로그인 쿠키 적용 및 필요시 로그인
       if (params.loginId) {
         const cookies = this.cookieService.loadCookies('dcinside', params.loginId)
-        if (cookies && cookies.length > 0) {
-          await browser.setCookie(...cookies)
-          // 로그인 상태 확인 (공통 서비스 활용)
-          const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
-          if (!isLoggedIn) throw new Error('로그인 필요')
-        } else {
-          throw new Error('로그인 필요')
-        }
+        assertLoginRequired(params.loginId, cookies)
+
+        await browser.setCookie(...cookies)
+        // 로그인 상태 확인 (공통 서비스 활용)
+        const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
+        assertIsLoggedIn(isLoggedIn)
       }
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
