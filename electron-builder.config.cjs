@@ -5,6 +5,7 @@
 const config = {
   appId: 'com.winsoft.dcinside',
   productName: 'winsoft-dcinside',
+  artifactName: '${productName}-${version}.${ext}',
   directories: {
     output: 'dist/electron',
   },
@@ -57,12 +58,14 @@ const config = {
     identity: null,
     hardenedRuntime: false,
     gatekeeperAssess: false,
+    artifactName: '${productName}-${version}-${arch}.${ext}',
   },
   win: {
     icon: 'build/icon.ico',
     target: [
       'nsis',
     ],
+    artifactName: '${productName}-${version}.${ext}',
   },
   nsis: {
     oneClick: false,
@@ -71,6 +74,7 @@ const config = {
     createStartMenuShortcut: true,
     runAfterFinish: true,
     perMachine: true,
+    artifactName: '${productName}-Setup-${version}.${ext}',
   },
 }
 
