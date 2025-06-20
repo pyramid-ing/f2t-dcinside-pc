@@ -167,7 +167,7 @@ const AppSidebar: React.FC = () => {
           <VersionBadge>v{appVersion}</VersionBadge>
         </VersionInfo>
         <UpdateButtonWrapper>
-          <UpdateManager autoCheck={false} />
+          <UpdateManager autoCheck={true} />
         </UpdateButtonWrapper>
       </UpdateSection>
     </Sider>

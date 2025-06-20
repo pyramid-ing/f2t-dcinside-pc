@@ -18,6 +18,8 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
   const [updateDownloaded, setUpdateDownloaded] = useState(false)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string>('')
+  const [isLatestVersion, setIsLatestVersion] = useState<boolean | null>(null) // null: 확인 중, true: 최신, false: 업데이트 필요
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
 
   useEffect(() => {
     // 현재 앱 버전 가져오기
@@ -52,9 +54,9 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
       })
     })
 
-    // 자동 업데이트 확인
+    // 자동 업데이트 확인 (조용히 실행)
     if (autoCheck) {
-      checkForUpdates()
+      checkForUpdatesQuietly()
     }
 
     return () => {
@@ -87,6 +89,45 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
     return false // 같은 버전
   }
 
+  // 조용한 업데이트 확인 (초기 로드 시 사용, 알림 없음)
+  const checkForUpdatesQuietly = async () => {
+    if (!window.electronAPI?.checkForUpdates) {
+      setIsLatestVersion(null)
+      setInitialCheckDone(true)
+      return
+    }
+
+    try {
+      const result: UpdateResult = await window.electronAPI.checkForUpdates()
+
+      if (result.error) {
+        setIsLatestVersion(null)
+      } else if (result.updateInfo) {
+        const remoteVersion = result.updateInfo.version
+
+        // 버전 비교하여 실제로 업데이트가 필요한지 확인
+        if (isNewerVersion(remoteVersion, currentVersion)) {
+          setUpdateAvailable(true)
+          setUpdateInfo({
+            version: result.updateInfo.version,
+            releaseNotes: result.updateInfo.releaseNotes,
+          })
+          setIsLatestVersion(false)
+        } else {
+          setIsLatestVersion(true)
+        }
+      } else {
+        setIsLatestVersion(true)
+      }
+    } catch (error) {
+      console.error('업데이트 확인 중 오류:', error)
+      setIsLatestVersion(null)
+    } finally {
+      setInitialCheckDone(true)
+    }
+  }
+
+  // 수동 업데이트 확인 (사용자가 버튼 클릭 시 사용, 알림 표시)
   const checkForUpdates = async () => {
     if (!window.electronAPI?.checkForUpdates) {
       console.log('Electron API not available')
@@ -112,15 +153,18 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
             version: result.updateInfo.version,
             releaseNotes: result.updateInfo.releaseNotes,
           })
+          setIsLatestVersion(false)
           setShowUpdateModal(true)
         } else {
           // 최신 버전인 경우
+          setIsLatestVersion(true)
           notification.info({
             message: '최신 버전',
             description: `현재 최신 버전(v${currentVersion})을 사용 중입니다.`,
           })
         }
       } else {
+        setIsLatestVersion(true)
         notification.info({
           message: '최신 버전',
           description: '현재 최신 버전을 사용 중입니다.',
@@ -193,16 +237,67 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
   return (
     <>
       <Space direction="vertical" style={{ width: '100%' }}>
-        {updateDownloaded ? (
+        {/* 초기 확인 중일 때 */}
+        {!initialCheckDone ? (
+          <Button loading block disabled>
+            버전 확인 중...
+          </Button>
+        ) : /* 업데이트 다운로드 완료 상태 */ updateDownloaded ? (
           <Button type="primary" icon={<ReloadOutlined />} onClick={installUpdate} block>
             재시작 및 설치
           </Button>
-        ) : updateAvailable ? (
+        ) : /* 업데이트 다운로드 가능 상태 */ updateAvailable ? (
           <Button type="primary" icon={<DownloadOutlined />} onClick={downloadUpdate} loading={isDownloading} block>
             업데이트 다운로드
           </Button>
+        ) : /* 최신 버전인 경우 */ isLatestVersion === true ? (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '12px 16px',
+              background: 'rgba(82, 196, 26, 0.1)',
+              border: '1px solid rgba(82, 196, 26, 0.3)',
+              borderRadius: '6px',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <Text
+              style={{
+                color: '#95de64',
+                fontSize: 13,
+                fontWeight: 600,
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
+                display: 'block',
+                marginBottom: 6,
+              }}
+            >
+              ✓ 최신 버전입니다
+            </Text>
+            <Button
+              size="small"
+              type="text"
+              onClick={checkForUpdates}
+              loading={isChecking}
+              style={{
+                color: 'rgba(149, 222, 100, 0.8)',
+                fontSize: 11,
+                height: 22,
+                padding: '0 8px',
+                border: '1px solid rgba(82, 196, 26, 0.2)',
+                borderRadius: '4px',
+                background: 'rgba(82, 196, 26, 0.05)',
+              }}
+            >
+              다시 확인
+            </Button>
+          </div>
         ) : (
-          <Button icon={<CheckOutlined />} onClick={checkForUpdates} loading={isChecking} block>
+          /* 확인 실패 또는 기본 상태 */ <Button
+            icon={<CheckOutlined />}
+            onClick={checkForUpdates}
+            loading={isChecking}
+            block
+          >
             업데이트 확인
           </Button>
         )}
