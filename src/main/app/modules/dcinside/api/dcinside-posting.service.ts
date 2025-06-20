@@ -5,6 +5,7 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
+import { humanClick, humanType } from '@main/app/utils/human-actions'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
 import { Page } from 'puppeteer-core'
@@ -157,18 +158,18 @@ export class DcinsidePostingService {
       const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
       if (el) el.value = ''
     })
-    await page.type('input[name=kcaptcha_code]', answer, { delay: 30 })
+    await humanType(page, 'input[name=kcaptcha_code]', answer)
   }
 
   private async inputPassword(page: Page, password: string): Promise<void> {
     if (await page.$('#password')) {
-      await page.type('#password', password.toString(), { delay: 30 })
+      await humanType(page, '#password', password.toString())
     }
   }
 
   private async inputTitle(page: Page, title: string): Promise<void> {
     await page.waitForSelector('#subject', { timeout: 10000 })
-    await page.type('#subject', title, { delay: 30 })
+    await humanType(page, '#subject', title)
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
@@ -220,7 +221,7 @@ export class DcinsidePostingService {
     // 코드뷰(HTML) 모드로 전환
     const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (!htmlChecked) {
-      await page.click('#chk_html')
+      await humanClick(page, '#chk_html')
       await new Promise(res => setTimeout(res, 300))
     }
     // textarea.note-codable에 HTML 입력
@@ -238,23 +239,35 @@ export class DcinsidePostingService {
     // 코드뷰 해제 (WYSIWYG로 복귀)
     const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (htmlChecked2) {
-      await page.click('#chk_html')
+      await humanClick(page, '#chk_html')
       await new Promise(res => setTimeout(res, 300))
     }
   }
 
   private async uploadImages(page: Page, browser: any, imagePaths: string[]): Promise<void> {
-    // 1. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
-    await page.click('button[aria-label="이미지"]')
+    // 1. 팝업 window 감지 리스너 먼저 설정
+    const popupPromise = new Promise<Page>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('이미지 팝업 윈도우 타임아웃 (10초)'))
+      }, 10000)
 
-    // 2. 팝업 window 감지 (input.file_add)
-    const popup = await new Promise<Page>(async (resolve, reject) => {
       browser.once('targetcreated', async (target: any) => {
-        const popupPage = await target.page()
-        if (popupPage) resolve(popupPage)
-        else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
+        clearTimeout(timeout)
+        try {
+          const popupPage = await target.page()
+          if (popupPage) resolve(popupPage)
+          else reject(new Error('이미지 팝업 윈도우를 찾을 수 없습니다.'))
+        } catch (error) {
+          reject(error)
+        }
       })
     })
+
+    // 2. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
+    await humanClick(page, 'button[aria-label="이미지"]')
+
+    // 3. 팝업 윈도우 대기
+    const popup = await popupPromise
 
     await popup.waitForSelector('input.file_add', { timeout: 10000 })
 
@@ -325,11 +338,7 @@ export class DcinsidePostingService {
         // 적용 버튼 존재 확인
         await popup.waitForSelector('.btn_apply', { timeout: 5000 })
 
-        // JavaScript로 직접 클릭
-        await popup.evaluate(() => {
-          const btn = document.querySelector('.btn_apply') as HTMLElement
-          if (btn) btn.click()
-        })
+        await humanClick(popup, '.btn_apply')
 
         // 클릭 후 팝업 닫힘 확인 (1초 대기)
         await sleep(1000)
@@ -356,7 +365,7 @@ export class DcinsidePostingService {
         // x버튼 클릭해서 닉네임 입력란 활성화
         const xBtn = await page.$('#btn_gall_nick_name_x')
         if (xBtn) {
-          await xBtn.click()
+          await humanClick(page, xBtn)
           await new Promise(res => setTimeout(res, 300))
         }
       }
@@ -365,8 +374,11 @@ export class DcinsidePostingService {
         const el = document.getElementById('gall_nick_name')
         if (el) el.removeAttribute('readonly')
       })
-      await page.click('#name', { clickCount: 3 })
-      await page.type('#name', nickname, { delay: 30 })
+      await humanClick(page, '#name')
+      await page.keyboard.down('Control')
+      await page.keyboard.press('KeyA')
+      await page.keyboard.up('Control')
+      await humanType(page, '#name', nickname)
     }
   }
 
@@ -376,9 +388,6 @@ export class DcinsidePostingService {
 
     while (true) {
       await this.solveCapcha(page)
-
-      // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-      await page.waitForSelector('button.btn_blue.btn_svc.write', { timeout: 10000 })
 
       // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
       const dialogPromise: Promise<string | null> = new Promise(resolve => {
@@ -391,6 +400,7 @@ export class DcinsidePostingService {
         setTimeout(() => resolve(null), 8000)
       })
 
+      // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
       await page.click('button.btn_blue.btn_svc.write')
 
       // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
@@ -463,17 +473,46 @@ export class DcinsidePostingService {
     return currentUrl
   }
 
+  private async waitForListPageNavigation(page: Page, galleryInfo: GalleryInfo): Promise<void> {
+    this.logger.log('게시글 목록으로 이동 대기 중...')
+
+    try {
+      // URL 변경 또는 특정 요소 나타날 때까지 대기
+      await Promise.race([
+        // 1. URL이 목록 페이지로 변경되길 대기
+        page.waitForFunction(
+          expectedUrl => {
+            return window.location.href.includes('/lists') || window.location.href.includes(expectedUrl)
+          },
+          { timeout: 15000 },
+          this.buildGalleryUrl(galleryInfo),
+        ),
+
+        // 2. 게시글 목록 테이블이 나타날 때까지 대기
+        page.waitForSelector('table.gall_list', { timeout: 15000 }),
+
+        // 3. 네비게이션 이벤트 대기
+        page.waitForNavigation({ timeout: 15000 }),
+      ])
+
+      this.logger.log('게시글 목록 페이지로 이동 완료')
+    } catch (error) {
+      this.logger.warn(`목록 페이지 이동 대기 중 타임아웃: ${error.message}`)
+      throw new Error('글 등록 후 목록 페이지 이동 실패 - 글 등록이 정상적으로 완료되지 않았습니다.')
+    }
+  }
+
   private async navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
     const success = await retry(
       async () => {
         const listUrl = this.buildGalleryUrl(galleryInfo)
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
 
-        await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
+        await page.goto(listUrl, { waitUntil: 'load', timeout: 20000 })
 
         // 글쓰기 버튼 클릭 (goWrite)
         await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
-        await page.click('a.btn_write.txt')
+        await humanClick(page, 'a.btn_write.txt')
         await sleep(4000)
 
         // 글쓰기 페이지로 정상 이동했는지 확인
@@ -536,23 +575,31 @@ export class DcinsidePostingService {
 
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
-      if (params.headtext) {
-        await this.selectHeadtext(page, params.headtext)
-      }
+      await sleep(1000)
+      await this.selectHeadtext(page, params.headtext)
+      await sleep(1000)
       await this.inputContent(page, params.contentHtml)
-
-      if (params.nickname) {
-        await this.inputNickname(page, params.nickname)
-      }
-      await this.inputPassword(page, params.password)
+      await sleep(1000)
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (params.imagePaths && params.imagePaths.length > 0) {
         await this.uploadImages(page, browser, params.imagePaths)
       }
+      await sleep(1000)
+
+      if (params.nickname) {
+        await this.inputNickname(page, params.nickname)
+        await sleep(1000)
+      }
+
+      await this.inputPassword(page, params.password)
+      await sleep(1000)
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
       await this.submitPostAndHandleErrors(page)
+
+      // 글 등록 완료 후 목록 페이지로 이동 대기
+      await this.waitForListPageNavigation(page, galleryInfo)
 
       // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
