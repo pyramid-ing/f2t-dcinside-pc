@@ -13,9 +13,15 @@ export class EnvConfig {
   public static isPackaged = app?.isPackaged || false
   public static userDataPath = EnvConfig.isPackaged ? app.getPath('userData') : process.cwd()
   public static resourcePath = EnvConfig.isPackaged ? process.resourcesPath : process.cwd()
-  public static dbPath = EnvConfig.isPackaged
+
+  // 패키지된 앱에서는 userData 폴더에 DB를 저장
+  public static dbPath = EnvConfig.isPackaged ? path.join(EnvConfig.userDataPath, 'app.sqlite') : './db.sqlite'
+
+  // 초기 DB 템플릿 경로 (resources 폴더)
+  public static initialDbPath = EnvConfig.isPackaged
     ? path.join(EnvConfig.resourcePath, 'resources', 'initial.sqlite')
     : './db.sqlite'
+
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
   private static engineName = ''
@@ -91,15 +97,36 @@ export class EnvConfig {
 
   private static ensureDatabaseWritable() {
     try {
-      if (fs.existsSync(this.dbPath)) {
+      if (this.isPackaged) {
+        // 패키지된 앱에서는 초기 DB를 userData로 복사
+        if (!fs.existsSync(this.dbPath) && fs.existsSync(this.initialDbPath)) {
+          // userData 디렉토리가 없으면 생성
+          const dbDir = path.dirname(this.dbPath)
+          if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true })
+          }
+
+          // 초기 DB를 userData로 복사
+          fs.copyFileSync(this.initialDbPath, this.dbPath)
+          LoggerConfig.info(`초기 데이터베이스를 복사했습니다: ${this.initialDbPath} -> ${this.dbPath}`)
+        }
+
         // 파일 권한을 쓰기 가능하도록 설정
-        fs.chmodSync(this.dbPath, 0o666)
-        LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
+        if (fs.existsSync(this.dbPath)) {
+          fs.chmodSync(this.dbPath, 0o666)
+          LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
+        } else {
+          LoggerConfig.warn(`데이터베이스 파일을 찾을 수 없습니다: ${this.dbPath}`)
+        }
       } else {
-        LoggerConfig.warn(`데이터베이스 파일을 찾을 수 없습니다: ${this.dbPath}`)
+        // 개발 환경에서는 기존 로직 유지
+        if (fs.existsSync(this.dbPath)) {
+          fs.chmodSync(this.dbPath, 0o666)
+          LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
+        }
       }
     } catch (error) {
-      LoggerConfig.error(`데이터베이스 권한 설정 중 오류:`, error)
+      LoggerConfig.error(`데이터베이스 설정 중 오류:`, error)
     }
   }
 

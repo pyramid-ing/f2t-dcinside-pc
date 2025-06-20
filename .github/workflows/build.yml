@@ -65,11 +65,29 @@ jobs:
           $env:DATABASE_URL = "file:$tmpDbPath"
           node scripts/build-initial-db.js
           
-          # 생성된 DB 파일에 쓰기 권한 부여
+          # resources 디렉토리 생성 (없는 경우)
+          $resourcesDir = "$(Get-Location)\resources"
+          if (-not (Test-Path $resourcesDir)) {
+            New-Item -ItemType Directory -Path $resourcesDir -Force
+            Write-Host "resources 디렉토리 생성: $resourcesDir"
+          }
+          
+          # 생성된 DB 파일을 resources로 복사
           $resourcesDbPath = "$(Get-Location)\resources\initial.sqlite"
-          if (Test-Path $resourcesDbPath) {
-            icacls $resourcesDbPath /grant Everyone:F
-            Write-Host "DB 파일에 쓰기 권한 부여: $resourcesDbPath"
+          if (Test-Path $tmpDbPath) {
+            Copy-Item $tmpDbPath $resourcesDbPath -Force
+            Write-Host "DB 파일 복사 완료: $tmpDbPath -> $resourcesDbPath"
+            
+            # DB 파일에 모든 권한 부여 (Windows)
+            icacls $resourcesDbPath /grant Everyone:F /T
+            attrib -R $resourcesDbPath
+            Write-Host "DB 파일 권한 설정 완료: $resourcesDbPath"
+            
+            # 임시 파일 삭제
+            Remove-Item $tmpDbPath -Force -ErrorAction SilentlyContinue
+          } else {
+            Write-Error "임시 DB 파일을 찾을 수 없습니다: $tmpDbPath"
+            exit 1
           }
 
       # 8. Electron 빌드
