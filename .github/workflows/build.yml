@@ -59,11 +59,7 @@ jobs:
 
       # 7. 초기 DB 빌드
       - name: Build initial database
-        shell: pwsh
-        run: |
-          Write-Host "=== 초기 DB 빌드 시작 ==="
-          node scripts/build-initial-db.js
-          Write-Host "=== 초기 DB 빌드 완료 ==="
+        run: node scripts/build-initial-db.js
 
       # 8. Electron 빌드
       - name: Build Windows App

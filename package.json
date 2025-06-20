@@ -20,7 +20,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "db:init": "prisma generate && prisma migrate deploy && pnpm run db:seed",
+    "db:init": "prisma generate && prisma migrate deploy",
     "build-initial-db": "node scripts/build-initial-db.js",
     "dev:front": "vite --config src/render/vite.config.mts",
     "dev:server": "tsx src/main/index.ts",

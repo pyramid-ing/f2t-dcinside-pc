@@ -63,7 +63,6 @@ const config = {
     target: [
       'nsis',
     ],
-    requestedExecutionLevel: 'requireAdministrator',
   },
   nsis: {
     oneClick: false,
@@ -72,7 +71,6 @@ const config = {
     createStartMenuShortcut: true,
     runAfterFinish: true,
     perMachine: true,
-    include: 'build/installer.nsh',
   },
 }
 

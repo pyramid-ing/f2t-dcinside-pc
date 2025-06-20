@@ -34,7 +34,7 @@ export class EnvConfig {
     this.setupEngineNames()
     if (this.isPackaged) {
       this.setupPackagedEnvironment()
-      this.ensureDatabaseWritable()
+      this.initializeDatabase()
 
       LoggerConfig.info('=== Application Start ===')
       LoggerConfig.logSystemInfo()
@@ -95,7 +95,7 @@ export class EnvConfig {
     process.env.COOKIE_DIR = path.join(this.resourcePath, 'cookies')
   }
 
-  private static ensureDatabaseWritable() {
+  private static initializeDatabase() {
     try {
       if (this.isPackaged) {
         // 패키지된 앱에서는 초기 DB를 userData로 복사
@@ -108,25 +108,11 @@ export class EnvConfig {
 
           // 초기 DB를 userData로 복사
           fs.copyFileSync(this.initialDbPath, this.dbPath)
-          LoggerConfig.info(`초기 데이터베이스를 복사했습니다: ${this.initialDbPath} -> ${this.dbPath}`)
-        }
-
-        // 파일 권한을 쓰기 가능하도록 설정
-        if (fs.existsSync(this.dbPath)) {
-          fs.chmodSync(this.dbPath, 0o666)
-          LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
-        } else {
-          LoggerConfig.warn(`데이터베이스 파일을 찾을 수 없습니다: ${this.dbPath}`)
-        }
-      } else {
-        // 개발 환경에서는 기존 로직 유지
-        if (fs.existsSync(this.dbPath)) {
-          fs.chmodSync(this.dbPath, 0o666)
-          LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
+          LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
         }
       }
     } catch (error) {
-      LoggerConfig.error(`데이터베이스 설정 중 오류:`, error)
+      LoggerConfig.error(`데이터베이스 초기화 중 오류:`, error)
     }
   }
 
