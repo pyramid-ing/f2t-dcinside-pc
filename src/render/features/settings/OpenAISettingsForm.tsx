@@ -1,6 +1,6 @@
 import { Button, Form, Input, message, Alert, Space } from 'antd'
 import { CheckCircleOutlined, LoadingOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { getOpenAIApiKeyFromServer, saveOpenAIApiKeyToServer, validateOpenAIApiKey } from '../../api'
 
 interface ValidationState {
@@ -13,6 +13,7 @@ const OpenAISettingsForm: React.FC = () => {
   const [form] = Form.useForm()
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' })
   const [isValidating, setIsValidating] = useState(false)
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -60,6 +61,23 @@ const OpenAISettingsForm: React.FC = () => {
     }
   }
 
+  const debouncedValidate = useCallback(
+    (apiKey: string) => {
+      // 기존 타이머 클리어
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+
+      // 새 타이머 설정 (1초 후 검증)
+      const timer = setTimeout(() => {
+        handleValidateKey(apiKey)
+      }, 1000)
+
+      setDebounceTimer(timer)
+    },
+    [debounceTimer],
+  )
+
   const onFinish = async (values: { openAIApiKey: string }) => {
     try {
       // 저장 전에 한 번 더 검증
@@ -79,8 +97,11 @@ const OpenAISettingsForm: React.FC = () => {
     const value = e.target.value
 
     // 입력이 변경되면 검증 상태 초기화
-    if (validation.status !== 'idle') {
-      setValidation({ status: 'idle' })
+    setValidation({ status: 'idle' })
+
+    // debounce로 자동 검증
+    if (value.trim().length > 0) {
+      debouncedValidate(value)
     }
   }
 
@@ -134,6 +155,15 @@ const OpenAISettingsForm: React.FC = () => {
     }
   }
 
+  // 컴포넌트 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+    }
+  }, [debounceTimer])
+
   return (
     <div>
       <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>OpenAI 설정</h3>
@@ -142,7 +172,7 @@ const OpenAISettingsForm: React.FC = () => {
           label="OpenAI API 키"
           name="openAIApiKey"
           rules={[{ required: true, message: 'API 키를 입력하세요.' }]}
-          extra="ChatGPT API를 사용하기 위한 OpenAI API 키를 입력하세요."
+          extra="ChatGPT API를 사용하기 위한 OpenAI API 키를 입력하세요. 입력 후 자동으로 검증됩니다."
         >
           <Input.Password placeholder="sk-..." autoComplete="off" onChange={onApiKeyChange} />
         </Form.Item>
@@ -150,22 +180,9 @@ const OpenAISettingsForm: React.FC = () => {
         {renderValidationStatus()}
 
         <Form.Item style={{ marginTop: 16 }}>
-          <Space>
-            <Button
-              type="default"
-              onClick={() => {
-                const apiKey = form.getFieldValue('openAIApiKey')
-                handleValidateKey(apiKey)
-              }}
-              loading={isValidating}
-              disabled={!form.getFieldValue('openAIApiKey')}
-            >
-              API 키 검증
-            </Button>
-            <Button type="primary" htmlType="submit" disabled={validation.status !== 'valid'}>
-              저장
-            </Button>
-          </Space>
+          <Button type="primary" htmlType="submit" disabled={validation.status !== 'valid'}>
+            저장
+          </Button>
         </Form.Item>
       </Form>
     </div>
