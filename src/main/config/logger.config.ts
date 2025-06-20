@@ -30,15 +30,9 @@ export class LoggerConfig {
 
     // 전역 에러 핸들링 설정
     this.setupErrorHandlers()
-
-    // 초기화 로그
-    this.logger.info('=== Application Start ===')
-    this.logSystemInfo()
-    this.logEnvironmentVariables()
-    this.logPrismaConfig()
   }
 
-  private static logSystemInfo() {
+   static logSystemInfo() {
     this.logger.info('--- System Information ---')
     this.logger.info('App Version:', process.env.npm_package_version)
     this.logger.info('Environment:', process.env.NODE_ENV)
@@ -53,7 +47,7 @@ export class LoggerConfig {
     this.logger.info('User Data Path:', app.getPath('userData'))
   }
 
-  private static logEnvironmentVariables() {
+   static logEnvironmentVariables() {
     this.logger.info('--- Environment Variables ---')
     Object.keys(process.env).forEach(key => {
       // 민감한 정보는 제외
@@ -61,22 +55,6 @@ export class LoggerConfig {
         this.logger.info(`${key}:`, process.env[key])
       }
     })
-  }
-
-  private static logPrismaConfig() {
-    this.logger.info('--- Prisma Configuration ---')
-    this.logger.info('Database URL:', process.env.DATABASE_URL)
-    this.logger.info('Query Engine Binary:', process.env.PRISMA_QUERY_ENGINE_BINARY)
-    this.logger.info('Query Engine Library:', process.env.PRISMA_QUERY_ENGINE_LIBRARY)
-    const enginePath = process.env.PRISMA_QUERY_ENGINE_BINARY
-    const libPath = process.env.PRISMA_QUERY_ENGINE_LIBRARY
-
-    if (enginePath) {
-      this.logger.info('Engine exists:', fs.existsSync(enginePath))
-    }
-    if (libPath) {
-      this.logger.info('Library exists:', fs.existsSync(libPath))
-    }
   }
 
   private static setupErrorHandlers() {

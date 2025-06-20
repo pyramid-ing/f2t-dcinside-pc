@@ -36,7 +36,23 @@ if (isWindows) {
 // 3. 임시 DB를 resources/initial.sqlite로 복사
 if (fs.existsSync(tmpDbPath)) {
   fs.copyFileSync(tmpDbPath, resourcesDbPath)
-  console.log('초기 DB를 resources/initial.sqlite로 복사 완료')
+  
+  try {
+    // 파일 권한을 쓰기 가능하도록 설정
+    if (process.platform === 'win32') {
+      // Windows: attrib 명령으로 읽기 전용 속성 제거
+      execSync(`attrib -R "${resourcesDbPath}"`, { stdio: 'inherit' })
+      console.log('Windows: 읽기 전용 속성 제거')
+    } else {
+      // Unix/Linux/macOS: chmod로 권한 설정
+      fs.chmodSync(resourcesDbPath, 0o666)
+      console.log('Unix: 파일 권한 설정 (0o666)')
+    }
+  } catch (error) {
+    console.warn('권한 설정 중 오류 (무시하고 계속):', error.message)
+  }
+  
+  console.log('초기 DB를 resources/initial.sqlite로 복사 완료 (쓰기 권한 설정)')
   // 4. 임시 DB 삭제(선택)
   fs.unlinkSync(tmpDbPath)
 } else {

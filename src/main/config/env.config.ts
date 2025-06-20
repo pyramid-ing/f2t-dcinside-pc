@@ -28,6 +28,11 @@ export class EnvConfig {
     this.setupEngineNames()
     if (this.isPackaged) {
       this.setupPackagedEnvironment()
+      this.ensureDatabaseWritable()
+
+      LoggerConfig.info('=== Application Start ===')
+      LoggerConfig.logSystemInfo()
+      LoggerConfig.logEnvironmentVariables()
     }
   }
 
@@ -82,6 +87,20 @@ export class EnvConfig {
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = libPath
     process.env.PUPPETEER_EXECUTABLE_PATH = this.getDefaultChromePath()
     process.env.COOKIE_DIR = path.join(this.resourcePath, 'cookies')
+  }
+
+  private static ensureDatabaseWritable() {
+    try {
+      if (fs.existsSync(this.dbPath)) {
+        // 파일 권한을 쓰기 가능하도록 설정
+        fs.chmodSync(this.dbPath, 0o666)
+        LoggerConfig.info(`데이터베이스 파일 권한을 쓰기 가능하도록 설정: ${this.dbPath}`)
+      } else {
+        LoggerConfig.warn(`데이터베이스 파일을 찾을 수 없습니다: ${this.dbPath}`)
+      }
+    } catch (error) {
+      LoggerConfig.error(`데이터베이스 권한 설정 중 오류:`, error)
+    }
   }
 
   public static getPrismaConfig() {

@@ -64,6 +64,13 @@ jobs:
           $tmpDbPath = "$(Get-Location)\prisma\tmp-initial.sqlite"
           $env:DATABASE_URL = "file:$tmpDbPath"
           node scripts/build-initial-db.js
+          
+          # 생성된 DB 파일에 쓰기 권한 부여
+          $resourcesDbPath = "$(Get-Location)\resources\initial.sqlite"
+          if (Test-Path $resourcesDbPath) {
+            icacls $resourcesDbPath /grant Everyone:F
+            Write-Host "DB 파일에 쓰기 권한 부여: $resourcesDbPath"
+          }
 
       # 8. Electron 빌드
       - name: Build Windows App
