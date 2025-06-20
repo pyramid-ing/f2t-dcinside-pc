@@ -2,11 +2,29 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/main/app/shared/prisma.service'
 import { OpenAI } from 'openai'
 
+interface AppSettings {
+  showBrowserWindow: boolean
+  taskDelay: number
+  imageUploadFailureAction: 'fail' | 'skip'
+}
+
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name)
 
   constructor(private readonly prisma: PrismaService) {}
+
+  // 앱 설정 조회
+  async getAppSettings(): Promise<AppSettings> {
+    const settings = await this.findByKey('app')
+    return (
+      (settings?.data as unknown as AppSettings) || {
+        showBrowserWindow: true,
+        taskDelay: 10,
+        imageUploadFailureAction: 'fail',
+      }
+    )
+  }
 
   // 모든 설정 조회
   async findAll() {

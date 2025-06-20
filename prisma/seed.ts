@@ -22,7 +22,8 @@ async function main() {
       id: 1,
       data: {
         showBrowserWindow: true,
-        taskDelay: 10
+        taskDelay: 10,
+        imageUploadFailureAction: 'fail'
       }
     }
   })

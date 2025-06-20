@@ -581,6 +581,9 @@ export class DcinsidePostingService {
       // 0. 파라미터 검증
       const params = this.validateParams(rawParams)
 
+      // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
+      const appSettings = await this.settingsService.getAppSettings()
+
       // 1. 갤러리 정보 추출 (id와 타입)
       const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
 
@@ -621,7 +624,25 @@ export class DcinsidePostingService {
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (params.imagePaths && params.imagePaths.length > 0) {
-        await this.uploadImages(page, browser, params.imagePaths)
+        try {
+          await this.uploadImages(page, browser, params.imagePaths)
+          this.logger.log('이미지 업로드 성공')
+        } catch (imageUploadError) {
+          const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
+          this.logger.warn(errorMessage)
+
+          // 설정에 따른 처리
+          const imageFailureAction = appSettings.imageUploadFailureAction || 'fail'
+
+          switch (imageFailureAction) {
+            case 'fail':
+              // 작업 실패 - 전체 포스팅 중단
+              throw new Error(errorMessage)
+            case 'skip':
+              this.logger.log('이미지 업로드 실패하였으나 설정에 따라 이미지 없이 포스팅을 진행합니다.')
+              break
+          }
+        }
       }
       await sleep(1000)
 
