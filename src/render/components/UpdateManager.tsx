@@ -17,8 +17,21 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
   const [isChecking, setIsChecking] = useState(false)
   const [updateDownloaded, setUpdateDownloaded] = useState(false)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState<string>('')
 
   useEffect(() => {
+    // 현재 앱 버전 가져오기
+    const getCurrentVersion = async () => {
+      try {
+        const version = await window.electronAPI.getAppVersion()
+        setCurrentVersion(version)
+      } catch (error) {
+        console.error('현재 버전을 가져오는데 실패했습니다:', error)
+      }
+    }
+
+    getCurrentVersion()
+
     // 업데이트 다운로드 진행률 리스너
     window.electronAPI?.onDownloadProgress((progress: DownloadProgress) => {
       setDownloadProgress(progress)
@@ -50,6 +63,30 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
     }
   }, [autoCheck])
 
+  // 버전 비교 함수 (semantic versioning)
+  const isNewerVersion = (remoteVersion: string, currentVersion: string): boolean => {
+    if (!currentVersion || !remoteVersion) return false
+
+    // 'v' 접두사 제거
+    const cleanRemote = remoteVersion.replace(/^v/, '')
+    const cleanCurrent = currentVersion.replace(/^v/, '')
+
+    const remoteParts = cleanRemote.split('.').map(Number)
+    const currentParts = cleanCurrent.split('.').map(Number)
+
+    // 버전 부분 개수를 맞춤 (예: 1.1 vs 1.1.0)
+    const maxLength = Math.max(remoteParts.length, currentParts.length)
+    while (remoteParts.length < maxLength) remoteParts.push(0)
+    while (currentParts.length < maxLength) currentParts.push(0)
+
+    for (let i = 0; i < maxLength; i++) {
+      if (remoteParts[i] > currentParts[i]) return true
+      if (remoteParts[i] < currentParts[i]) return false
+    }
+
+    return false // 같은 버전
+  }
+
   const checkForUpdates = async () => {
     if (!window.electronAPI?.checkForUpdates) {
       console.log('Electron API not available')
@@ -66,12 +103,23 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
           description: result.error,
         })
       } else if (result.updateInfo) {
-        setUpdateAvailable(true)
-        setUpdateInfo({
-          version: result.updateInfo.version,
-          releaseNotes: result.updateInfo.releaseNotes,
-        })
-        setShowUpdateModal(true)
+        const remoteVersion = result.updateInfo.version
+
+        // 버전 비교하여 실제로 업데이트가 필요한지 확인
+        if (isNewerVersion(remoteVersion, currentVersion)) {
+          setUpdateAvailable(true)
+          setUpdateInfo({
+            version: result.updateInfo.version,
+            releaseNotes: result.updateInfo.releaseNotes,
+          })
+          setShowUpdateModal(true)
+        } else {
+          // 최신 버전인 경우
+          notification.info({
+            message: '최신 버전',
+            description: `현재 최신 버전(v${currentVersion})을 사용 중입니다.`,
+          })
+        }
       } else {
         notification.info({
           message: '최신 버전',
