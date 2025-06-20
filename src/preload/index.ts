@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
+  // 앱 정보 API
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
   // 업데이트 관련 API
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

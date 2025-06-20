@@ -4,8 +4,10 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import { readFileSync } from 'fs'
 import { WinstonModule } from 'nest-winston'
 import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
+import { join } from 'path'
 import winston from 'winston'
 import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
@@ -100,6 +102,23 @@ function setupIpcHandlers() {
   ipcMain.handle('get-backend-port', () => null)
   ipcMain.handle('open-external', async (_, url) => {
     await shell.openExternal(url)
+  })
+
+  ipcMain.handle('get-app-version', () => {
+    try {
+      // package.json 직접 읽기
+      const appPath = app.isPackaged ? app.getAppPath() : process.cwd()
+      const packageJsonPath = join(appPath, 'package.json')
+
+      const packageJsonContent = readFileSync(packageJsonPath, 'utf8')
+      const packageJson = JSON.parse(packageJsonContent)
+
+      return packageJson.version
+    } catch (error) {
+      console.error('Error reading package.json:', error)
+      // fallback으로 app.getVersion() 사용
+      return app.getVersion()
+    }
   })
 
   // 업데이트 관련 IPC 핸들러

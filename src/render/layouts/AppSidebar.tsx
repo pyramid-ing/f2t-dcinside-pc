@@ -1,10 +1,9 @@
 import { HomeOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 import UpdateManager from '../components/UpdateManager'
-import packageJson from '../../../package.json'
 
 const { Text } = Typography
 
@@ -113,6 +112,21 @@ const UpdateButtonWrapper = styled.div`
 
 const AppSidebar: React.FC = () => {
   const location = useLocation()
+  const [appVersion, setAppVersion] = useState<string>('...')
+
+  useEffect(() => {
+    const getVersion = async () => {
+      try {
+        const version = await window.electronAPI.getAppVersion()
+        setAppVersion(version)
+      } catch (error) {
+        console.error('앱 버전을 가져오는데 실패했습니다:', error)
+        setAppVersion('Unknown')
+      }
+    }
+
+    getVersion()
+  }, [])
 
   const getSelectedKey = () => {
     if (location.pathname === '/') return '1'
@@ -150,7 +164,7 @@ const AppSidebar: React.FC = () => {
       <UpdateSection>
         <VersionInfo>
           <VersionLabel>현재 버전</VersionLabel>
-          <VersionBadge>v{packageJson.version}</VersionBadge>
+          <VersionBadge>v{appVersion}</VersionBadge>
         </VersionInfo>
         <UpdateButtonWrapper>
           <UpdateManager autoCheck={false} />

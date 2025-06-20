@@ -19,6 +19,9 @@ export interface IElectronAPI {
   getBackendPort: () => Promise<number>
   openExternal: (url: string) => void
   
+  // 앱 정보 API
+  getAppVersion: () => Promise<string>
+  
   // 업데이트 관련 API
   checkForUpdates: () => Promise<UpdateResult>
   downloadUpdate: () => Promise<UpdateResult>

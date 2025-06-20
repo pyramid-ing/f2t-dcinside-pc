@@ -21,6 +21,9 @@ declare global {
       getBackendPort: () => Promise<number>
       openExternal: (url: string) => Promise<void>
       
+      // 앱 정보 API
+      getAppVersion: () => Promise<string>
+      
       // 업데이트 관련 API
       checkForUpdates: () => Promise<UpdateResult>
       downloadUpdate: () => Promise<UpdateResult>
