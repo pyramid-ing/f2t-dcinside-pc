@@ -430,7 +430,7 @@ export class DcinsidePostingService {
       })
 
       // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-      await page.click('button.btn_blue.btn_svc.write')
+      await page.click('button.btn_svc.write')
 
       // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
       const dialogMessage = await Promise.race([
