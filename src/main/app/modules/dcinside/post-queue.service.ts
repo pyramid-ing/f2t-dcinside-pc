@@ -2,9 +2,11 @@ import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
 import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
+import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
 import { DcinsidePostSchema } from './api/dto/schemas'
+import type { Browser } from 'puppeteer-core'
 
 interface PostQueueItem {
   id: number
@@ -18,6 +20,7 @@ export class PostQueueService {
   private isProcessingQueue = false
 
   constructor(
+    private readonly browserManager: BrowserManagerService,
     private readonly postJobService: PostJobService,
     private readonly postingService: DcinsidePostingService,
     private readonly settingsService: SettingsService,
@@ -90,30 +93,36 @@ export class PostQueueService {
     const taskDelay = appSettings.taskDelay * 1000 // 초를 밀리초로 변환
     const headless = !appSettings.showBrowserWindow
 
-    while (this.postQueue.length > 0) {
-      const queueItem = this.postQueue.shift()!
+    // ✅ 브라우저 세션 시작
+    const browser: Browser = await this.browserManager.launchBrowser({ headless })
+    this.logger.log('큐 처리를 위한 브라우저 세션 시작됨')
 
-      try {
-        this.logger.log(`포스팅 시작: ID ${queueItem.id}`)
-        const result = await this.postingService.postArticle({
-          ...queueItem.params,
-          headless,
-        })
-        await this.postJobService.updateStatusWithUrl(queueItem.id, 'completed', result.message, result.url)
-        this.logger.log(`포스팅 완료: ID ${queueItem.id}, URL: ${result.url}`)
-      } catch (error) {
-        await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)
-        this.logger.error(`포스팅 실패: ID ${queueItem.id} - ${error.message}`)
-      }
+    try {
+      while (this.postQueue.length > 0) {
+        const queueItem = this.postQueue.shift()!
 
-      // 설정된 작업 간 딜레이
-      if (this.postQueue.length > 0) {
-        this.logger.log(`작업 간 딜레이: ${appSettings.taskDelay}초`)
-        await sleep(taskDelay)
+        try {
+          this.logger.log(`포스팅 시작: ID ${queueItem.id}`)
+          // ✅ 브라우저 인스턴스를 포스팅 서비스에 전달
+          const result = await this.postingService.postArticle(queueItem.params, browser)
+          await this.postJobService.updateStatusWithUrl(queueItem.id, 'completed', result.message, result.url)
+          this.logger.log(`포스팅 완료: ID ${queueItem.id}, URL: ${result.url}`)
+        } catch (error) {
+          await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)
+          this.logger.error(`포스팅 실패: ID ${queueItem.id} - ${error.message}`)
+        }
+
+        // 설정된 작업 간 딜레이
+        if (this.postQueue.length > 0) {
+          this.logger.log(`작업 간 딜레이: ${appSettings.taskDelay}초`)
+          await sleep(taskDelay)
+        }
       }
+    } finally {
+      // ✅ 브라우저 세션 종료
+      await this.browserManager.closeBrowser(browser)
+      this.isProcessingQueue = false
+      this.logger.log('포스팅 큐 처리 완료 및 브라우저 세션 종료됨')
     }
-
-    this.isProcessingQueue = false
-    this.logger.log('포스팅 큐 처리 완료')
   }
 }

@@ -1,5 +1,6 @@
 import { PostQueueService } from '@main/app/modules/dcinside/post-queue.service'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
+import { UtilModule } from '@main/app/modules/util/util.module'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Module } from '@nestjs/common'
 import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
@@ -11,7 +12,7 @@ import { DcinsideWorkflowService } from './dcinside-workflow.service'
 import { ScheduledPostCronService } from './scheduled-post-cron.service'
 
 @Module({
-  imports: [SettingsModule],
+  imports: [SettingsModule, UtilModule],
   controllers: [DcinsideWorkflowController],
   providers: [
     DcinsideWorkflowService,

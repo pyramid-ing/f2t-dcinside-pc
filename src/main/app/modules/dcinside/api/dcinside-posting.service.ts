@@ -2,13 +2,14 @@ import type { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinsid
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/schemas'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { humanClick, humanType } from '@main/app/utils/human-actions'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
-import { Page } from 'puppeteer-core'
+import { Browser, Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { ZodError } from 'zod/v4'
@@ -60,6 +61,7 @@ function assertRetrySuccess(success: boolean, errorMessage: string): asserts suc
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
   constructor(
+    private readonly browserManager: BrowserManagerService,
     private readonly cookieService: CookieService,
     private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
@@ -560,8 +562,7 @@ export class DcinsidePostingService {
     assertRetrySuccess(success, '글쓰기 페이지 이동 실패 (3회 시도)')
   }
 
-  async postArticle(rawParams: any): Promise<{ success: boolean; message: string; url?: string }> {
-    let browser = null
+  async postArticle(rawParams: any, browser: Browser): Promise<{ success: boolean; message: string; url?: string }> {
     try {
       // 0. 파라미터 검증
       const params = this.validateParams(rawParams)
@@ -572,18 +573,8 @@ export class DcinsidePostingService {
       // 1. 갤러리 정보 추출 (id와 타입)
       const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
 
-      const launchOptions: any = {
-        headless: params.headless ?? true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ko-KR,ko'],
-      }
-      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-      }
-      browser = await puppeteer.launch(launchOptions)
-      const page: Page = await browser.newPage()
-      await page.setExtraHTTPHeaders({
-        'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      })
+      this.logger.log('외부 브라우저 세션 사용')
+      const page: Page = await this.browserManager.createPage(browser)
 
       // 로그인 쿠키 적용 및 필요시 로그인
       if (params.loginId) {
@@ -678,11 +669,7 @@ export class DcinsidePostingService {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
       throw new Error(e.message)
     } finally {
-      if (browser) {
-        try {
-          await browser.close()
-        } catch {}
-      }
+      // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음
     }
   }
 }

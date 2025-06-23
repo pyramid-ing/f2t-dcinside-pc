@@ -8,9 +8,10 @@ import { DcinsideLoginController } from './dcinside-login.controller'
 import { DcinsideLoginService } from './dcinside-login.service'
 import { DcinsidePostingController } from './dcinside-posting.controller'
 import { DcinsidePostingService } from './dcinside-posting.service'
+import { UtilModule } from '@main/app/modules/util/util.module'
 
 @Module({
-  imports: [SettingsModule],
+  imports: [SettingsModule, UtilModule],
   controllers: [DcinsidePostingController, DcinsideLoginController, PostJobController],
   providers: [DcinsidePostingService, DcinsideLoginService, CookieService, PostJobService, PrismaService],
   exports: [DcinsidePostingService, DcinsideLoginService, PostJobService],

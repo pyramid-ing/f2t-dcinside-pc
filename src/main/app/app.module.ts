@@ -10,6 +10,7 @@ import { GlobalExceptionFilter } from '../filters/global-exception.filter'
 import customConfig from './config/custom-config'
 import { SettingsModule } from './modules/settings/settings.module'
 import { PrismaService } from './shared/prisma.service'
+import { UtilModule } from '@main/app/modules/util/util.module'
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PrismaService } from './shared/prisma.service'
       load: [customConfig],
       isGlobal: true,
     }),
+    UtilModule,
     SettingsModule,
     DcinsideModule,
     ScheduleModule.forRoot(),
