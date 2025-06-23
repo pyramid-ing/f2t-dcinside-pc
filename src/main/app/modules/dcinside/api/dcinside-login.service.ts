@@ -81,10 +81,13 @@ export class DcinsideLoginService {
     }
   }
 
-  async loginWithPage(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {
+  async loginWithPage(
+    page: Page,
+    params: { id: string; password: string },
+  ): Promise<{ success: boolean; message: string }> {
     try {
       await page.goto('https://dcinside.com/', { waitUntil: 'networkidle2', timeout: 60000 })
-      
+
       // 로그인 폼 입력 및 로그인 버튼 클릭
       await page.type('#user_id', params.id, { delay: 30 })
       await page.type('#pw', params.password, { delay: 30 })

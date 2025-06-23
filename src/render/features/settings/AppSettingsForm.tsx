@@ -53,6 +53,7 @@ const AppSettingsForm: React.FC = () => {
         initialValues={{
           showBrowserWindow: true,
           taskDelay: 10,
+          actionDelay: 1.0,
           imageUploadFailureAction: 'fail',
         }}
       >
@@ -75,6 +76,26 @@ const AppSettingsForm: React.FC = () => {
           extra="연속 포스팅 시 작업 사이의 대기 시간을 설정합니다."
         >
           <InputNumber min={1} max={300} addonAfter="초" style={{ width: 150 }} disabled={loading} />
+        </Form.Item>
+
+        <Form.Item
+          label="동작간 딜레이 (초)"
+          name="actionDelay"
+          rules={[
+            { required: true, message: '동작간 딜레이를 입력해주세요.' },
+            { type: 'number', min: 0.1, max: 10, message: '0.1초 ~ 10초 사이의 값을 입력해주세요.' },
+          ]}
+          extra="포스팅 과정 중 각 동작(제목 입력, 내용 입력 등) 사이의 대기 시간을 설정합니다."
+        >
+          <InputNumber
+            min={0.1}
+            max={10}
+            step={0.1}
+            precision={1}
+            addonAfter="초"
+            style={{ width: 150 }}
+            disabled={loading}
+          />
         </Form.Item>
 
         <Form.Item

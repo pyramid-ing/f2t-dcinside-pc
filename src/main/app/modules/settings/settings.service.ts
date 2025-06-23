@@ -5,6 +5,7 @@ import { OpenAI } from 'openai'
 interface AppSettings {
   showBrowserWindow: boolean
   taskDelay: number
+  actionDelay: number // 초 단위
   imageUploadFailureAction: 'fail' | 'skip'
 }
 
@@ -21,6 +22,7 @@ export class SettingsService {
       (settings?.data as unknown as AppSettings) || {
         showBrowserWindow: true,
         taskDelay: 10,
+        actionDelay: 1.0, // 1초
         imageUploadFailureAction: 'fail',
       }
     )

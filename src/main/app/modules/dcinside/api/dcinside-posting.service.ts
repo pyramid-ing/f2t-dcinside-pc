@@ -393,7 +393,7 @@ export class DcinsidePostingService {
         const xBtn = await page.$('#btn_gall_nick_name_x')
         if (xBtn) {
           await humanClick(page, xBtn)
-          await new Promise(res => setTimeout(res, 300))
+          await sleep(300)
         }
       }
       // 닉네임 입력란이 활성화되었으면 입력
@@ -621,14 +621,15 @@ export class DcinsidePostingService {
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
       await this.navigateToWritePage(page, galleryInfo)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
-      await sleep(1000)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       await this.selectHeadtext(page, params.headtext)
-      await sleep(1000)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       await this.inputContent(page, params.contentHtml)
-      await sleep(1000)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (params.imagePaths && params.imagePaths.length > 0) {
@@ -652,15 +653,15 @@ export class DcinsidePostingService {
           }
         }
       }
-      await sleep(1000)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       if (params.nickname) {
         await this.inputNickname(page, params.nickname)
-        await sleep(1000)
+        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       await this.inputPassword(page, params.password)
-      await sleep(1000)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
       await this.submitPostAndHandleErrors(page)
