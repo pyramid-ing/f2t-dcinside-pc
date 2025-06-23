@@ -44,21 +44,6 @@ function assertOpenAIResponse(response: any): asserts response is { answer: stri
   }
 }
 
-function assertLoginRequired(loginId: string | undefined, cookies: any[] | null): asserts loginId is string {
-  if (!loginId) {
-    throw new Error('로그인 ID가 필요합니다.')
-  }
-  if (!cookies || cookies.length === 0) {
-    throw new Error('로그인 필요')
-  }
-}
-
-function assertIsLoggedIn(isLoggedIn: boolean): asserts isLoggedIn is true {
-  if (!isLoggedIn) {
-    throw new Error('로그인 필요')
-  }
-}
-
 function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
   if (!popupPage) {
     throw new Error('이미지 팝업 윈도우를 찾을 수 없습니다.')
@@ -603,12 +588,35 @@ export class DcinsidePostingService {
       // 로그인 쿠키 적용 및 필요시 로그인
       if (params.loginId) {
         const cookies = this.cookieService.loadCookies('dcinside', params.loginId)
-        assertLoginRequired(params.loginId, cookies)
 
-        await browser.setCookie(...cookies)
-        // 로그인 상태 확인 (공통 서비스 활용)
+        // 쿠키가 있으면 먼저 적용해보기
+        if (cookies && cookies.length > 0) {
+          await browser.setCookie(...cookies)
+        }
+
+        // 로그인 상태 확인
         const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
-        assertIsLoggedIn(isLoggedIn)
+
+        if (!isLoggedIn) {
+          // 로그인이 안되어 있으면 로그인 실행
+          if (!params.loginPassword) {
+            throw new Error('로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.')
+          }
+
+          this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
+          const loginResult = await this.dcinsideLoginService.loginWithPage(page, {
+            id: params.loginId,
+            password: params.loginPassword,
+          })
+
+          if (!loginResult.success) {
+            throw new Error(`자동 로그인 실패: ${loginResult.message}`)
+          }
+
+          this.logger.log('자동 로그인이 성공했습니다.')
+        } else {
+          this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
+        }
       }
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)

@@ -116,19 +116,6 @@ export class DcinsideWorkflowService {
         }
       }
 
-      // 로그인 필요 체크 및 로그인
-      if (row.loginId && row.loginPassword) {
-        const loginResult = await this.loginService.login({
-          id: row.loginId,
-          password: row.loginPassword,
-          headless: false,
-        })
-        if (!loginResult.success) {
-          results.push({ ...row, success: false, message: '로그인 실패' })
-          continue
-        }
-      }
-
       // 모든 포스팅을 예약 등록으로 통일 처리 (즉시 실행도 현재 시간으로 예약)
       try {
         const scheduled = await this.postJobService.createPostJob({
