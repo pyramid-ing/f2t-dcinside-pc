@@ -1,10 +1,10 @@
-import type { PostJobDto } from './dto/scheduled-post.dto'
+import type { DcinsidePostDto } from './dto/dcinside-post.dto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { ZodError } from 'zod'
-import { PostJobSchema } from './dto/schemas'
+import { DcinsidePostSchema } from './dto/schemas'
 
 @Injectable()
 export class PostJobService {
@@ -40,12 +40,12 @@ export class PostJobService {
     return { valid, errors }
   }
 
-  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: PostJobDto; errors: string[] } {
+  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: DcinsidePostDto; errors: string[] } {
     const errors: string[] = []
 
     try {
       // Zod로 검증 및 변환
-      const sanitizedDto = PostJobSchema.parse(rawDto)
+      const sanitizedDto = DcinsidePostSchema.parse(rawDto)
 
       // 추가 이미지 파일 검증
       if (sanitizedDto.imagePaths && sanitizedDto.imagePaths.length > 0) {
