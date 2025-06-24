@@ -51,25 +51,7 @@ export const DcinsidePostSchema = z
   })
   .refine(
     data => {
-      // 로그인 ID가 없으면 비로그인 모드 - 닉네임과 비밀번호 필수
-      if (!data.loginId || data.loginId.trim() === '') {
-        if (!data.nickname || data.nickname.trim() === '') {
-          return false
-        }
-        if (!data.password || data.password.trim() === '') {
-          return false
-        }
-      }
-      return true
-    },
-    {
-      message: '비로그인 모드에서는 닉네임과 비밀번호가 필수입니다.',
-      path: ['nickname'], // 에러가 표시될 필드
-    },
-  )
-  .refine(
-    data => {
-      // 로그인 ID가 없으면 비로그인 모드 - 비밀번호 필수 (별도 체크로 더 명확한 에러 메시지)
+      // 로그인 ID가 없으면 비로그인 모드 - 비밀번호만 필수 (닉네임은 optional)
       if (!data.loginId || data.loginId.trim() === '') {
         if (!data.password || data.password.trim() === '') {
           return false
@@ -144,25 +126,7 @@ export const PostJobToParamsSchema = z
   })
   .refine(
     data => {
-      // 로그인 ID가 없으면 비로그인 모드 - 닉네임과 비밀번호 필수
-      if (!data.loginId || data.loginId.trim() === '') {
-        if (!data.nickname || data.nickname.trim() === '') {
-          return false
-        }
-        if (!data.password || data.password.trim() === '') {
-          return false
-        }
-      }
-      return true
-    },
-    {
-      message: '비로그인 모드에서는 닉네임과 비밀번호가 필수입니다.',
-      path: ['nickname'], // 에러가 표시될 필드
-    },
-  )
-  .refine(
-    data => {
-      // 로그인 ID가 없으면 비로그인 모드 - 비밀번호 필수 (별도 체크로 더 명확한 에러 메시지)
+      // 로그인 ID가 없으면 비로그인 모드 - 비밀번호만 필수 (닉네임은 optional)
       if (!data.loginId || data.loginId.trim() === '') {
         if (!data.password || data.password.trim() === '') {
           return false
