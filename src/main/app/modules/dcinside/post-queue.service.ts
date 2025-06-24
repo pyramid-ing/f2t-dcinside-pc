@@ -5,7 +5,7 @@ import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
-import { DcinsidePostSchema } from './api/dto/schemas'
+import { DcinsidePostSchema, PostJobToParamsSchema } from './api/dto/schemas'
 import type { Browser } from 'puppeteer-core'
 
 interface PostQueueItem {
@@ -41,31 +41,26 @@ export class PostQueueService {
   }
 
   private async convertJobToParams(job: any): Promise<DcinsidePostParams> {
-    const appSettings = await this.getAppSettings()
-
-    // 기본 포스팅 파라미터 구성
-    const rawParams = {
-      galleryUrl: job.galleryUrl,
-      title: job.title,
-      contentHtml: job.contentHtml,
-      password: job.password,
-      nickname: job.nickname,
-      headtext: job.headtext,
-      imagePaths: job.imagePaths ? JSON.parse(job.imagePaths) : [],
-      loginId: job.loginId,
-      loginPassword: job.loginPassword,
-      headless: !appSettings.showBrowserWindow, // 창보임 설정의 반대가 headless
-    }
-
     try {
-      // Zod로 검증 및 변환
-      return DcinsidePostSchema.parse(rawParams)
+      const appSettings = await this.getAppSettings()
+      
+      // 1단계: PostJob 객체 검증 및 기본 변환
+      const baseParams = PostJobToParamsSchema.parse(job)
+      
+      // 2단계: headless 설정 추가하여 최종 파라미터 구성
+      const finalParams = {
+        ...baseParams,
+        headless: !appSettings.showBrowserWindow, // 창보임 설정의 반대가 headless
+      }
+      
+      // 3단계: 최종 DcinsidePostSchema로 검증
+      return DcinsidePostSchema.parse(finalParams)
     } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
-        throw new Error(`큐 파라미터 검증 실패: ${zodErrors.join(', ')}`)
+        throw new Error(`작업 파라미터 검증 실패: ${zodErrors.join(', ')}`)
       }
-      throw new Error(`큐 파라미터 검증 실패: ${error.message}`)
+      throw new Error(`작업 파라미터 검증 실패: ${error.message}`)
     }
   }
 

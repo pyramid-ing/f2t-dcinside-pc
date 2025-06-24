@@ -97,6 +97,72 @@ export const DcinsideLoginSchema = z.object({
     .optional(),
 })
 
+// PostJob DB 객체를 위한 스키마
+export const PostJobSchema = z.object({
+  id: z.number(),
+  galleryUrl: z.string(),
+  title: z.string(),
+  contentHtml: z.string(),
+  password: z.string(),
+  nickname: z.string().nullable(),
+  headtext: z.string().nullable(),
+  imagePaths: z.string().nullable(), // JSON 문자열
+  loginId: z.string().nullable(),
+  loginPassword: z.string().nullable(),
+  scheduledAt: z.date().optional(),
+  status: z.string().optional(),
+  resultMsg: z.string().nullable().optional(),
+  resultUrl: z.string().nullable().optional(),
+  createdAt: z.date().optional(),
+  updatedAt: z.date().optional(),
+})
+
+// PostJob을 DcinsidePostParams로 변환하는 스키마
+export const PostJobToParamsSchema = z
+  .object({
+    id: z.number(),
+    galleryUrl: z.string().url('유효한 갤러리 URL을 입력해주세요.'),
+    title: z.string().min(1, '제목을 입력해주세요.'),
+    contentHtml: z.string().min(1, '내용을 입력해주세요.'),
+    password: z.string().min(1, '비밀번호를 입력해주세요.'),
+    nickname: z.string().nullable(),
+    headtext: z.string().nullable(),
+    imagePaths: z.preprocess(
+      (val) => {
+        if (!val || val === null) return []
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val)
+          } catch {
+            return []
+          }
+        }
+        return Array.isArray(val) ? val : []
+      },
+      z.array(z.string()).optional()
+    ),
+    loginId: z.string().nullable(),
+    loginPassword: z.string().nullable(),
+    // 여기서 headless는 추가로 계산됨
+  })
+  .transform((data) => {
+    // imagePaths가 null이면 빈 배열로 변환
+    const imagePaths = data.imagePaths || []
+    
+    return {
+      galleryUrl: data.galleryUrl,
+      title: data.title,
+      contentHtml: data.contentHtml,
+      password: data.password,
+      nickname: data.nickname || undefined,
+      headtext: data.headtext || undefined,
+      imagePaths,
+      loginId: data.loginId || undefined,
+      loginPassword: data.loginPassword || undefined,
+    }
+  })
+
 // 타입 추출
 export type DcinsidePostDto = z.infer<typeof DcinsidePostSchema>
 export type DcinsideLoginDto = z.infer<typeof DcinsideLoginSchema>
+export type PostJobDto = z.infer<typeof PostJobSchema>
