@@ -47,6 +47,8 @@ export class ScheduledPostCronService implements OnModuleInit {
         for (const job of processingJobs) {
           await this.postQueueService.enqueueJob(job)
         }
+
+        await this.postQueueService.processQueue()
       }
     } catch (error) {
       this.logger.error('스케줄 처리 중 오류:', error)
