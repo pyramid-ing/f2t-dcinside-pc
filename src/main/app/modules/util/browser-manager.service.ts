@@ -10,9 +10,16 @@ export interface BrowserLaunchOptions {
   args?: string[]
 }
 
+// 브라우저 ID별 브라우저 관리
+interface ManagedBrowser {
+  browserId: string
+  browser: Browser
+}
+
 @Injectable()
 export class BrowserManagerService {
   private readonly logger = new Logger(BrowserManagerService.name)
+  private managedBrowsers = new Map<string, ManagedBrowser>() // 브라우저 ID별 브라우저 관리
 
   // 브라우저 실행 (세션 시작)
   async launchBrowser(options: BrowserLaunchOptions = {}): Promise<Browser> {
@@ -82,5 +89,58 @@ export class BrowserManagerService {
         this.logger.warn(`페이지 종료 중 오류: ${error.message}`)
       }
     }
+  }
+
+  // 브라우저 ID별 브라우저 가져오기 또는 생성
+  async getOrCreateBrowser(browserId: string, options: BrowserLaunchOptions = {}): Promise<Browser> {
+    let managedBrowser = this.managedBrowsers.get(browserId)
+    
+    if (!managedBrowser) {
+      // 새 브라우저 생성
+      const browser = await this.launchBrowser(options)
+      
+      managedBrowser = {
+        browserId,
+        browser,
+      }
+      
+      this.managedBrowsers.set(browserId, managedBrowser)
+      this.logger.log(`브라우저 생성: ${browserId}`)
+    }
+    
+    return managedBrowser.browser
+  }
+
+  // 특정 브라우저 종료
+  async closeManagedBrowser(browserId: string): Promise<void> {
+    const managedBrowser = this.managedBrowsers.get(browserId)
+    if (!managedBrowser) return
+
+    await this.closeBrowser(managedBrowser.browser)
+    this.managedBrowsers.delete(browserId)
+    this.logger.log(`브라우저 종료: ${browserId}`)
+  }
+
+  // 모든 관리 브라우저 정리
+  async closeAllManagedBrowsers(): Promise<void> {
+    this.logger.log('모든 관리 브라우저 정리 시작')
+    
+    for (const [browserId, managedBrowser] of this.managedBrowsers.entries()) {
+      await this.closeBrowser(managedBrowser.browser)
+      this.logger.log(`브라우저 강제 종료: ${browserId}`)
+    }
+    
+    this.managedBrowsers.clear()
+    this.logger.log('모든 관리 브라우저 정리 완료')
+  }
+
+  // 브라우저 존재 여부 확인
+  hasManagedBrowser(browserId: string): boolean {
+    return this.managedBrowsers.has(browserId)
+  }
+
+  // 현재 활성 브라우저 ID 목록 조회
+  getActiveBrowserIds(): string[] {
+    return Array.from(this.managedBrowsers.keys())
   }
 }
