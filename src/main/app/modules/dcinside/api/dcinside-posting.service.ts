@@ -274,45 +274,68 @@ export class DcinsidePostingService {
   }
 
   private async uploadImages(page: Page, browser: any, imagePaths: string[]): Promise<void> {
-    // 1. 팝업 window 감지 리스너 먼저 설정
-    const popupPromise = new Promise<Page>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('이미지 팝업 윈도우 타임아웃 (10초)'))
-      }, 10000)
-
-      browser.once('targetcreated', async (target: any) => {
-        clearTimeout(timeout)
-        try {
-          const popupPage = await target.page()
-          assertValidPopupPage(popupPage)
-          resolve(popupPage)
-        } catch (error) {
-          reject(error)
+    // 이미지 업로드 중 발생할 수 있는 다이얼로그 처리
+    const handleImageUploadDialog = (dialog: any) => {
+      try {
+        const message = dialog.message()
+        this.logger.warn(`이미지 업로드 중 다이얼로그 발생: ${message}`)
+        if (!dialog._handled) {
+          dialog.accept()
         }
+      } catch (error) {
+        if (!error.message.includes('already handled')) {
+          this.logger.warn(`이미지 업로드 다이얼로그 처리 오류: ${error.message}`)
+        }
+      }
+    }
+
+    // 다이얼로그 이벤트 리스너 등록
+    page.on('dialog', handleImageUploadDialog)
+
+    try {
+      // 1. 팝업 window 감지 리스너 먼저 설정
+      const popupPromise = new Promise<Page>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('이미지 팝업 윈도우 타임아웃 (10초)'))
+        }, 10000)
+
+        browser.once('targetcreated', async (target: any) => {
+          clearTimeout(timeout)
+          try {
+            const popupPage = await target.page()
+            assertValidPopupPage(popupPage)
+            resolve(popupPage)
+          } catch (error) {
+            reject(error)
+          }
+        })
       })
-    })
 
-    // 2. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
-    await humanClick(page, 'button[aria-label="이미지"]')
+      // 2. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
+      await humanClick(page, 'button[aria-label="이미지"]')
 
-    // 3. 팝업 윈도우 대기
-    const popup = await popupPromise
+      // 3. 팝업 윈도우 대기
+      const popup = await popupPromise
 
-    await popup.waitForSelector('input.file_add', { timeout: 10000 })
+      await popup.waitForSelector('input.file_add', { timeout: 10000 })
 
-    // 3. 파일 업로드
-    await sleep(2000) // 팝업 안정화 대기
-    const input = await popup.$('input.file_add')
-    assertElementExists(input, '이미지 업로드 input을 찾을 수 없습니다.')
+      // 3. 파일 업로드
+      await sleep(2000) // 팝업 안정화 대기
+      const input = await popup.$('input.file_add')
+      assertElementExists(input, '이미지 업로드 input을 찾을 수 없습니다.')
 
-    await input.uploadFile(...imagePaths)
-    this.logger.log(`${imagePaths.length}개 이미지 업로드 시작`)
+      await input.uploadFile(...imagePaths)
+      this.logger.log(`${imagePaths.length}개 이미지 업로드 시작`)
 
-    // 4. 업로드 완료 대기 - 로딩 상태 확인
-    await this.waitForImageUploadComplete(popup, imagePaths.length)
+      // 4. 업로드 완료 대기 - 로딩 상태 확인
+      await this.waitForImageUploadComplete(popup, imagePaths.length)
 
-    // 5. 적용 버튼 클릭 (여러 방법으로 시도)
-    await this.clickApplyButtonSafely(popup)
+      // 5. 적용 버튼 클릭 (여러 방법으로 시도)
+      await this.clickApplyButtonSafely(popup)
+    } finally {
+      // 다이얼로그 이벤트 리스너 제거
+      page.off('dialog', handleImageUploadDialog)
+    }
   }
 
   private async waitForImageUploadComplete(popup: Page, expectedImageCount: number): Promise<void> {
@@ -424,14 +447,36 @@ export class DcinsidePostingService {
       try {
         // dialog(알림창) 대기 프로미스
         const dialogPromise: Promise<string | null> = new Promise(resolve => {
+          let dialogHandled = false // 다이얼로그 처리 여부 플래그
+
           dialogHandler = async (dialog: any) => {
+            if (dialogHandled) {
+              this.logger.warn('다이얼로그가 이미 처리되었습니다.')
+              resolve(null)
+              return
+            }
+
             try {
+              dialogHandled = true
               const msg = dialog.message()
-              await dialog.accept()
+
+              // dialog가 이미 처리되었는지 확인 (Puppeteer 내부 상태)
+              if (!dialog._handled) {
+                await dialog.accept()
+              } else {
+                this.logger.warn('다이얼로그가 이미 처리된 상태입니다.')
+              }
+
               resolve(msg)
             } catch (error) {
-              this.logger.warn(`다이얼로그 처리 중 오류: ${error.message}`)
-              resolve(null)
+              // "Cannot accept dialog which is already handled!" 오류는 무시
+              if (error.message.includes('already handled')) {
+                this.logger.warn('다이얼로그가 이미 처리된 상태에서 accept 시도됨 (무시)')
+                resolve(null)
+              } else {
+                this.logger.warn(`다이얼로그 처리 중 오류: ${error.message}`)
+                resolve(null)
+              }
             }
           }
 
