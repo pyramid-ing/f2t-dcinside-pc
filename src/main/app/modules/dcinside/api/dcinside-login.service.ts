@@ -72,7 +72,7 @@ export class DcinsideLoginService {
 
   async isLogin(page: Page): Promise<boolean> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'networkidle2', timeout: 60000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
       await page.waitForSelector('#login_box', { timeout: 10000 })
       const userNameExists = await page.$eval('#login_box .user_name', el => !!el)
       return !!userNameExists
@@ -86,7 +86,7 @@ export class DcinsideLoginService {
     params: { id: string; password: string },
   ): Promise<{ success: boolean; message: string }> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'networkidle2', timeout: 60000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
 
       // 로그인 폼 입력 및 로그인 버튼 클릭
       await page.type('#user_id', params.id, { delay: 30 })
