@@ -1,6 +1,6 @@
 import type { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
-import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/schemas'
+import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/dcinside-post.schema'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
@@ -434,10 +434,10 @@ export class DcinsidePostingService {
               resolve(null)
             }
           }
-          
+
           page.once('dialog', dialogHandler)
         })
-        
+
         // 타임아웃 프로미스 (8초)
         const timeoutPromise: Promise<null> = new Promise(resolve => {
           timeoutId = setTimeout(() => {

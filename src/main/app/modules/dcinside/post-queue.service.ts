@@ -7,7 +7,8 @@ import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
 import { DcinsideLoginService } from './api/dcinside-login.service'
 import { CookieService } from '../util/cookie.service'
-import { DcinsidePostSchema, PostJobToParamsSchema } from './api/dto/schemas'
+import { DcinsidePostSchema } from './api/dto/dcinside-post.schema'
+import { PostJobToParamsSchema } from './api/dto/post-job.schema'
 import type { Browser, Page } from 'puppeteer-core'
 
 interface PostQueueItem {

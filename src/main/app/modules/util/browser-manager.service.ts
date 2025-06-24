@@ -78,7 +78,7 @@ export class BrowserManagerService {
             page.removeAllListeners()
           }
         }
-        
+
         await browser.close()
         this.logger.log('브라우저 세션 종료됨')
       } catch (error) {

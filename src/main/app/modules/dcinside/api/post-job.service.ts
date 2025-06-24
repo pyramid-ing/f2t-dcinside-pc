@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { ZodError } from 'zod'
-import { DcinsidePostSchema } from './dto/schemas'
+import { DcinsidePostSchema } from './dto/dcinside-post.schema'
 
 @Injectable()
 export class PostJobService {

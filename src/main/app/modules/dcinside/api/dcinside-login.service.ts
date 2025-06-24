@@ -6,7 +6,7 @@ import { Page } from 'puppeteer-core'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { ZodError } from 'zod'
-import { DcinsideLoginSchema } from './dto/schemas'
+import { DcinsideLoginSchema } from './dto/dcinside-login.schema'
 
 puppeteer.use(StealthPlugin())
 

@@ -1,4 +1,4 @@
-import type { PostJobDto } from './dto/schemas'
+import type { PostJobDto } from './dto/post-job.schema'
 import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
 import { PostJobService } from './post-job.service'
 
