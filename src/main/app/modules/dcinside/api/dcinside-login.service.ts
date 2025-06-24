@@ -45,7 +45,7 @@ export class DcinsideLoginService {
       const page: Page = await browser.newPage()
       await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9' })
 
-      await page.goto('https://dcinside.com/', { waitUntil: 'networkidle2', timeout: 60000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
       // 로그인 폼 입력 및 로그인 버튼 클릭 (구체적 셀렉터는 실제 DOM 확인 필요)
       await page.type('#user_id', params.id, { delay: 30 })
       await page.type('#pw', params.password, { delay: 30 })

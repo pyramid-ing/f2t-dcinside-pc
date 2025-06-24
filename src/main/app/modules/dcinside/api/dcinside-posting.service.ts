@@ -537,7 +537,7 @@ export class DcinsidePostingService {
         const listUrl = this.buildGalleryUrl(galleryInfo)
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
 
-        await page.goto(listUrl, { waitUntil: 'load', timeout: 20000 })
+        await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
 
         // 글쓰기 버튼 클릭 (goWrite)
         await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
