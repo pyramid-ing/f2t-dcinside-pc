@@ -574,7 +574,7 @@ export class DcinsidePostingService {
       const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
 
       this.logger.log('외부 브라우저 세션 사용')
-      const page: Page = await this.browserManager.createPage(browser)
+      const page: Page = await this.browserManager.getOrCreatePage(browser)
 
       // 로그인 쿠키 적용 및 필요시 로그인
       if (params.loginId) {

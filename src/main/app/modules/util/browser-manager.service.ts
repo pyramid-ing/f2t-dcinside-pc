@@ -45,6 +45,21 @@ export class BrowserManagerService {
     return page
   }
 
+  // 기존 페이지 재사용 또는 새 페이지 생성
+  async getOrCreatePage(browser: Browser, headers?: Record<string, string>): Promise<Page> {
+    const pages = await browser.pages()
+
+    if (pages.length > 0) {
+      const page = pages[0]
+      this.logger.log('기존 페이지 재사용')
+      return page
+    }
+
+    // 페이지가 없으면 새로 생성 (헤더 설정 포함)
+    this.logger.log('기존 페이지가 없어 새 페이지 생성')
+    return this.createPage(browser, headers)
+  }
+
   // 브라우저 종료 (세션 종료)
   async closeBrowser(browser: Browser): Promise<void> {
     if (browser) {
