@@ -1,8 +1,167 @@
 import type { PostJob } from '../../api'
-import { Button, Input, message, Popconfirm, Select, Space, Table, Tag } from 'antd'
+import { Button, Input, message, Popconfirm, Popover, Select, Space, Table, Tag } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { deletePostJob, getPostJobs, retryPostJob } from '../../api'
 import PageContainer from '../../components/shared/PageContainer'
+import styled from 'styled-components'
+
+const ResultCell = styled.div`
+  max-width: 100%;
+  word-break: break-word;
+  line-height: 1.5;
+
+  .result-text {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 4px;
+  }
+
+  .success-text {
+    color: #16a34a;
+    font-weight: 500;
+  }
+
+  .error-text {
+    color: #dc2626;
+    font-weight: 500;
+  }
+
+  .pending-text {
+    color: #2563eb;
+    font-weight: 500;
+  }
+
+  .processing-text {
+    color: #d97706;
+    font-weight: 500;
+  }
+
+  .hover-hint {
+    cursor: help;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background-color: rgba(59, 130, 246, 0.1);
+    }
+  }
+`
+
+const PopoverContent = styled.div`
+  max-width: 400px;
+
+  .popover-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+
+    &.success {
+      color: #16a34a;
+    }
+
+    &.error {
+      color: #dc2626;
+    }
+
+    &.pending {
+      color: #2563eb;
+    }
+
+    &.processing {
+      color: #d97706;
+    }
+  }
+
+  .popover-message {
+    background: #f8fafc;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #475569;
+    border-left: 3px solid #e2e8f0;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &.success {
+      background: #f0fdf4;
+      border-left-color: #16a34a;
+      color: #15803d;
+    }
+
+    &.error {
+      background: #fef2f2;
+      border-left-color: #dc2626;
+      color: #b91c1c;
+    }
+
+    &.pending {
+      background: #eff6ff;
+      border-left-color: #2563eb;
+      color: #1e40af;
+    }
+
+    &.processing {
+      background: #fffbeb;
+      border-left-color: #d97706;
+      color: #a16207;
+    }
+  }
+
+  .result-url {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+
+    a {
+      color: #1890ff;
+      text-decoration: none;
+      font-weight: 500;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+`
+
+const StyledTable = styled(Table)`
+  .ant-table-tbody > tr.row-completed {
+    background-color: #f6ffed;
+
+    &:hover > td {
+      background-color: #e6f7e0 !important;
+    }
+  }
+
+  .ant-table-tbody > tr.row-failed {
+    background-color: #fff2f0;
+
+    &:hover > td {
+      background-color: #ffe6e2 !important;
+    }
+  }
+
+  .ant-table-tbody > tr.row-processing {
+    background-color: #fff7e6;
+
+    &:hover > td {
+      background-color: #ffeac2 !important;
+    }
+  }
+
+  .ant-table-tbody > tr.row-pending {
+    background-color: #f0f9ff;
+
+    &:hover > td {
+      background-color: #e0f2fe !important;
+    }
+  }
+`
 
 const statusColor: Record<string, string> = {
   pending: 'blue',
@@ -46,6 +205,70 @@ function extractGalleryId(galleryUrl: string): string {
     return galleryUrl
   } catch {
     return galleryUrl
+  }
+}
+
+// 상태별 기본 메시지
+function getDefaultMessage(status: string): string {
+  switch (status) {
+    case 'pending':
+      return '처리 대기 중입니다.'
+    case 'processing':
+      return '현재 처리 중입니다.'
+    case 'completed':
+      return '성공적으로 완료되었습니다.'
+    case 'failed':
+      return '처리 중 오류가 발생했습니다.'
+    default:
+      return '상태를 확인할 수 없습니다.'
+  }
+}
+
+// 상태별 타입 반환
+function getStatusType(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'success'
+    case 'failed':
+      return 'error'
+    case 'pending':
+      return 'pending'
+    case 'processing':
+      return 'processing'
+    default:
+      return 'pending'
+  }
+}
+
+// 상태별 아이콘
+function getStatusIcon(status: string): string {
+  switch (status) {
+    case 'pending':
+      return '⏳'
+    case 'processing':
+      return '⚙️'
+    case 'completed':
+      return '🎉'
+    case 'failed':
+      return '⚠️'
+    default:
+      return '❓'
+  }
+}
+
+// 상태별 제목
+function getStatusTitle(status: string): string {
+  switch (status) {
+    case 'pending':
+      return '대기 중 상세 정보'
+    case 'processing':
+      return '처리 중 상세 정보'
+    case 'completed':
+      return '완료 상세 정보'
+    case 'failed':
+      return '실패 원인 상세'
+    default:
+      return '상세 정보'
   }
 }
 
@@ -140,7 +363,7 @@ const ScheduledPostsTable: React.FC = () => {
         </Space>
       </div>
 
-      <Table
+      <StyledTable
         rowKey="id"
         dataSource={data}
         loading={loading}
@@ -155,6 +378,7 @@ const ScheduledPostsTable: React.FC = () => {
         bordered
         style={{ background: '#fff' }}
         scroll={{ x: 'max-content' }}
+        rowClassName={(record: PostJob) => `row-${record.status}`}
         columns={[
           {
             title: 'ID',
@@ -186,24 +410,50 @@ const ScheduledPostsTable: React.FC = () => {
           {
             title: '결과',
             dataIndex: 'resultMsg',
-            width: 250,
+            width: 350,
             render: (v: string, row: PostJob) => {
-              if (row.status === 'completed' && row.resultUrl) {
-                return (
-                  <div>
-                    <div style={{ marginBottom: '4px' }}>{v || '완료'}</div>
-                    <a
-                      href={row.resultUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: '#1890ff', fontSize: '12px' }}
-                    >
-                      등록된 글 보기 →
-                    </a>
+              const displayMessage = v || getDefaultMessage(row.status)
+              const statusType = getStatusType(row.status)
+
+              const popoverContent = (
+                <PopoverContent>
+                  <div className={`popover-header ${statusType}`}>
+                    {getStatusIcon(row.status)} {getStatusTitle(row.status)}
                   </div>
-                )
-              }
-              return <span style={{ color: '#666' }}>{v || '-'}</span>
+                  <div className={`popover-message ${statusType}`}>{displayMessage}</div>
+                  {row.status === 'completed' && row.resultUrl && (
+                    <div className="result-url">
+                      <a href={row.resultUrl} target="_blank" rel="noopener noreferrer">
+                        📝 등록된 글 보기 →
+                      </a>
+                    </div>
+                  )}
+                </PopoverContent>
+              )
+
+              return (
+                <Popover
+                  content={popoverContent}
+                  title={null}
+                  trigger="hover"
+                  placement="topLeft"
+                  mouseEnterDelay={0.3}
+                >
+                  <ResultCell>
+                    <div className={`result-text hover-hint ${statusType}-text`}>{displayMessage}</div>
+                    {row.status === 'completed' && row.resultUrl && (
+                      <a
+                        href={row.resultUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#1890ff', fontSize: '12px' }}
+                      >
+                        등록된 글 보기 →
+                      </a>
+                    )}
+                  </ResultCell>
+                </Popover>
+              )
             },
             sorter: true,
           },
