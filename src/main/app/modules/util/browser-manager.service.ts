@@ -94,20 +94,20 @@ export class BrowserManagerService {
   // 브라우저 ID별 브라우저 가져오기 또는 생성
   async getOrCreateBrowser(browserId: string, options: BrowserLaunchOptions = {}): Promise<Browser> {
     let managedBrowser = this.managedBrowsers.get(browserId)
-    
+
     if (!managedBrowser) {
       // 새 브라우저 생성
       const browser = await this.launchBrowser(options)
-      
+
       managedBrowser = {
         browserId,
         browser,
       }
-      
+
       this.managedBrowsers.set(browserId, managedBrowser)
       this.logger.log(`브라우저 생성: ${browserId}`)
     }
-    
+
     return managedBrowser.browser
   }
 
@@ -124,12 +124,12 @@ export class BrowserManagerService {
   // 모든 관리 브라우저 정리
   async closeAllManagedBrowsers(): Promise<void> {
     this.logger.log('모든 관리 브라우저 정리 시작')
-    
+
     for (const [browserId, managedBrowser] of this.managedBrowsers.entries()) {
       await this.closeBrowser(managedBrowser.browser)
       this.logger.log(`브라우저 강제 종료: ${browserId}`)
     }
-    
+
     this.managedBrowsers.clear()
     this.logger.log('모든 관리 브라우저 정리 완료')
   }

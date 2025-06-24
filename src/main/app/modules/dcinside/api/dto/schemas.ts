@@ -124,41 +124,75 @@ export const PostJobToParamsSchema = z
     galleryUrl: z.string().url('유효한 갤러리 URL을 입력해주세요.'),
     title: z.string().min(1, '제목을 입력해주세요.'),
     contentHtml: z.string().min(1, '내용을 입력해주세요.'),
-    password: z.string().min(1, '비밀번호를 입력해주세요.'),
+    password: z.string(), // 조건부로 필수가 될 수 있음
     nickname: z.string().nullable(),
     headtext: z.string().nullable(),
-    imagePaths: z.preprocess(
-      (val) => {
-        if (!val || val === null) return []
-        if (typeof val === 'string') {
-          try {
-            return JSON.parse(val)
-          } catch {
-            return []
-          }
+    imagePaths: z.preprocess(val => {
+      if (!val || val === null) return []
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val)
+        } catch {
+          return []
         }
-        return Array.isArray(val) ? val : []
-      },
-      z.array(z.string()).optional()
-    ),
+      }
+      return Array.isArray(val) ? val : []
+    }, z.array(z.string()).optional()),
     loginId: z.string().nullable(),
     loginPassword: z.string().nullable(),
     // 여기서 headless는 추가로 계산됨
   })
-  .transform((data) => {
+  .refine(
+    data => {
+      // 로그인 ID가 없으면 비로그인 모드 - 닉네임과 비밀번호 필수
+      if (!data.loginId || data.loginId.trim() === '') {
+        if (!data.nickname || data.nickname.trim() === '') {
+          return false
+        }
+        if (!data.password || data.password.trim() === '') {
+          return false
+        }
+      }
+      return true
+    },
+    {
+      message: '비로그인 모드에서는 닉네임과 비밀번호가 필수입니다.',
+      path: ['nickname'], // 에러가 표시될 필드
+    },
+  )
+  .refine(
+    data => {
+      // 로그인 ID가 없으면 비로그인 모드 - 비밀번호 필수 (별도 체크로 더 명확한 에러 메시지)
+      if (!data.loginId || data.loginId.trim() === '') {
+        if (!data.password || data.password.trim() === '') {
+          return false
+        }
+      }
+      return true
+    },
+    {
+      message: '비로그인 모드에서는 비밀번호가 필수입니다.',
+      path: ['password'], // 에러가 표시될 필드
+    },
+  )
+  .transform(data => {
     // imagePaths가 null이면 빈 배열로 변환
     const imagePaths = data.imagePaths || []
-    
+
+    // 로그인 ID가 있으면 로그인 모드 (nickname, password 무시)
+    // 로그인 ID가 없으면 비로그인 모드 (nickname, password 사용)
+    const hasLoginId = data.loginId && data.loginId.trim() !== ''
+
     return {
       galleryUrl: data.galleryUrl,
       title: data.title,
       contentHtml: data.contentHtml,
-      password: data.password,
-      nickname: data.nickname || undefined,
+      password: hasLoginId ? '' : data.password, // 로그인 모드면 빈 문자열, 비로그인 모드면 입력된 password
+      nickname: hasLoginId ? undefined : data.nickname || undefined, // 로그인 모드면 undefined
       headtext: data.headtext || undefined,
       imagePaths,
-      loginId: data.loginId || undefined,
-      loginPassword: data.loginPassword || undefined,
+      loginId: hasLoginId ? data.loginId : undefined,
+      loginPassword: hasLoginId ? data.loginPassword || undefined : undefined,
     }
   })
 

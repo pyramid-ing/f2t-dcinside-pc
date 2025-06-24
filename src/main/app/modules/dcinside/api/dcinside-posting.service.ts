@@ -576,46 +576,6 @@ export class DcinsidePostingService {
       this.logger.log('외부 브라우저 세션 사용')
       const page: Page = await this.browserManager.getOrCreatePage(browser)
 
-      // 로그인 쿠키 적용 및 필요시 로그인
-      if (params.loginId) {
-        this.logger.log(`로그인 처리 시작: ${params.loginId}`)
-
-        // 브라우저 생성 직후 쿠키 로드 및 적용
-        const cookies = this.cookieService.loadCookies('dcinside', params.loginId)
-
-        // 쿠키가 있으면 먼저 적용해보기
-        if (cookies && cookies.length > 0) {
-          this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
-          await browser.setCookie(...cookies)
-        }
-
-        // 로그인 상태 확인
-        const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
-
-        if (!isLoggedIn) {
-          // 로그인이 안되어 있으면 로그인 실행
-          if (!params.loginPassword) {
-            throw new Error('로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.')
-          }
-
-          this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
-          const loginResult = await this.dcinsideLoginService.loginWithPage(page, {
-            id: params.loginId,
-            password: params.loginPassword,
-          })
-
-          if (!loginResult.success) {
-            throw new Error(`자동 로그인 실패: ${loginResult.message}`)
-          }
-
-          this.logger.log('자동 로그인이 성공했습니다.')
-        } else {
-          this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
-        }
-      } else {
-        this.logger.log('비로그인 모드로 포스팅을 진행합니다.')
-      }
-
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
       await this.navigateToWritePage(page, galleryInfo)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환

@@ -5,8 +5,10 @@ import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
+import { DcinsideLoginService } from './api/dcinside-login.service'
+import { CookieService } from '../util/cookie.service'
 import { DcinsidePostSchema, PostJobToParamsSchema } from './api/dto/schemas'
-import type { Browser } from 'puppeteer-core'
+import type { Browser, Page } from 'puppeteer-core'
 
 interface PostQueueItem {
   id: number
@@ -25,6 +27,8 @@ export class PostQueueService {
     private readonly postJobService: PostJobService,
     private readonly postingService: DcinsidePostingService,
     private readonly settingsService: SettingsService,
+    private readonly dcinsideLoginService: DcinsideLoginService,
+    private readonly cookieService: CookieService,
   ) {}
 
   private async getAppSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
@@ -43,16 +47,16 @@ export class PostQueueService {
   private async convertJobToParams(job: any): Promise<DcinsidePostParams> {
     try {
       const appSettings = await this.getAppSettings()
-      
+
       // 1단계: PostJob 객체 검증 및 기본 변환
       const baseParams = PostJobToParamsSchema.parse(job)
-      
+
       // 2단계: headless 설정 추가하여 최종 파라미터 구성
       const finalParams = {
         ...baseParams,
         headless: !appSettings.showBrowserWindow, // 창보임 설정의 반대가 headless
       }
-      
+
       // 3단계: 최종 DcinsidePostSchema로 검증
       return DcinsidePostSchema.parse(finalParams)
     } catch (error) {
@@ -64,7 +68,50 @@ export class PostQueueService {
     }
   }
 
-  
+  /**
+   * 브라우저별 로그인 처리 (브라우저 생성 직후 한 번만 실행)
+   */
+  private async handleBrowserLogin(browser: Browser, loginId: string, loginPassword: string): Promise<void> {
+    this.logger.log(`로그인 처리 시작: ${loginId}`)
+
+    const page: Page = await this.browserManager.getOrCreatePage(browser)
+
+    // 브라우저 생성 직후 쿠키 로드 및 적용
+    const cookies = this.cookieService.loadCookies('dcinside', loginId)
+
+    // 쿠키가 있으면 먼저 적용해보기
+    if (cookies && cookies.length > 0) {
+      this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
+      await browser.setCookie(...cookies)
+    }
+
+    // 로그인 상태 확인
+    const isLoggedIn = await this.dcinsideLoginService.isLogin(page)
+
+    if (!isLoggedIn) {
+      // 로그인이 안되어 있으면 로그인 실행
+      if (!loginPassword) {
+        throw new Error('로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.')
+      }
+
+      this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
+      const loginResult = await this.dcinsideLoginService.loginWithPage(page, {
+        id: loginId,
+        password: loginPassword,
+      })
+
+      if (!loginResult.success) {
+        throw new Error(`자동 로그인 실패: ${loginResult.message}`)
+      }
+
+      // 로그인 성공 후 새로운 쿠키 저장
+      const newCookies = await browser.cookies()
+      this.cookieService.saveCookies('dcinside', loginId, newCookies)
+      this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
+    } else {
+      this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
+    }
+  }
 
   /**
    * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
@@ -86,6 +133,9 @@ export class PostQueueService {
       browserJobCounts.set(item.browserId, count + 1)
     }
 
+    // 브라우저별 로그인 처리 완료 여부 추적
+    const browserLoginCompleted = new Set<string>()
+
     try {
       // 큐에서 순서대로 하나씩 처리
       while (this.postQueue.length > 0) {
@@ -95,10 +145,21 @@ export class PostQueueService {
           this.logger.log(`작업 시작: ID ${queueItem.id} (브라우저: ${queueItem.browserId})`)
 
           // 해당 브라우저 가져오기 또는 생성
-          const browser = await this.browserManager.getOrCreateBrowser(
-            queueItem.browserId, 
-            { headless: !appSettings.showBrowserWindow }
-          )
+          const browser = await this.browserManager.getOrCreateBrowser(queueItem.browserId, {
+            headless: !appSettings.showBrowserWindow,
+          })
+
+          // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
+          if (!browserLoginCompleted.has(queueItem.browserId)) {
+            if (queueItem.params.loginId && queueItem.params.loginPassword) {
+              await this.handleBrowserLogin(browser, queueItem.params.loginId, queueItem.params.loginPassword)
+            } else if (queueItem.params.loginId) {
+              this.logger.log(`비로그인 모드로 진행: ${queueItem.browserId}`)
+            } else {
+              this.logger.log(`비로그인 모드로 진행: ${queueItem.browserId}`)
+            }
+            browserLoginCompleted.add(queueItem.browserId)
+          }
 
           // 작업 처리
           const result = await this.postingService.postArticle(queueItem.params, browser)
@@ -113,7 +174,6 @@ export class PostQueueService {
           if (browserJobCounts.get(queueItem.browserId) === 0) {
             await this.browserManager.closeManagedBrowser(queueItem.browserId)
           }
-
         } catch (error) {
           await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)
           this.logger.error(`작업 실패: ID ${queueItem.id} - ${error.message}`)
