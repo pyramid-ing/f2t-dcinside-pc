@@ -71,6 +71,14 @@ export class BrowserManagerService {
   async closeBrowser(browser: Browser): Promise<void> {
     if (browser) {
       try {
+        // 브라우저의 모든 페이지에서 이벤트 리스너 정리
+        const pages = await browser.pages()
+        for (const page of pages) {
+          if (!page.isClosed()) {
+            page.removeAllListeners()
+          }
+        }
+        
         await browser.close()
         this.logger.log('브라우저 세션 종료됨')
       } catch (error) {
@@ -83,6 +91,8 @@ export class BrowserManagerService {
   async closePage(page: Page): Promise<void> {
     if (page && !page.isClosed()) {
       try {
+        // 페이지의 모든 이벤트 리스너 제거
+        page.removeAllListeners()
         await page.close()
         this.logger.log('페이지 종료됨')
       } catch (error) {

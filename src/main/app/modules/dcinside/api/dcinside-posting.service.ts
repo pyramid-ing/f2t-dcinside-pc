@@ -418,54 +418,79 @@ export class DcinsidePostingService {
     while (true) {
       await this.solveCapcha(page)
 
-      // dialog(알림창) 대기 프로미스 – 8초 내 발생하지 않으면 null 반환
-      const dialogPromise: Promise<string | null> = new Promise(resolve => {
-        const handler = async (dialog: any) => {
-          const msg = dialog.message()
-          await dialog.accept()
-          resolve(msg)
+      let dialogHandler: ((dialog: any) => Promise<void>) | null = null
+      let timeoutId: NodeJS.Timeout | null = null
+
+      try {
+        // dialog(알림창) 대기 프로미스
+        const dialogPromise: Promise<string | null> = new Promise(resolve => {
+          dialogHandler = async (dialog: any) => {
+            try {
+              const msg = dialog.message()
+              await dialog.accept()
+              resolve(msg)
+            } catch (error) {
+              this.logger.warn(`다이얼로그 처리 중 오류: ${error.message}`)
+              resolve(null)
+            }
+          }
+          
+          page.once('dialog', dialogHandler)
+        })
+        
+        // 타임아웃 프로미스 (8초)
+        const timeoutPromise: Promise<null> = new Promise(resolve => {
+          timeoutId = setTimeout(() => {
+            resolve(null)
+          }, 8000)
+        })
+
+        // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
+        await page.click('button.btn_svc.write')
+
+        // dialog, timeout, navigation 중 먼저 완료되는 것을 대기
+        const dialogMessage = await Promise.race([
+          Promise.race([dialogPromise, timeoutPromise]),
+          page
+            .waitForNavigation({ timeout: 10000 })
+            .then(() => null)
+            .catch(() => null),
+        ])
+
+        // 알림창이 떴을 경우 처리
+        if (dialogMessage) {
+          // 캡챠 오류 메시지일 경우에만 재시도
+          if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
+            captchaTryCount += 1
+            if (captchaTryCount >= 3) throw new Error('캡챠 해제 실패(3회 시도)')
+
+            // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
+            try {
+              await page.evaluate(() => {
+                const img = document.getElementById('kcaptcha') as HTMLImageElement | null
+                if (img) img.click()
+              })
+            } catch {}
+
+            await sleep(1000)
+            continue // while – 다시 등록 버튼 클릭 시도
+          } else {
+            // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
+            throw new Error(`글 등록 실패: ${dialogMessage}`)
+          }
         }
-        page.once('dialog', handler)
-        setTimeout(() => resolve(null), 8000)
-      })
 
-      // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-      await page.click('button.btn_svc.write')
-
-      // dialog 결과와 navigation 중 먼저 완료되는 것을 대기
-      const dialogMessage = await Promise.race([
-        dialogPromise,
-        page
-          .waitForNavigation({ timeout: 10000 })
-          .then(() => null)
-          .catch(() => null),
-      ])
-
-      // 알림창이 떴을 경우 처리
-      if (dialogMessage) {
-        // 캡챠 오류 메시지일 경우에만 재시도
-        if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
-          captchaTryCount += 1
-          if (captchaTryCount >= 3) throw new Error('캡챠 해제 실패(3회 시도)')
-
-          // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
-          try {
-            await page.evaluate(() => {
-              const img = document.getElementById('kcaptcha') as HTMLImageElement | null
-              if (img) img.click()
-            })
-          } catch {}
-
-          await sleep(1000)
-          continue // while – 다시 등록 버튼 클릭 시도
-        } else {
-          // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
-          throw new Error(`글 등록 실패: ${dialogMessage}`)
+        // dialog가 없으면 성공으로 간주하고 루프 탈출
+        break
+      } finally {
+        // 다이얼로그 이벤트 리스너와 타이머 정리
+        if (dialogHandler) {
+          page.off('dialog', dialogHandler)
+        }
+        if (timeoutId) {
+          clearTimeout(timeoutId)
         }
       }
-
-      // dialog가 없으면 성공으로 간주하고 루프 탈출
-      break
     }
   }
 
