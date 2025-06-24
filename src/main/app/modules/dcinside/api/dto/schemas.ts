@@ -64,6 +64,25 @@ export const DcinsidePostSchema = z
       path: ['password'], // 에러가 표시될 필드
     },
   )
+  .transform(data => {
+    // 로그인 ID가 있으면 로그인 모드 우선 처리 (nickname, password 무시)
+    // 로그인 ID가 없으면 비로그인 모드 (nickname, password 사용)
+    const hasLoginId = data.loginId && data.loginId.trim() !== ''
+
+    return {
+      galleryUrl: data.galleryUrl,
+      title: data.title,
+      contentHtml: data.contentHtml,
+      password: hasLoginId ? undefined : data.password, // 로그인 모드면 undefined, 비로그인 모드면 입력된 password
+      nickname: hasLoginId ? undefined : data.nickname || undefined, // 로그인 모드면 undefined
+      headless: data.headless,
+      imagePaths: data.imagePaths,
+      scheduledAt: data.scheduledAt,
+      loginId: hasLoginId ? data.loginId : undefined,
+      loginPassword: hasLoginId ? data.loginPassword || undefined : undefined,
+      headtext: data.headtext || undefined,
+    }
+  })
 
 // DcinsideLogin 스키마
 export const DcinsideLoginSchema = z.object({
