@@ -190,6 +190,38 @@ export class DcinsidePostingService {
     await humanType(page, 'input[name=kcaptcha_code]', answer)
   }
 
+  private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
+    try {
+      // 커스텀 팝업이 나타날 때까지 대기 (최대 8초)
+      await page.waitForSelector('.pop_wrap[style*="display: block"]', { timeout: 8000 })
+
+      // 팝업 내용 추출
+      const popupContent = await page.evaluate(() => {
+        const popupElement = document.querySelector('.pop_wrap[style*="display: block"]')
+        if (!popupElement) return null
+
+        // 팝업 내 텍스트 내용 추출
+        const txtbox = popupElement.querySelector('.txtbox')
+        if (txtbox) {
+          return txtbox.textContent?.trim() || null
+        }
+
+        // txtbox가 없으면 전체 내용에서 추출
+        const content = popupElement.textContent?.trim()
+        return content || null
+      })
+
+      if (!popupContent) return null
+
+      this.logger.warn(`커스텀 팝업 감지: ${popupContent}`)
+
+      return { isCustomPopup: true, message: popupContent }
+    } catch (error) {
+      // 타임아웃이거나 팝업이 없으면 null 반환
+      return null
+    }
+  }
+
   private async inputPassword(page: Page, password: string): Promise<void> {
     if (await page.$('#password')) {
       await humanType(page, '#password', password.toString())
@@ -493,14 +525,26 @@ export class DcinsidePostingService {
         // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
         await page.click('button.btn_svc.write')
 
-        // dialog, timeout, navigation 중 먼저 완료되는 것을 대기
-        const dialogMessage = await Promise.race([
-          Promise.race([dialogPromise, timeoutPromise]),
+        // 커스텀 팝업 대기 프로미스
+        const customPopupPromise = this.waitForCustomPopup(page)
+
+        // dialog, timeout, navigation, custom popup 중 먼저 완료되는 것을 대기
+        const result = await Promise.race([
+          dialogPromise,
+          timeoutPromise,
+          customPopupPromise,
           page
             .waitForNavigation({ timeout: 10000 })
             .then(() => null)
             .catch(() => null),
         ])
+
+        // 커스텀 팝업 결과 처리
+        if (result && typeof result === 'object' && 'isCustomPopup' in result) {
+          throw new Error(`글 등록 실패: ${result.message}`)
+        }
+
+        const dialogMessage = result
 
         // 알림창이 떴을 경우 처리
         if (dialogMessage) {
