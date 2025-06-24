@@ -83,7 +83,7 @@ export class PostJobService {
         galleryUrl: sanitizedDto.galleryUrl,
         title: sanitizedDto.title,
         contentHtml: sanitizedDto.contentHtml,
-        password: sanitizedDto.password.toString(),
+        password: sanitizedDto.password ?? null,
         nickname: sanitizedDto.nickname ?? null,
         headtext: sanitizedDto.headtext ?? null,
         imagePaths: sanitizedDto.imagePaths ? JSON.stringify(sanitizedDto.imagePaths) : null,

@@ -19,7 +19,7 @@ model PostJob {
   galleryUrl    String
   title         String
   contentHtml   String
-  password      String
+  password      String?
   nickname      String?
   headtext      String?
   imagePaths    String?  // JSON stringified array
