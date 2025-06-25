@@ -92,7 +92,7 @@ export class EnvConfig {
     process.env.PRISMA_QUERY_ENGINE_BINARY = enginePath
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = libPath
     process.env.PUPPETEER_EXECUTABLE_PATH = this.getDefaultChromePath()
-    process.env.COOKIE_DIR = path.join(this.resourcePath, 'cookies')
+    process.env.COOKIE_DIR = path.join(this.userDataPath, 'cookies')
   }
 
   private static initializeDatabase() {
