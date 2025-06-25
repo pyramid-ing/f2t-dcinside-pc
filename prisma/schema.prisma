@@ -29,6 +29,7 @@ model PostJob {
   status        String   // "pending" | "completed" | "failed"
   resultMsg     String?
   resultUrl     String?
+  imagePosition String?  // '상단' 또는 '하단'
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

@@ -57,6 +57,26 @@ function assertRetrySuccess(success: boolean, errorMessage: string): asserts suc
   }
 }
 
+// 커서를 이동하는 함수
+async function moveCursorToPosition(page: any, position: '상단' | '하단') {
+  await page.evaluate(pos => {
+    const editor = document.querySelector('.note-editable') as HTMLElement
+    if (editor) {
+      editor.focus()
+
+      const selection = window.getSelection()
+      if (!selection) return
+
+      const range = document.createRange()
+      range.selectNodeContents(editor)
+      range.collapse(pos === '상단') // 시작 또는 끝 위치로 커서 이동
+
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+  }, position)
+}
+
 @Injectable()
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
@@ -679,7 +699,7 @@ export class DcinsidePostingService {
   async postArticle(rawParams: any, browser: Browser): Promise<{ success: boolean; message: string; url?: string }> {
     try {
       // 0. 파라미터 검증
-      const params = this.validateParams(rawParams)
+      const params = this.validateParams(rawParams) as DcinsidePostDto & { imagePosition?: '상단' | '하단' }
 
       // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
       const appSettings = await this.settingsService.getAppSettings()
@@ -705,6 +725,8 @@ export class DcinsidePostingService {
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (params.imagePaths && params.imagePaths.length > 0) {
         try {
+          await moveCursorToPosition(page, params.imagePosition)
+
           await this.uploadImages(page, browser, params.imagePaths)
           this.logger.log('이미지 업로드 성공')
         } catch (imageUploadError) {

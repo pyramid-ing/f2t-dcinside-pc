@@ -91,6 +91,7 @@ export class PostJobService {
         loginPassword: sanitizedDto.loginPassword ?? null,
         scheduledAt: sanitizedDto.scheduledAt || new Date(),
         status: 'pending',
+        imagePosition: sanitizedDto.imagePosition ?? null,
       },
     })
   }

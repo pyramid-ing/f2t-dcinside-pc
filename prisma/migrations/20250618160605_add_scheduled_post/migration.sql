@@ -8,6 +8,7 @@ CREATE TABLE "ScheduledPost" (
     "nickname" TEXT,
     "headless" BOOLEAN,
     "imagePaths" TEXT,
+    "imagePosition" TEXT,
     "publishAt" DATETIME NOT NULL,
     "status" TEXT NOT NULL,
     "resultMsg" TEXT,

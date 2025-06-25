@@ -16,6 +16,7 @@ export const PostJobSchema = BasePostSchema.extend({
   resultUrl: z.string().nullable().optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
+  imagePosition: z.enum(['상단', '하단']).optional(),
 })
 
 // PostJob을 DcinsidePostParams로 변환하는 스키마 - 기본 스키마 확장
@@ -33,6 +34,7 @@ export const PostJobToParamsSchema = BasePostSchema.extend({
     return Array.isArray(val) ? val : []
   }, z.array(z.string()).optional()),
   // 여기서 headless는 추가로 계산됨
+  imagePosition: z.string().optional(),
 })
   .refine(
     data => {
@@ -67,6 +69,7 @@ export const PostJobToParamsSchema = BasePostSchema.extend({
       imagePaths,
       loginId: hasLoginId ? data.loginId : undefined,
       loginPassword: hasLoginId ? data.loginPassword || undefined : undefined,
+      imagePosition: data.imagePosition || '',
     }
   })
 
@@ -92,6 +95,7 @@ export const ExcelRowSchema = z
     로그인비번: z.string().optional(),
     말머리: z.string().optional(),
     예약날짜: z.string().optional(),
+    이미지위치: z.string().optional(),
   })
   .transform(data => {
     // 이미지 경로들을 배열로 변환
@@ -136,6 +140,7 @@ export const ExcelRowSchema = z
       loginId: data.로그인ID || '',
       loginPassword: data.로그인비번 || '',
       scheduledAt,
+      imagePosition: data.이미지위치 || '',
     }
   })
 

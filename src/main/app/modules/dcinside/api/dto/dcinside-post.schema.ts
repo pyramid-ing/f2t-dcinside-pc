@@ -40,6 +40,7 @@ export const DcinsidePostSchema = BasePostSchema.extend({
 
     return undefined
   }, z.date().optional()),
+  imagePosition: z.enum(['상단', '하단']).optional(),
 })
   .refine(
     data => {
@@ -73,6 +74,7 @@ export const DcinsidePostSchema = BasePostSchema.extend({
       loginId: hasLoginId ? data.loginId : undefined,
       loginPassword: hasLoginId ? data.loginPassword || undefined : undefined,
       headtext: data.headtext || undefined,
+      imagePosition: data.imagePosition,
     }
   })
 

@@ -49,6 +49,7 @@ export class DcinsideWorkflowService {
           headtext: transformedRow.headtext,
           loginId: transformedRow.loginId,
           loginPassword: transformedRow.loginPassword,
+          imagePosition: transformedRow.imagePosition,
         })
 
         const isScheduled = transformedRow.scheduledAt && dayjs(transformedRow.scheduledAt).isAfter(dayjs())
