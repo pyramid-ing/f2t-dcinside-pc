@@ -302,7 +302,7 @@ export class DcinsidePostingService {
     const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (!htmlChecked) {
       await page.click('#chk_html')
-      await new Promise(res => setTimeout(res, 300))
+      await sleep(300)
     }
     // textarea.note-codable에 HTML 입력
     await page.waitForSelector('.note-codable', { timeout: 5000 })
@@ -315,12 +315,12 @@ export class DcinsidePostingService {
         textarea.dispatchEvent(event)
       }
     }, contentHtml)
-    await new Promise(res => setTimeout(res, 300))
+    await sleep(300)
     // 코드뷰 해제 (WYSIWYG로 복귀)
     const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (htmlChecked2) {
       await page.click('#chk_html')
-      await new Promise(res => setTimeout(res, 300))
+      await sleep(300)
     }
   }
 
