@@ -6,7 +6,6 @@ import { BrowserManagerService } from '@main/app/modules/util/browser-manager.se
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
-import { humanClick, humanType } from '@main/app/utils/human-actions'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
 import { Browser, Page } from 'puppeteer-core'
@@ -207,7 +206,7 @@ export class DcinsidePostingService {
       const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
       if (el) el.value = ''
     })
-    await humanType(page, 'input[name=kcaptcha_code]', answer)
+    await page.type('input[name=kcaptcha_code]', answer)
   }
 
   private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
@@ -244,13 +243,13 @@ export class DcinsidePostingService {
 
   private async inputPassword(page: Page, password: string): Promise<void> {
     if (await page.$('#password')) {
-      await humanType(page, '#password', password.toString())
+      await page.type('#password', password.toString())
     }
   }
 
   private async inputTitle(page: Page, title: string): Promise<void> {
     await page.waitForSelector('#subject', { timeout: 10000 })
-    await humanType(page, '#subject', title)
+    await page.type('#subject', title)
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
@@ -302,7 +301,7 @@ export class DcinsidePostingService {
     // 코드뷰(HTML) 모드로 전환
     const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (!htmlChecked) {
-      await humanClick(page, '#chk_html')
+      await page.click('#chk_html')
       await new Promise(res => setTimeout(res, 300))
     }
     // textarea.note-codable에 HTML 입력
@@ -320,7 +319,7 @@ export class DcinsidePostingService {
     // 코드뷰 해제 (WYSIWYG로 복귀)
     const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
     if (htmlChecked2) {
-      await humanClick(page, '#chk_html')
+      await page.click('#chk_html')
       await new Promise(res => setTimeout(res, 300))
     }
   }
@@ -364,7 +363,7 @@ export class DcinsidePostingService {
       })
 
       // 2. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
-      await humanClick(page, 'button[aria-label="이미지"]')
+      await page.click('button[aria-label="이미지"]')
 
       // 3. 팝업 윈도우 대기
       const popup = await popupPromise
@@ -441,17 +440,13 @@ export class DcinsidePostingService {
       async () => {
         // 적용 버튼 존재 확인
         await popup.waitForSelector('.btn_apply', { timeout: 5000 })
-
-        await humanClick(popup, '.btn_apply')
-
+        await popup.click('.btn_apply')
         // 클릭 후 팝업 닫힘 확인 (1초 대기)
         await sleep(1000)
-
         if (popup.isClosed()) {
           this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
           return true
         }
-
         throw new Error('팝업이 아직 닫히지 않았습니다.')
       },
       1000,
@@ -469,7 +464,7 @@ export class DcinsidePostingService {
         // x버튼 클릭해서 닉네임 입력란 활성화
         const xBtn = await page.$('#btn_gall_nick_name_x')
         if (xBtn) {
-          await humanClick(page, xBtn)
+          await page.click('#btn_gall_nick_name_x')
           await sleep(300)
         }
       }
@@ -478,11 +473,11 @@ export class DcinsidePostingService {
         const el = document.getElementById('gall_nick_name')
         if (el) el.removeAttribute('readonly')
       })
-      await humanClick(page, '#name')
+      await page.click('#name')
       await page.keyboard.down('Control')
       await page.keyboard.press('KeyA')
       await page.keyboard.up('Control')
-      await humanType(page, '#name', nickname)
+      await page.type('#name', nickname)
     }
   }
 
@@ -670,21 +665,17 @@ export class DcinsidePostingService {
       async () => {
         const listUrl = this.buildGalleryUrl(galleryInfo)
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
-
         await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
-
         // 글쓰기 버튼 클릭 (goWrite)
         await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
-        await humanClick(page, 'a.btn_write.txt')
+        await page.click('a.btn_write.txt')
         await sleep(4000)
-
         // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
         if (!currentUrl.includes('/write')) {
           this.logger.warn('글쓰기 페이지로 이동하지 못했습니다.')
           return false
         }
-
         this.logger.log('글쓰기 페이지 이동 성공')
         return true
       },
@@ -692,7 +683,6 @@ export class DcinsidePostingService {
       3,
       'linear',
     )
-
     assertRetrySuccess(success, '글쓰기 페이지 이동 실패 (3회 시도)')
   }
 
