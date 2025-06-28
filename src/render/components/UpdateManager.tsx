@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Progress, Modal, Typography, Space, notification } from 'antd'
 import { DownloadOutlined, ReloadOutlined, CheckOutlined } from '@ant-design/icons'
-import type { UpdateInfo, DownloadProgress, UpdateResult } from '../types/electron'
+import type { UpdateInfo, DownloadProgress, UpdateResult } from 'src/render/types/electron'
 
 const { Text, Paragraph } = Typography
 
