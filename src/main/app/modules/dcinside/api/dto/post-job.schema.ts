@@ -140,7 +140,7 @@ export const ExcelRowSchema = z
       loginId: data.로그인ID || '',
       loginPassword: data.로그인비번 || '',
       scheduledAt,
-      imagePosition: data.이미지위치 || '',
+      imagePosition: data.이미지위치 && data.이미지위치.trim() ? data.이미지위치 : undefined,
     }
   })
 
