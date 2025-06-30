@@ -361,11 +361,22 @@ export class DcinsidePostingService {
   }
 
   private async performImageUpload(page: Page, browser: any, imagePaths: string[]): Promise<void> {
+    let imageUploadError: Error | null = null
+
     // 이미지 업로드 중 발생할 수 있는 다이얼로그 처리
     const handleImageUploadDialog = (dialog: any) => {
       try {
         const message = dialog.message()
         this.logger.warn(`이미지 업로드 중 다이얼로그 발생: ${message}`)
+
+        // "이미지 업로드 중입니다" 메시지가 나오면 에러로 처리
+        if (message && message.includes('이미지 업로드 중입니다')) {
+          imageUploadError = new Error(
+            '이미지 업로드 중 에러 발생: 동일한 이미지가 이미 업로드 중이거나 처리할 수 없는 상태입니다.',
+          )
+          this.logger.error(`이미지 업로드 에러: ${message}`)
+        }
+
         if (!dialog._handled) {
           dialog.accept()
         }
@@ -379,6 +390,7 @@ export class DcinsidePostingService {
     // 다이얼로그 이벤트 리스너 등록
     page.on('dialog', handleImageUploadDialog)
 
+    let popup: Page | null = null
     try {
       // 1. 팝업 window 감지 리스너 먼저 설정
       const popupPromise = new Promise<Page>((resolve, reject) => {
@@ -402,7 +414,10 @@ export class DcinsidePostingService {
       await page.click('button[aria-label="이미지"]')
 
       // 3. 팝업 윈도우 대기
-      const popup = await popupPromise
+      popup = await popupPromise
+
+      // 팝업 창에서도 dialog 리스너 등록
+      popup.on('dialog', handleImageUploadDialog)
 
       await popup.waitForSelector('input.file_add', { timeout: 10000 })
 
@@ -422,6 +437,19 @@ export class DcinsidePostingService {
     } finally {
       // 다이얼로그 이벤트 리스너 제거
       page.off('dialog', handleImageUploadDialog)
+      // 팝업이 존재하고 닫히지 않았다면 팝업의 dialog 리스너도 제거
+      try {
+        if (popup && !popup.isClosed()) {
+          popup.off('dialog', handleImageUploadDialog)
+        }
+      } catch (error) {
+        // 팝업이 이미 닫혔거나 접근할 수 없는 경우 무시
+      }
+    }
+
+    // 이미지 업로드 중 에러가 발생했다면 에러 던지기
+    if (imageUploadError) {
+      throw imageUploadError
     }
   }
 
