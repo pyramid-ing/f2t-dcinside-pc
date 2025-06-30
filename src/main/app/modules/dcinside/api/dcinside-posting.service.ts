@@ -59,7 +59,7 @@ function assertRetrySuccess(success: boolean, errorMessage: string): asserts suc
 // 커서를 이동하는 함수
 async function moveCursorToPosition(page: any, position: '상단' | '하단') {
   await page.evaluate(pos => {
-    const editor = document.querySelector('.note-editable') as HTMLElement
+    const editor = document.querySelector('.note-editor .note-editable') as HTMLElement
     if (editor) {
       editor.focus()
 
@@ -254,10 +254,10 @@ export class DcinsidePostingService {
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
     try {
-      await page.waitForSelector('.subject_list li', { timeout: 5000 })
+      await page.waitForSelector('.write_subject .subject_list li', { timeout: 5000 })
 
       const found = await page.evaluate(headtext => {
-        const items = Array.from(document.querySelectorAll('.subject_list li'))
+        const items = Array.from(document.querySelectorAll('.write_subject .subject_list li'))
 
         // headtext가 있으면 해당 말머리 찾기
         if (headtext) {
@@ -305,9 +305,9 @@ export class DcinsidePostingService {
       await sleep(300)
     }
     // textarea.note-codable에 HTML 입력
-    await page.waitForSelector('.note-codable', { timeout: 5000 })
+    await page.waitForSelector('.note-editor .note-codable', { timeout: 5000 })
     await page.evaluate(html => {
-      const textarea = document.querySelector('.note-codable') as HTMLTextAreaElement
+      const textarea = document.querySelector('.note-editor .note-codable') as HTMLTextAreaElement
       if (textarea) {
         textarea.value = html
         // input 이벤트 트리거
@@ -324,7 +324,43 @@ export class DcinsidePostingService {
     }
   }
 
-  private async uploadImages(page: Page, browser: any, imagePaths: string[]): Promise<void> {
+  private async uploadImages(
+    page: Page,
+    browser: any,
+    imagePaths: string[],
+    imagePosition: '상단' | '하단',
+  ): Promise<void> {
+    // 이미지가 없으면 바로 리턴
+    if (!imagePaths || imagePaths.length === 0) {
+      return
+    }
+    await moveCursorToPosition(page, imagePosition)
+
+    // 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
+    const appSettings = await this.settingsService.getAppSettings()
+
+    try {
+      await this.performImageUpload(page, browser, imagePaths)
+      this.logger.log('이미지 업로드 성공')
+    } catch (imageUploadError) {
+      const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
+      this.logger.warn(errorMessage)
+
+      // 설정에 따른 처리
+      const imageFailureAction = appSettings.imageUploadFailureAction || 'fail'
+
+      switch (imageFailureAction) {
+        case 'fail':
+          // 작업 실패 - 전체 포스팅 중단
+          throw new Error(errorMessage)
+        case 'skip':
+          this.logger.log('이미지 업로드 실패하였으나 설정에 따라 이미지 없이 포스팅을 진행합니다.')
+          break
+      }
+    }
+  }
+
+  private async performImageUpload(page: Page, browser: any, imagePaths: string[]): Promise<void> {
     // 이미지 업로드 중 발생할 수 있는 다이얼로그 처리
     const handleImageUploadDialog = (dialog: any) => {
       try {
@@ -707,43 +743,26 @@ export class DcinsidePostingService {
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      await this.selectHeadtext(page, params.headtext)
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      await this.inputContent(page, params.contentHtml)
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-
-      // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
-      if (params.imagePaths && params.imagePaths.length > 0) {
-        try {
-          await moveCursorToPosition(page, params.imagePosition)
-
-          await this.uploadImages(page, browser, params.imagePaths)
-          this.logger.log('이미지 업로드 성공')
-        } catch (imageUploadError) {
-          const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
-          this.logger.warn(errorMessage)
-
-          // 설정에 따른 처리
-          const imageFailureAction = appSettings.imageUploadFailureAction || 'fail'
-
-          switch (imageFailureAction) {
-            case 'fail':
-              // 작업 실패 - 전체 포스팅 중단
-              throw new Error(errorMessage)
-            case 'skip':
-              this.logger.log('이미지 업로드 실패하였으나 설정에 따라 이미지 없이 포스팅을 진행합니다.')
-              break
-          }
-        }
+      if (params.headtext) {
+        await this.selectHeadtext(page, params.headtext)
+        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       if (params.nickname) {
         await this.inputNickname(page, params.nickname)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
-      await this.inputPassword(page, params.password)
+      if (params.password) {
+        await this.inputPassword(page, params.password)
+        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      }
+
+      await this.inputContent(page, params.contentHtml)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+      // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
+      await this.uploadImages(page, browser, params.imagePaths, params.imagePosition)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
