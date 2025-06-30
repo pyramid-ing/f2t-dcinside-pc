@@ -61,16 +61,21 @@ jobs:
       - name: Build initial database
         run: node scripts/build-initial-db.js
 
-      # 8. Electron 빌드
+      # 8. package.json에서 버전 읽기
+      - name: Get package version
+        id: package-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      # 9. Electron 빌드
       - name: Build Windows App
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: pnpm build
         shell: pwsh
 
-      # 9. 빌드된 파일 업로드
+      # 10. 빌드된 파일 업로드
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: f2t-dcinside-windows
+          name: f2t-dcinside-windows-v${{ steps.package-version.outputs.version }}
           path: dist/electron
