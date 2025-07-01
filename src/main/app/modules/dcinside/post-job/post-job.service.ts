@@ -6,7 +6,6 @@ import { AppSettings, SettingsService } from '@main/app/modules/settings/setting
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page } from 'playwright'
 import { PostJob } from '@prisma/client'
-import { EnvConfig } from '@main/config/env.config'
 import _ from 'lodash'
 import { sleep } from '@main/app/utils/sleep'
 
@@ -198,14 +197,12 @@ export class PostJobService {
         status: 'processing',
       },
     })
+    const appSettings = await this.getAppSettings()
 
     const groupedPostJobs = _.groupBy(postJobs, postJob => postJob.loginId)
     for (const loginId in groupedPostJobs) {
-      const { browser, context } = await this.postingService.launch(
-        EnvConfig.isPackaged, // background (개발환경에서는 디버깅용으로 비활성화)
-      )
+      const { browser, context } = await this.postingService.launch(!appSettings.showBrowserWindow)
       try {
-        const appSettings = await this.getAppSettings()
         const postJobs = groupedPostJobs[loginId]
 
         for (const postJob of postJobs) {
