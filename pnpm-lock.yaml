@@ -116,9 +116,6 @@ importers:
       reflect-metadata:
         specifier: ^0.1.13
         version: 0.1.14
-      rxjs:
-        specifier: ^7.8.1
-        version: 7.8.2
       styled-components:
         specifier: ^6.1.16
         version: 6.1.19(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -147,6 +144,9 @@ importers:
       '@types/express':
         specifier: ^5.0.3
         version: 5.0.3
+      '@types/lodash':
+        specifier: ^4.17.19
+        version: 4.17.19
       '@types/node':
         specifier: ^20.19.0
         version: 20.19.1
@@ -1383,6 +1383,9 @@ packages:
 
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
+
+  '@types/lodash@4.17.19':
+    resolution: {integrity: sha512-NYqRyg/hIQrYPT9lbOeYc3kIRabJDn/k4qQHIXUpx88CBDww2fD15Sg5kbXlW86zm2XEW4g0QxkTI3/Kfkc7xQ==}
 
   '@types/luxon@3.6.2':
     resolution: {integrity: sha512-R/BdP7OxEMc44l2Ex5lSXHoIXTB2JLNa3y2QISIbr58U/YcsffyQrYW//hZSdrfxrjRZj3GcUoxMPGdO8gSYuw==}
@@ -6530,6 +6533,8 @@ snapshots:
   '@types/keyv@3.1.4':
     dependencies:
       '@types/node': 20.19.1
+
+  '@types/lodash@4.17.19': {}
 
   '@types/luxon@3.6.2': {}
 

@@ -1,100 +1,26 @@
-import type { DcinsidePostDto } from 'src/main/app/modules/dcinside/api/dto/dcinside-post.dto'
-import * as fs from 'node:fs'
-import * as path from 'node:path'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
-import { ZodError } from 'zod'
-import { DcinsidePostSchema } from 'src/main/app/modules/dcinside/api/dto/dcinside-post.schema'
+import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
+import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
+import { AppSettings, SettingsService } from '@main/app/modules/settings/settings.service'
+import { CookieService } from '@main/app/modules/util/cookie.service'
+import { BrowserContext, Page } from 'playwright'
+import { PostJob } from '@prisma/client'
+import { EnvConfig } from '@main/config/env.config'
+import _ from 'lodash'
+import { sleep } from '@main/app/utils/sleep'
 
 @Injectable()
 export class PostJobService {
   private readonly logger = new Logger(PostJobService.name)
-  constructor(private readonly prismaService: PrismaService) {}
 
-  private validateImagePaths(imagePaths: string[]): { valid: string[]; errors: string[] } {
-    const valid: string[] = []
-    const errors: string[] = []
-
-    for (const imagePath of imagePaths) {
-      try {
-        // 파일 존재 여부 확인
-        if (!fs.existsSync(imagePath)) {
-          errors.push(`파일이 존재하지 않습니다: ${imagePath}`)
-          continue
-        }
-
-        // 파일이 이미지인지 확인 (확장자 체크)
-        const ext = path.extname(imagePath).toLowerCase()
-        const validImageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
-        if (!validImageExts.includes(ext)) {
-          errors.push(`지원하지 않는 이미지 형식입니다: ${imagePath}`)
-          continue
-        }
-
-        valid.push(imagePath)
-      } catch (error) {
-        errors.push(`파일 접근 오류: ${imagePath} - ${error.message}`)
-      }
-    }
-
-    return { valid, errors }
-  }
-
-  private validateAndSanitizeDto(rawDto: any): { sanitizedDto: DcinsidePostDto; errors: string[] } {
-    const errors: string[] = []
-
-    try {
-      // Zod로 검증 및 변환
-      const sanitizedDto = DcinsidePostSchema.parse(rawDto)
-
-      // 추가 이미지 파일 검증
-      if (sanitizedDto.imagePaths && sanitizedDto.imagePaths.length > 0) {
-        const validation = this.validateImagePaths(sanitizedDto.imagePaths)
-        if (validation.errors.length > 0) {
-          errors.push(...validation.errors)
-          return { sanitizedDto, errors }
-        }
-        sanitizedDto.imagePaths = validation.valid
-      }
-
-      return { sanitizedDto, errors }
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const zodErrors = error.errors.map(err => `${err.path.join('.')}: ${err.message}`)
-        errors.push(...zodErrors)
-      } else {
-        errors.push(`검증 오류: ${error.message}`)
-      }
-      return { sanitizedDto: null as any, errors }
-    }
-  }
-
-  // 예약 등록 추가 (검증 포함)
-  async createPostJob(rawDto: any) {
-    // 데이터 검증 및 정리
-    const { sanitizedDto, errors } = this.validateAndSanitizeDto(rawDto)
-
-    if (errors.length > 0) {
-      throw new Error(`데이터 검증 실패: ${errors.join(', ')}`)
-    }
-
-    return this.prismaService.postJob.create({
-      data: {
-        galleryUrl: sanitizedDto.galleryUrl,
-        title: sanitizedDto.title,
-        contentHtml: sanitizedDto.contentHtml,
-        password: sanitizedDto.password ?? null,
-        nickname: sanitizedDto.nickname ?? null,
-        headtext: sanitizedDto.headtext ?? null,
-        imagePaths: sanitizedDto.imagePaths ? JSON.stringify(sanitizedDto.imagePaths) : null,
-        loginId: sanitizedDto.loginId ?? null,
-        loginPassword: sanitizedDto.loginPassword ?? null,
-        scheduledAt: sanitizedDto.scheduledAt || new Date(),
-        status: 'pending',
-        imagePosition: sanitizedDto.imagePosition ?? null,
-      },
-    })
-  }
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly jobLogsService: JobLogsService,
+    private readonly postingService: DcinsidePostingService,
+    private readonly settingsService: SettingsService,
+    private readonly cookieService: CookieService,
+  ) {}
 
   // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
   async getPostJobs(options?: { status?: string; search?: string; orderBy?: string; order?: 'asc' | 'desc' }) {
@@ -143,34 +69,12 @@ export class PostJobService {
     })
   }
 
-  // pending 작업 조회 (scheduledAt <= now)
-  async findPending(now: Date) {
-    return this.prismaService.postJob.findMany({
-      where: { status: 'pending', scheduledAt: { lte: now } },
-      orderBy: { scheduledAt: 'asc' },
-    })
-  }
-
   // 특정 상태인 작업들 조회
   async findByStatus(status: string) {
     return this.prismaService.postJob.findMany({
       where: { status },
       orderBy: { scheduledAt: 'asc' },
     })
-  }
-
-  // pending 상태이면서 scheduledAt <= now인 작업들을 processing으로 일괄 변경
-  async updatePendingToProcessing(now: Date): Promise<number> {
-    const result = await this.prismaService.postJob.updateMany({
-      where: {
-        status: 'pending',
-        scheduledAt: { lte: now },
-      },
-      data: {
-        status: 'processing',
-      },
-    })
-    return result.count
   }
 
   // 실패한 작업 재시도 (상태를 pending으로 변경)
@@ -212,5 +116,157 @@ export class PostJobService {
     await this.prismaService.postJob.delete({ where: { id } })
 
     return { success: true, message: '작업이 삭제되었습니다.' }
+  }
+
+  private async getAppSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
+    try {
+      const setting = await this.settingsService.findByKey('app')
+      const data = setting?.data as unknown as AppSettings
+      return {
+        showBrowserWindow: data?.showBrowserWindow ?? true,
+        taskDelay: data?.taskDelay ?? 10,
+      }
+    } catch {
+      return { showBrowserWindow: true, taskDelay: 10 }
+    }
+  }
+
+  /**
+   * 브라우저별 로그인 처리 (브라우저 생성 직후 한 번만 실행)
+   */
+  private async handleBrowserLogin(
+    browserContext: BrowserContext,
+    page: Page,
+    loginId: string,
+    loginPassword: string,
+  ): Promise<void> {
+    this.logger.log(`로그인 처리 시작: ${loginId}`)
+
+    // 브라우저 생성 직후 쿠키 로드 및 적용
+    const cookies = this.cookieService.loadCookies('dcinside', loginId)
+
+    // 쿠키가 있으면 먼저 적용해보기
+    if (cookies && cookies.length > 0) {
+      this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
+      await browserContext.addCookies(cookies)
+    }
+
+    // 로그인 상태 확인
+    const isLoggedIn = await this.postingService.isLogin(page)
+
+    if (!isLoggedIn) {
+      // 로그인이 안되어 있으면 로그인 실행
+      if (!loginPassword) {
+        throw new Error('로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.')
+      }
+
+      this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
+      const loginResult = await this.postingService.login(page, {
+        id: loginId,
+        password: loginPassword,
+      })
+
+      if (!loginResult.success) {
+        throw new Error(`자동 로그인 실패: ${loginResult.message}`)
+      }
+
+      // 로그인 성공 후 새로운 쿠키 저장
+      const newCookies = await browserContext.cookies()
+      this.cookieService.saveCookies('dcinside', loginId, newCookies)
+      this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
+    } else {
+      this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
+    }
+  }
+
+  async processPostJobs(): Promise<void> {
+    const postJobs = await this.prismaService.postJob.findMany({
+      where: {
+        status: 'pending',
+        scheduledAt: {
+          lte: new Date(),
+        },
+      },
+    })
+    await this.prismaService.postJob.updateMany({
+      where: {
+        id: {
+          in: postJobs.map(postJob => postJob.id),
+        },
+      },
+      data: {
+        status: 'processing',
+      },
+    })
+
+    const groupedPostJobs = _.groupBy(postJobs, postJob => postJob.loginId)
+    for (const loginId in groupedPostJobs) {
+      const { browser, context } = await this.postingService.launch(
+        EnvConfig.isPackaged, // background (개발환경에서는 디버깅용으로 비활성화)
+      )
+      try {
+        const appSettings = await this.getAppSettings()
+        const postJobs = groupedPostJobs[loginId]
+
+        for (const postJob of postJobs) {
+          await this.handlePostJob(context, postJob)
+
+          // 작업 간 딜레이
+          this.logger.log(`작업 간 딜레이: ${appSettings.taskDelay}초`)
+          await sleep(appSettings.taskDelay * 1000)
+        }
+      } catch (error) {
+        console.error(error)
+        await this.prismaService.postJob.updateMany({
+          where: {
+            id: {
+              in: postJobs.map(postJob => postJob.id),
+            },
+          },
+          data: {
+            status: 'failed',
+            resultMsg: error.message,
+          },
+        })
+      } finally {
+        await browser.close()
+      }
+    }
+  }
+
+  /**
+   * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
+   */
+  async handlePostJob(context: BrowserContext, postJob: PostJob) {
+    const page = await context.newPage()
+
+    try {
+      this.logger.log(`작업 시작: ID ${postJob.id})`)
+      await this.jobLogsService.createJobLog(postJob.id, '작업 시작')
+
+      // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
+      if (postJob.loginId && postJob.loginPassword) {
+        await this.jobLogsService.createJobLog(postJob.id, `로그인 시도: ${postJob.loginId}`)
+        await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+        await this.jobLogsService.createJobLog(postJob.id, '로그인 성공')
+      } else {
+        this.logger.log(`비로그인 모드로 진행`)
+        await this.jobLogsService.createJobLog(postJob.id, '비로그인 모드로 진행')
+      }
+
+      // 작업 처리
+      await this.jobLogsService.createJobLog(postJob.id, '포스팅 시작')
+      const result = await this.postingService.postArticle(postJob, context, postJob.id)
+      await this.updateStatusWithUrl(postJob.id, 'completed', result.message, result.url)
+      await this.jobLogsService.createJobLog(postJob.id, `포스팅 완료: ${result.url}`)
+
+      this.logger.log(`작업 완료: ID ${postJob.id}, URL: ${result.url}`)
+    } catch (error) {
+      await this.updateStatus(postJob.id, 'failed', error.message)
+      await this.jobLogsService.createJobLog(postJob.id, `작업 실패: ${error.message}`)
+      this.logger.error(`작업 실패: ID ${postJob.id} - ${error.message}`)
+    } finally {
+      await page.close()
+    }
   }
 }

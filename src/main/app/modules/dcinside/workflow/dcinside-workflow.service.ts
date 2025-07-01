@@ -1,18 +1,12 @@
-import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { Injectable } from '@nestjs/common'
 import dayjs from 'dayjs'
-import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
 import * as XLSX from 'xlsx'
-import { DcinsidePostingService } from '../api/dcinside-posting.service'
 import { ExcelRowSchema } from '../api/dto/post-job.schema'
+import { PrismaService } from '@main/app/shared/prisma.service'
 
 @Injectable()
 export class DcinsideWorkflowService {
-  constructor(
-    private readonly postingService: DcinsidePostingService,
-    private readonly loginService: DcinsideLoginService,
-    private readonly postJobService: PostJobService,
-  ) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async handleExcelUpload(file: any) {
     const workbook = XLSX.read(file.buffer, { type: 'buffer' })
@@ -38,18 +32,24 @@ export class DcinsideWorkflowService {
 
       // 모든 포스팅을 예약 등록으로 통일 처리 (즉시 실행도 현재 시간으로 예약)
       try {
-        const scheduled = await this.postJobService.createPostJob({
-          galleryUrl: transformedRow.galleryUrl,
-          title: transformedRow.title,
-          contentHtml: transformedRow.contentHtml,
-          password: transformedRow.password,
-          nickname: transformedRow.nickname,
-          imagePaths: transformedRow.imagePaths,
-          scheduledAt: transformedRow.scheduledAt,
-          headtext: transformedRow.headtext,
-          loginId: transformedRow.loginId,
-          loginPassword: transformedRow.loginPassword,
-          imagePosition: transformedRow.imagePosition,
+        const scheduled = await this.prismaService.postJob.create({
+          data: {
+            galleryUrl: transformedRow.galleryUrl,
+            title: transformedRow.title,
+            contentHtml: transformedRow.contentHtml,
+            password: transformedRow.password ?? null,
+            nickname: transformedRow.nickname ?? null,
+            headtext: transformedRow.headtext ?? null,
+            imagePaths: transformedRow.imagePaths ? JSON.stringify(transformedRow.imagePaths) : null,
+            loginId: transformedRow.loginId ?? null,
+            loginPassword: transformedRow.loginPassword ?? null,
+            scheduledAt: transformedRow.scheduledAt || new Date(),
+            status: 'pending',
+            imagePosition: transformedRow.imagePosition ?? null,
+          },
+          select: {
+            id: true,
+          },
         })
 
         const isScheduled = transformedRow.scheduledAt && dayjs(transformedRow.scheduledAt).isAfter(dayjs())

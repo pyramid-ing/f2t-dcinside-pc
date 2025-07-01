@@ -1,16 +1,14 @@
 import type { DcinsidePostDto } from '@main/app/modules/dcinside/api/dto/dcinside-post.dto'
-import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/dcinside-post.schema'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
-import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
-import { CookieService } from '@main/app/modules/util/cookie.service'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
-import { Browser, Page } from 'playwright'
+import { BrowserContext, chromium, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
+import { CookieService } from '@main/app/modules/util/cookie.service'
 
 export type DcinsidePostParams = DcinsidePostDto
 
@@ -77,12 +75,68 @@ async function moveCursorToPosition(page: any, position: '상단' | '하단') {
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
   constructor(
-    private readonly browserManager: BrowserManagerService,
-    private readonly cookieService: CookieService,
-    private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
+    private readonly cookieService: CookieService,
     private readonly jobLogsService: JobLogsService,
   ) {}
+
+  async launch(headless: boolean) {
+    const browser = await chromium.launch({
+      headless,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+    })
+
+    const context = await browser.newContext({
+      viewport: { width: 393, height: 852 },
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    })
+    // 세션 스토리지 초기화
+    await context.addInitScript(() => {
+      window.sessionStorage.clear()
+      window.sessionStorage.setItem('barcelona_mobile_upsell_state', '1')
+    })
+
+    return { browser, context }
+  }
+
+  async login(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {
+    try {
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+
+      // 로그인 폼 입력 및 로그인 버튼 클릭
+      await page.fill('#user_id', params.id)
+      await page.fill('#pw', params.password)
+      await page.click('#login_ok')
+      await sleep(2000)
+
+      // 로그인 체크
+      const isLoggedIn = await this.isLogin(page)
+      if (isLoggedIn) {
+        // 쿠키 저장
+        const context = page.context()
+        const cookies = await context.cookies()
+        this.cookieService.saveCookies('dcinside', params.id, cookies)
+        return { success: true, message: '로그인 성공' }
+      } else {
+        return { success: false, message: '로그인 실패' }
+      }
+    } catch (e) {
+      this.logger.error(`페이지 로그인 실패: ${e.message}`)
+      return { success: false, message: e.message }
+    }
+  }
+
+  async isLogin(page: Page): Promise<boolean> {
+    try {
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.waitForSelector('#login_box', { timeout: 10000 })
+      const userNameExists = (await page.locator('#login_box .user_name').count()) > 0
+      return userNameExists
+    } catch {
+      return false
+    }
+  }
 
   private validateParams(rawParams: any): DcinsidePostDto {
     try {
@@ -306,7 +360,7 @@ export class DcinsidePostingService {
 
   private async uploadImages(
     page: Page,
-    browser: any,
+    browserContext: BrowserContext,
     imagePaths: string[],
     imagePosition: '상단' | '하단',
   ): Promise<void> {
@@ -320,7 +374,7 @@ export class DcinsidePostingService {
     const appSettings = await this.settingsService.getAppSettings()
 
     try {
-      await this.performImageUpload(page, browser, imagePaths)
+      await this.performImageUpload(page, browserContext, imagePaths)
       this.logger.log('이미지 업로드 성공')
     } catch (imageUploadError) {
       const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
@@ -340,7 +394,7 @@ export class DcinsidePostingService {
     }
   }
 
-  private async performImageUpload(page: Page, browser: any, imagePaths: string[]): Promise<void> {
+  private async performImageUpload(page: Page, browserContext: BrowserContext, imagePaths: string[]): Promise<void> {
     // 이미지 업로드 다이얼로그 처리
     const handleImageUploadDialog = (dialog: any) => {
       const message = dialog.message()
@@ -361,7 +415,7 @@ export class DcinsidePostingService {
     let popupPage: Page | null = null
     try {
       // 팝업이 열릴 때까지 대기하는 Promise 생성
-      const popupPromise = browser.waitForEvent('page')
+      const popupPromise = browserContext.waitForEvent('page')
 
       // 다이얼로그 이벤트 리스너 등록
       page.on('dialog', handleImageUploadDialog)
@@ -706,7 +760,7 @@ export class DcinsidePostingService {
 
   async postArticle(
     rawParams: any,
-    browser: Browser,
+    browserContext: BrowserContext,
     jobId?: string,
   ): Promise<{ success: boolean; message: string; url?: string }> {
     try {
@@ -725,7 +779,7 @@ export class DcinsidePostingService {
         `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
       )
 
-      const page: Page = await this.browserManager.getOrCreatePage(browser)
+      const page: Page = await browserContext.newPage()
       await this.jobLogsService.createJobLog(jobId || 'unknown', '페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
@@ -766,7 +820,7 @@ export class DcinsidePostingService {
           jobId || 'unknown',
           `이미지 업로드 시작: ${params.imagePaths.length}개 이미지`,
         )
-        await this.uploadImages(page, browser, params.imagePaths, params.imagePosition)
+        await this.uploadImages(page, browserContext, params.imagePaths, params.imagePosition)
         await this.jobLogsService.createJobLog(jobId || 'unknown', '이미지 업로드 완료')
       }
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환

@@ -1,15 +1,9 @@
-import type { PostJobDto } from 'src/main/app/modules/dcinside/api/dto/post-job.schema'
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
+import { Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
 import { PostJobService } from 'src/main/app/modules/dcinside/post-job/post-job.service'
 
 @Controller('post-jobs')
 export class PostJobController {
   constructor(private readonly postJobService: PostJobService) {}
-
-  @Post()
-  async create(@Body() dto: PostJobDto) {
-    return this.postJobService.createPostJob(dto)
-  }
 
   @Get()
   async findAll(
