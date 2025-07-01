@@ -172,7 +172,7 @@ export class PostQueueService {
 
           // 작업 처리
           await this.jobLogsService.createJobLog(queueItem.id, '포스팅 시작')
-          const result = await this.postingService.postArticle(queueItem.params, browser)
+          const result = await this.postingService.postArticle(queueItem.params, browser, queueItem.id)
           await this.postJobService.updateStatusWithUrl(queueItem.id, 'completed', result.message, result.url)
           await this.jobLogsService.createJobLog(queueItem.id, `포스팅 완료: ${result.url}`)
 

@@ -4,6 +4,7 @@ import { DcinsidePostSchema } from '@main/app/modules/dcinside/api/dto/dcinside-
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
+import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
@@ -84,6 +85,7 @@ export class DcinsidePostingService {
     private readonly cookieService: CookieService,
     private readonly dcinsideLoginService: DcinsideLoginService,
     private readonly settingsService: SettingsService,
+    private readonly jobLogsService: JobLogsService,
   ) {}
 
   private validateParams(rawParams: any): DcinsidePostDto {
@@ -759,62 +761,91 @@ export class DcinsidePostingService {
     assertRetrySuccess(success, '글쓰기 페이지 이동 실패 (3회 시도)')
   }
 
-  async postArticle(rawParams: any, browser: Browser): Promise<{ success: boolean; message: string; url?: string }> {
+  async postArticle(
+    rawParams: any,
+    browser: Browser,
+    jobId?: string,
+  ): Promise<{ success: boolean; message: string; url?: string }> {
     try {
       // 0. 파라미터 검증
       const params = this.validateParams(rawParams) as DcinsidePostDto & { imagePosition?: '상단' | '하단' }
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '포스팅 파라미터 검증 완료')
 
       // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
       const appSettings = await this.settingsService.getAppSettings()
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '앱 설정 가져오기 완료')
 
       // 1. 갤러리 정보 추출 (id와 타입)
       const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
+      await this.jobLogsService.createJobLog(
+        jobId || 'unknown',
+        `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
+      )
 
-      this.logger.log('외부 브라우저 세션 사용')
       const page: Page = await this.browserManager.getOrCreatePage(browser)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
       await this.navigateToWritePage(page, galleryInfo)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '글쓰기 페이지 이동 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 3. 입력폼 채우기
       await this.inputTitle(page, params.title)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', `제목 입력 완료: "${params.title}"`)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
       if (params.headtext) {
         await this.selectHeadtext(page, params.headtext)
+        await this.jobLogsService.createJobLog(jobId || 'unknown', `말머리 선택 완료: "${params.headtext}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       if (params.nickname) {
         await this.inputNickname(page, params.nickname)
+        await this.jobLogsService.createJobLog(jobId || 'unknown', `닉네임 입력 완료: "${params.nickname}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       if (params.password) {
         await this.inputPassword(page, params.password)
+        await this.jobLogsService.createJobLog(jobId || 'unknown', '비밀번호 입력 완료')
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       await this.inputContent(page, params.contentHtml)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '글 내용 입력 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
-      await this.uploadImages(page, browser, params.imagePaths, params.imagePosition)
+      if (params.imagePaths && params.imagePaths.length > 0) {
+        await this.jobLogsService.createJobLog(
+          jobId || 'unknown',
+          `이미지 업로드 시작: ${params.imagePaths.length}개 이미지`,
+        )
+        await this.uploadImages(page, browser, params.imagePaths, params.imagePosition)
+        await this.jobLogsService.createJobLog(jobId || 'unknown', '이미지 업로드 완료')
+      }
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '캡챠 처리 및 글 등록 시작')
       await this.submitPostAndHandleErrors(page)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '글 등록 완료')
 
       // 글 등록 완료 후 목록 페이지로 이동 대기
       await this.waitForListPageNavigation(page, galleryInfo)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', '목록 페이지 이동 완료')
 
       // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
       const finalUrl = await this.extractPostUrl(page, params.title)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', `최종 URL 추출 완료: ${finalUrl}`)
 
       return { success: true, message: '글 등록 성공', url: finalUrl }
     } catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
+      await this.jobLogsService.createJobLog(jobId || 'unknown', `포스팅 실패: ${e.message}`)
       throw new Error(e.message)
     } finally {
       // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음
