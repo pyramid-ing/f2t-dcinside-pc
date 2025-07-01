@@ -1,7 +1,7 @@
 {
   "name": "winsoft-dcinside",
   "type": "module",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "packageManager": "pnpm@10.12.1",
   "description": "DC 관련 자동 포스팅 프로그램입니다.",
   "main": "dist/main/index.cjs",
