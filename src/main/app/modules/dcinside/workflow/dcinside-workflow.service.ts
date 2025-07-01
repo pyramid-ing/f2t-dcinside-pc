@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
-import { ExcelRowSchema } from '../api/dto/post-job.schema'
+import { ExcelRowSchema } from '@main/app/modules/dcinside/workflow/dto/excel-row.schema'
 import { PrismaService } from '@main/app/shared/prisma.service'
 
 @Injectable()

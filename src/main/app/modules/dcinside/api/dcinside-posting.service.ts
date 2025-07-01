@@ -9,14 +9,26 @@ import { OpenAI } from 'openai'
 import { BrowserContext, chromium, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
 import { CookieService } from '@main/app/modules/util/cookie.service'
-
-export type DcinsidePostParams = DcinsidePostDto
+import { PostJob } from '@prisma/client'
+import UserAgent from 'user-agents'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
 
 interface GalleryInfo {
   id: string
   type: GalleryType
+}
+
+interface ParsedPostJob {
+  id: string
+  title: string
+  contentHtml: string
+  galleryUrl: string
+  headtext?: string | null
+  nickname?: string | null
+  password?: string | null
+  imagePaths?: string[]
+  imagePosition?: '상단' | '하단' | null
 }
 
 // Assertion functions
@@ -87,14 +99,12 @@ export class DcinsidePostingService {
     })
 
     const context = await browser.newContext({
-      viewport: { width: 393, height: 852 },
-      userAgent:
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      viewport: { width: 1200, height: 1142 },
+      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
     })
     // 세션 스토리지 초기화
     await context.addInitScript(() => {
       window.sessionStorage.clear()
-      window.sessionStorage.setItem('barcelona_mobile_upsell_state', '1')
     })
 
     return { browser, context }
@@ -147,6 +157,34 @@ export class DcinsidePostingService {
         throw new Error(`포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`)
       }
       throw new Error(`포스팅 파라미터 검증 실패: ${error.message}`)
+    }
+  }
+
+  private parsePostJobData(postJob: PostJob): ParsedPostJob {
+    let imagePaths: string[] = []
+
+    // imagePaths JSON 문자열 파싱
+    if (postJob.imagePaths) {
+      try {
+        const parsed = JSON.parse(postJob.imagePaths)
+        if (Array.isArray(parsed)) {
+          imagePaths = parsed.filter(path => typeof path === 'string')
+        }
+      } catch (error) {
+        this.logger.warn(`imagePaths 파싱 실패: ${error.message}`)
+      }
+    }
+
+    return {
+      id: postJob.id,
+      title: postJob.title,
+      contentHtml: postJob.contentHtml,
+      galleryUrl: postJob.galleryUrl,
+      headtext: postJob.headtext,
+      nickname: postJob.nickname,
+      password: postJob.password,
+      imagePaths,
+      imagePosition: postJob.imagePosition as '상단' | '하단' | null,
     }
   }
 
@@ -759,90 +797,87 @@ export class DcinsidePostingService {
   }
 
   async postArticle(
-    rawParams: any,
+    postJob: PostJob,
     browserContext: BrowserContext,
-    jobId?: string,
+    jobId: string,
   ): Promise<{ success: boolean; message: string; url?: string }> {
     try {
-      // 0. 파라미터 검증
-      const params = this.validateParams(rawParams) as DcinsidePostDto & { imagePosition?: '상단' | '하단' }
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '포스팅 파라미터 검증 완료')
+      // 0. PostJob 데이터 파싱
+      const parsedPostJob = this.parsePostJobData(postJob)
+      await this.jobLogsService.createJobLog(jobId, 'PostJob 데이터 파싱 완료')
 
       // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
       const appSettings = await this.settingsService.getAppSettings()
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '앱 설정 가져오기 완료')
+      await this.jobLogsService.createJobLog(jobId, '앱 설정 가져오기 완료')
 
       // 1. 갤러리 정보 추출 (id와 타입)
-      const galleryInfo = this.extractGalleryInfo(params.galleryUrl)
+      const galleryInfo = this.extractGalleryInfo(parsedPostJob.galleryUrl)
       await this.jobLogsService.createJobLog(
-        jobId || 'unknown',
+        jobId,
         `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
       )
 
       const page: Page = await browserContext.newPage()
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '페이지 생성 완료')
+      await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
       await this.navigateToWritePage(page, galleryInfo)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '글쓰기 페이지 이동 완료')
+      await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 3. 입력폼 채우기
-      await this.inputTitle(page, params.title)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', `제목 입력 완료: "${params.title}"`)
+      await this.inputTitle(page, parsedPostJob.title)
+      await this.jobLogsService.createJobLog(jobId, `제목 입력 완료: "${parsedPostJob.title}"`)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
-      if (params.headtext) {
-        await this.selectHeadtext(page, params.headtext)
-        await this.jobLogsService.createJobLog(jobId || 'unknown', `말머리 선택 완료: "${params.headtext}"`)
+      if (parsedPostJob.headtext) {
+        await this.selectHeadtext(page, parsedPostJob.headtext)
+        await this.jobLogsService.createJobLog(jobId, `말머리 선택 완료: "${parsedPostJob.headtext}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
-      if (params.nickname) {
-        await this.inputNickname(page, params.nickname)
-        await this.jobLogsService.createJobLog(jobId || 'unknown', `닉네임 입력 완료: "${params.nickname}"`)
+      if (parsedPostJob.nickname) {
+        await this.inputNickname(page, parsedPostJob.nickname)
+        await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
-      if (params.password) {
-        await this.inputPassword(page, params.password)
-        await this.jobLogsService.createJobLog(jobId || 'unknown', '비밀번호 입력 완료')
+      if (parsedPostJob.password) {
+        await this.inputPassword(page, parsedPostJob.password)
+        await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
-      await this.inputContent(page, params.contentHtml)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '글 내용 입력 완료')
+      await this.inputContent(page, parsedPostJob.contentHtml)
+      await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
-      if (params.imagePaths && params.imagePaths.length > 0) {
-        await this.jobLogsService.createJobLog(
-          jobId || 'unknown',
-          `이미지 업로드 시작: ${params.imagePaths.length}개 이미지`,
-        )
-        await this.uploadImages(page, browserContext, params.imagePaths, params.imagePosition)
-        await this.jobLogsService.createJobLog(jobId || 'unknown', '이미지 업로드 완료')
+      if (parsedPostJob.imagePaths && parsedPostJob.imagePaths.length > 0) {
+        await this.jobLogsService.createJobLog(jobId, `이미지 업로드 시작: ${parsedPostJob.imagePaths.length}개 이미지`)
+        await this.uploadImages(page, browserContext, parsedPostJob.imagePaths, parsedPostJob.imagePosition)
+        await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
       }
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '캡챠 처리 및 글 등록 시작')
+      await this.jobLogsService.createJobLog(jobId, '캡챠 처리 및 글 등록 시작')
       await this.submitPostAndHandleErrors(page)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '글 등록 완료')
+      await this.jobLogsService.createJobLog(jobId, '글 등록 완료')
 
       // 글 등록 완료 후 목록 페이지로 이동 대기
       await this.waitForListPageNavigation(page, galleryInfo)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', '목록 페이지 이동 완료')
+      await this.jobLogsService.createJobLog(jobId, '목록 페이지 이동 완료')
 
       // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
-      const finalUrl = await this.extractPostUrl(page, params.title)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', `최종 URL 추출 완료: ${finalUrl}`)
+      const finalUrl = await this.extractPostUrl(page, parsedPostJob.title)
+      await this.jobLogsService.createJobLog(jobId, `최종 URL 추출 완료: ${finalUrl}`)
 
       return { success: true, message: '글 등록 성공', url: finalUrl }
     } catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
-      await this.jobLogsService.createJobLog(jobId || 'unknown', `포스팅 실패: ${e.message}`)
+      await this.jobLogsService.createJobLog(jobId, `포스팅 실패: ${e.message}`)
       throw new Error(e.message)
     } finally {
       // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음

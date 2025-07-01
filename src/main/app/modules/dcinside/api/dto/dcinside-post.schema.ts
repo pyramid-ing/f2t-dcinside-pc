@@ -74,7 +74,7 @@ export const DcinsidePostSchema = BasePostSchema.extend({
       loginId: hasLoginId ? data.loginId : undefined,
       loginPassword: hasLoginId ? data.loginPassword || undefined : undefined,
       headtext: data.headtext || undefined,
-      imagePosition: data.imagePosition,
+      imagePosition: data.imagePosition || undefined,
     }
   })
 
