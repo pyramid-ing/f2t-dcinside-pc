@@ -520,28 +520,37 @@ export class DcinsidePostingService {
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
-    if (await page.$('#gall_nick_name')) {
-      // 닉네임 input이 readonly인지 확인
-      await page.waitForSelector('#gall_nick_name', { timeout: 10000 })
-      const isReadonly = await page.$eval('#gall_nick_name', el => el.hasAttribute('readonly'))
-      if (isReadonly) {
-        // x버튼 클릭해서 닉네임 입력란 활성화
-        const xBtn = await page.$('#btn_gall_nick_name_x')
-        if (xBtn) {
-          await page.click('#btn_gall_nick_name_x')
-          await sleep(300)
-        }
-      }
-      // 닉네임 입력란이 활성화되었으면 입력
-      await page.evaluate(() => {
-        const el = document.getElementById('gall_nick_name')
-        if (el) el.removeAttribute('readonly')
+    // 갤닉네임 요소가 실제로 화면에 보이는지 확인
+    const isGallNickNameVisible = await page
+      .$eval('#gall_nick_name', el => {
+        const style = window.getComputedStyle(el)
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'
       })
+      .catch(() => false)
+
+    if (isGallNickNameVisible) {
+      // 갤닉네임이 보이는 경우 - 갤닉네임 지우고 #name으로 전환
+      await page.waitForSelector('#gall_nick_name', { visible: true, timeout: 10000 })
+      // x버튼 클릭해서 닉네임 입력란 활성화 (갤닉네임 지우고 #name으로 전환)
+      const xBtn = await page.$('#btn_gall_nick_name_x')
+      if (xBtn) {
+        await page.click('#btn_gall_nick_name_x')
+      }
+    }
+
+    // 갤닉네임 유무와 관계없이 최종적으로 #name 필드에 입력
+    await page.waitForSelector('#name')
+    const nameElement = await page.$('#name')
+    if (nameElement) {
       await page.click('#name')
-      await page.keyboard.down('Control')
-      await page.keyboard.press('KeyA')
-      await page.keyboard.up('Control')
-      await page.type('#name', nickname)
+      // 직접 value를 설정하여 기존 값 제거 후 새 닉네임 입력
+      await page.$eval(
+        '#name',
+        (el, value) => {
+          ;(el as HTMLInputElement).value = value
+        },
+        nickname,
+      )
     }
   }
 
