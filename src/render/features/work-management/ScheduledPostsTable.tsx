@@ -1,7 +1,7 @@
 import type { PostJob } from '../../api'
-import { Button, Input, message, Popconfirm, Popover, Select, Space, Table, Tag } from 'antd'
+import { Button, Input, message, Popconfirm, Popover, Select, Space, Table, Tag, Modal } from 'antd'
 import React, { useEffect, useState } from 'react'
-import { deletePostJob, getPostJobs, retryPostJob } from '../../api'
+import { deletePostJob, getPostJobs, retryPostJob, getJobLogs, getLatestJobLog, type JobLog } from '../../api'
 import PageContainer from '../../components/shared/PageContainer'
 import styled from 'styled-components'
 
@@ -280,6 +280,13 @@ const ScheduledPostsTable: React.FC = () => {
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // JobLog 모달 관련 state
+  const [logModalVisible, setLogModalVisible] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string>('')
+  const [jobLogs, setJobLogs] = useState<JobLog[]>([])
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [latestLogs, setLatestLogs] = useState<Record<string, JobLog>>({})
+
   useEffect(() => {
     fetchData()
   }, [statusFilter, searchText, sortField, sortOrder])
@@ -302,11 +309,40 @@ const ScheduledPostsTable: React.FC = () => {
         order: sortOrder,
       })
       setData(json)
+
+      // 최신 로그들을 가져와서 요약 표시용으로 저장
+      const latestLogsData: Record<string, JobLog> = {}
+      for (const job of json) {
+        try {
+          const latestLog = await getLatestJobLog(job.id)
+          if (latestLog) {
+            latestLogsData[job.id] = latestLog
+          }
+        } catch (error) {
+          // 로그가 없는 경우는 무시
+        }
+      }
+      setLatestLogs(latestLogsData)
     } catch {}
     setLoading(false)
   }
 
-  const handleRetry = async (id: number) => {
+  const showJobLogs = async (jobId: string) => {
+    setCurrentJobId(jobId)
+    setLogModalVisible(true)
+    setLogsLoading(true)
+
+    try {
+      const logs = await getJobLogs(jobId)
+      setJobLogs(logs)
+    } catch (error) {
+      message.error('로그를 불러오는데 실패했습니다')
+      setJobLogs([])
+    }
+    setLogsLoading(false)
+  }
+
+  const handleRetry = async (id: string) => {
     try {
       const json = await retryPostJob(id)
       if (json.success) {
@@ -320,7 +356,7 @@ const ScheduledPostsTable: React.FC = () => {
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       const json = await deletePostJob(id)
       if (json.success) {
@@ -412,7 +448,8 @@ const ScheduledPostsTable: React.FC = () => {
             dataIndex: 'resultMsg',
             width: 350,
             render: (v: string, row: PostJob) => {
-              const displayMessage = v || getDefaultMessage(row.status)
+              const latestLog = latestLogs[row.id]
+              const displayMessage = latestLog ? latestLog.message : v || getDefaultMessage(row.status)
               const statusType = getStatusType(row.status)
 
               const popoverContent = (
@@ -421,6 +458,11 @@ const ScheduledPostsTable: React.FC = () => {
                     {getStatusIcon(row.status)} {getStatusTitle(row.status)}
                   </div>
                   <div className={`popover-message ${statusType}`}>{displayMessage}</div>
+                  {latestLog && (
+                    <div style={{ fontSize: '11px', color: '#666', marginTop: '8px' }}>
+                      최신 로그: {new Date(latestLog.createdAt).toLocaleString('ko-KR')}
+                    </div>
+                  )}
                   {row.status === 'completed' && row.resultUrl && (
                     <div className="result-url">
                       <a href={row.resultUrl} target="_blank" rel="noopener noreferrer">
@@ -504,16 +546,26 @@ const ScheduledPostsTable: React.FC = () => {
           {
             title: '액션',
             dataIndex: 'action',
-            width: 120,
+            width: 150,
             fixed: 'right',
             align: 'center',
             render: (_: any, row: PostJob) => (
-              <Space size="small">
-                {row.status === 'failed' && (
-                  <Button type="primary" size="small" onClick={() => handleRetry(row.id)} style={{ fontSize: '11px' }}>
-                    재시도
+              <Space size="small" direction="vertical">
+                <Space size="small">
+                  <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
+                    상세
                   </Button>
-                )}
+                  {row.status === 'failed' && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleRetry(row.id)}
+                      style={{ fontSize: '11px' }}
+                    >
+                      재시도
+                    </Button>
+                  )}
+                </Space>
                 {row.status !== 'processing' && (
                   <Popconfirm
                     title="정말 삭제하시겠습니까?"
@@ -521,7 +573,7 @@ const ScheduledPostsTable: React.FC = () => {
                     okText="삭제"
                     cancelText="취소"
                   >
-                    <Button danger size="small" style={{ fontSize: '11px' }}>
+                    <Button danger size="small" style={{ fontSize: '11px', width: '100%' }}>
                       삭제
                     </Button>
                   </Popconfirm>
@@ -531,6 +583,45 @@ const ScheduledPostsTable: React.FC = () => {
           },
         ]}
       />
+
+      {/* JobLog 모달 */}
+      <Modal
+        title={`작업 로그 (ID: ${currentJobId})`}
+        open={logModalVisible}
+        onCancel={() => setLogModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setLogModalVisible(false)}>
+            닫기
+          </Button>,
+        ]}
+        width={800}
+      >
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          {logsLoading ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>로그를 불러오는 중...</div>
+          ) : jobLogs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>로그가 없습니다.</div>
+          ) : (
+            <div>
+              {jobLogs.map((log, index) => (
+                <div
+                  key={log.id}
+                  style={{
+                    padding: '8px 12px',
+                    borderBottom: index === jobLogs.length - 1 ? 'none' : '1px solid #f0f0f0',
+                    fontSize: '13px',
+                  }}
+                >
+                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>
+                    {new Date(log.createdAt).toLocaleString('ko-KR')}
+                  </div>
+                  <div style={{ color: '#333' }}>{log.message}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
     </PageContainer>
   )
 }

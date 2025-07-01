@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
-import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
+import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
 import { PostQueueService } from '../post-queue.service'
 
 @Injectable()

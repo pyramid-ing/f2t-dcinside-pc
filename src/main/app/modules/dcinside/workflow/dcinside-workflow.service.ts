@@ -1,7 +1,7 @@
 import { DcinsideLoginService } from '@main/app/modules/dcinside/api/dcinside-login.service'
 import { Injectable } from '@nestjs/common'
 import dayjs from 'dayjs'
-import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
+import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
 import * as XLSX from 'xlsx'
 import { DcinsidePostingService } from '../api/dcinside-posting.service'
 import { ExcelRowSchema } from '../api/dto/post-job.schema'

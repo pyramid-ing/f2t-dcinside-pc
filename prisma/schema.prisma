@@ -15,7 +15,7 @@ model Settings {
 }
 
 model PostJob {
-  id            Int      @id @default(autoincrement())
+  id            String   @id @default(uuid())
   galleryUrl    String
   title         String
   contentHtml   String
@@ -32,4 +32,20 @@ model PostJob {
   imagePosition String?  // '상단' 또는 '하단'
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // 관계 설정
+  jobLogs       JobLog[]
+}
+
+model JobLog {
+  id        String   @id @default(uuid())
+  jobId     String
+  message   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // 관계 설정
+  postJob   PostJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
 }

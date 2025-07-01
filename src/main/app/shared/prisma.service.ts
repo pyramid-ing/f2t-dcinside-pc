@@ -4,6 +4,7 @@ import { EnvConfig } from '../../config/env.config'
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  [x: string]: any
   constructor() {
     const config = EnvConfig.getPrismaConfig()
 

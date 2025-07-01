@@ -1,10 +1,10 @@
-import type { DcinsidePostDto } from './dto/dcinside-post.dto'
+import type { DcinsidePostDto } from 'src/main/app/modules/dcinside/api/dto/dcinside-post.dto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { ZodError } from 'zod'
-import { DcinsidePostSchema } from './dto/dcinside-post.schema'
+import { DcinsidePostSchema } from 'src/main/app/modules/dcinside/api/dto/dcinside-post.schema'
 
 @Injectable()
 export class PostJobService {
@@ -128,7 +128,7 @@ export class PostJobService {
   }
 
   // 예약 작업 상태/결과 갱신
-  async updateStatus(id: number, status: string, resultMsg?: string) {
+  async updateStatus(id: string, status: string, resultMsg?: string) {
     return this.prismaService.postJob.update({
       where: { id },
       data: { status, resultMsg },
@@ -136,7 +136,7 @@ export class PostJobService {
   }
 
   // 예약 작업 상태/결과/URL 갱신 (포스팅 완료 시 사용)
-  async updateStatusWithUrl(id: number, status: string, resultMsg?: string, resultUrl?: string) {
+  async updateStatusWithUrl(id: string, status: string, resultMsg?: string, resultUrl?: string) {
     return this.prismaService.postJob.update({
       where: { id },
       data: { status, resultMsg, resultUrl },
@@ -174,7 +174,7 @@ export class PostJobService {
   }
 
   // 실패한 작업 재시도 (상태를 pending으로 변경)
-  async retryPostJob(id: number) {
+  async retryPostJob(id: string) {
     const job = await this.prismaService.postJob.findUnique({ where: { id } })
 
     if (!job) {
@@ -198,7 +198,7 @@ export class PostJobService {
   }
 
   // 작업 삭제
-  async deletePostJob(id: number) {
+  async deletePostJob(id: string) {
     const job = await this.prismaService.postJob.findUnique({ where: { id } })
 
     if (!job) {

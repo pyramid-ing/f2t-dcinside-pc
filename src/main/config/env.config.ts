@@ -99,17 +99,17 @@ export class EnvConfig {
     try {
       if (this.isPackaged) {
         // 패키지된 앱에서는 초기 DB를 userData로 복사
-        if (!fs.existsSync(this.dbPath) && fs.existsSync(this.initialDbPath)) {
-          // userData 디렉토리가 없으면 생성
-          const dbDir = path.dirname(this.dbPath)
-          if (!fs.existsSync(dbDir)) {
-            fs.mkdirSync(dbDir, { recursive: true })
-          }
-
-          // 초기 DB를 userData로 복사
-          fs.copyFileSync(this.initialDbPath, this.dbPath)
-          LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
+        // if (!fs.existsSync(this.dbPath) && fs.existsSync(this.initialDbPath)) {
+        // warning: 무조건 DB 덮어쓰기
+        const dbDir = path.dirname(this.dbPath)
+        if (!fs.existsSync(dbDir)) {
+          fs.mkdirSync(dbDir, { recursive: true })
         }
+
+        // 초기 DB를 userData로 복사
+        fs.copyFileSync(this.initialDbPath, this.dbPath)
+        LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
+        // }
       }
     } catch (error) {
       LoggerConfig.error(`데이터베이스 초기화 중 오류:`, error)

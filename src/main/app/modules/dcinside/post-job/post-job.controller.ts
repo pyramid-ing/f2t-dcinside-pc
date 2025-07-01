@@ -1,6 +1,6 @@
-import type { PostJobDto } from './dto/post-job.schema'
+import type { PostJobDto } from 'src/main/app/modules/dcinside/api/dto/post-job.schema'
 import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
-import { PostJobService } from './post-job.service'
+import { PostJobService } from 'src/main/app/modules/dcinside/post-job/post-job.service'
 
 @Controller('post-jobs')
 export class PostJobController {
@@ -28,11 +28,11 @@ export class PostJobController {
 
   @Post(':id/retry')
   async retry(@Param('id') id: string) {
-    return this.postJobService.retryPostJob(Number(id))
+    return this.postJobService.retryPostJob(id)
   }
 
   @Delete(':id')
   async delete(@Param('id') id: string) {
-    return this.postJobService.deletePostJob(Number(id))
+    return this.postJobService.deletePostJob(id)
   }
 }

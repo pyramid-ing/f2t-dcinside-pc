@@ -123,7 +123,7 @@ export async function getAppSettingsFromServer(): Promise<AppSettings> {
 // ------------------------------
 
 export interface PostJob {
-  id: number
+  id: string
   galleryUrl: string
   title: string
   scheduledAt: string
@@ -157,19 +157,43 @@ export async function getPostJobs(params?: {
     searchParams.append('order', params.order)
   }
 
-  const url = `${API_BASE_URL}/dcinside/api/post-jobs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+  const url = `${API_BASE_URL}/post-jobs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
   const res = await axios.get(url)
   return res.data
 }
 
 // 실패/대기중 Job 재시도
-export async function retryPostJob(id: number): Promise<any> {
-  const res = await axios.post(`${API_BASE_URL}/dcinside/api/post-jobs/${id}/retry`)
+export async function retryPostJob(id: string): Promise<any> {
+  const res = await axios.post(`${API_BASE_URL}/post-jobs/${id}/retry`)
   return res.data
 }
 
 // 작업 삭제
-export async function deletePostJob(id: number): Promise<any> {
-  const res = await axios.delete(`${API_BASE_URL}/dcinside/api/post-jobs/${id}`)
+export async function deletePostJob(id: string): Promise<any> {
+  const res = await axios.delete(`${API_BASE_URL}/post-jobs/${id}`)
   return res.data
+}
+
+// ------------------------------
+// JobLog API
+// ------------------------------
+
+export interface JobLog {
+  id: string
+  jobId: string
+  message: string
+  createdAt: string
+  updatedAt: string
+}
+
+// 특정 Job의 로그 목록 가져오기
+export async function getJobLogs(jobId: string): Promise<JobLog[]> {
+  const res = await axios.get(`${API_BASE_URL}/job-logs/${jobId}`)
+  return res.data.jobLogs
+}
+
+// 특정 Job의 최신 로그 가져오기
+export async function getLatestJobLog(jobId: string): Promise<JobLog | null> {
+  const res = await axios.get(`${API_BASE_URL}/job-logs/${jobId}/latest`)
+  return res.data.jobLog
 }

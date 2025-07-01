@@ -3,7 +3,7 @@ import { BasePostSchema } from './base-post.schema'
 
 // PostJob DB 객체를 위한 스키마 - 기본 스키마 확장
 export const PostJobSchema = BasePostSchema.extend({
-  id: z.number(),
+  id: z.string(),
   password: z.string().nullable(), // DB에서는 nullable 필드
   nickname: z.string().nullable(), // DB에서는 nullable
   headtext: z.string().nullable(), // DB에서는 nullable (BasePostSchema 오버라이드)
@@ -21,7 +21,7 @@ export const PostJobSchema = BasePostSchema.extend({
 
 // PostJob을 DcinsidePostParams로 변환하는 스키마 - 기본 스키마 확장
 export const PostJobToParamsSchema = BasePostSchema.extend({
-  id: z.number(),
+  id: z.string(),
   imagePaths: z.preprocess(val => {
     if (!val || val === null) return []
     if (typeof val === 'string') {

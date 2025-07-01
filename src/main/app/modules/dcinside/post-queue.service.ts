@@ -1,6 +1,7 @@
 import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
-import { PostJobService } from 'src/main/app/modules/dcinside/api/post-job.service'
+import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
+import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ZodError } from 'zod'
@@ -12,7 +13,7 @@ import { PostJobToParamsSchema } from './api/dto/post-job.schema'
 import type { Browser, Page } from 'puppeteer-core'
 
 interface PostQueueItem {
-  id: number
+  id: string
   params: DcinsidePostParams
   browserId: string // 로그인 ID 또는 'anonymous'
 }
@@ -26,6 +27,7 @@ export class PostQueueService {
   constructor(
     private readonly browserManager: BrowserManagerService,
     private readonly postJobService: PostJobService,
+    private readonly jobLogsService: JobLogsService,
     private readonly postingService: DcinsidePostingService,
     private readonly settingsService: SettingsService,
     private readonly dcinsideLoginService: DcinsideLoginService,
@@ -144,27 +146,35 @@ export class PostQueueService {
 
         try {
           this.logger.log(`작업 시작: ID ${queueItem.id} (브라우저: ${queueItem.browserId})`)
+          await this.jobLogsService.createJobLog(queueItem.id, '작업 시작')
 
           // 해당 브라우저 가져오기 또는 생성
           const browser = await this.browserManager.getOrCreateBrowser(queueItem.browserId, {
             headless: !appSettings.showBrowserWindow,
           })
+          await this.jobLogsService.createJobLog(queueItem.id, `브라우저 생성 완료 (${queueItem.browserId})`)
 
           // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
           if (!browserLoginCompleted.has(queueItem.browserId)) {
             if (queueItem.params.loginId && queueItem.params.loginPassword) {
+              await this.jobLogsService.createJobLog(queueItem.id, `로그인 시도: ${queueItem.params.loginId}`)
               await this.handleBrowserLogin(browser, queueItem.params.loginId, queueItem.params.loginPassword)
+              await this.jobLogsService.createJobLog(queueItem.id, '로그인 성공')
             } else if (queueItem.params.loginId) {
               this.logger.log(`비로그인 모드로 진행: ${queueItem.browserId}`)
+              await this.jobLogsService.createJobLog(queueItem.id, '비로그인 모드로 진행')
             } else {
               this.logger.log(`비로그인 모드로 진행: ${queueItem.browserId}`)
+              await this.jobLogsService.createJobLog(queueItem.id, '비로그인 모드로 진행')
             }
             browserLoginCompleted.add(queueItem.browserId)
           }
 
           // 작업 처리
+          await this.jobLogsService.createJobLog(queueItem.id, '포스팅 시작')
           const result = await this.postingService.postArticle(queueItem.params, browser)
           await this.postJobService.updateStatusWithUrl(queueItem.id, 'completed', result.message, result.url)
+          await this.jobLogsService.createJobLog(queueItem.id, `포스팅 완료: ${result.url}`)
 
           this.logger.log(`작업 완료: ID ${queueItem.id}, URL: ${result.url}`)
 
@@ -174,9 +184,11 @@ export class PostQueueService {
           // 해당 브라우저의 마지막 작업이면 브라우저 종료
           if (browserJobCounts.get(queueItem.browserId) === 0) {
             await this.browserManager.closeManagedBrowser(queueItem.browserId)
+            await this.jobLogsService.createJobLog(queueItem.id, '브라우저 종료')
           }
         } catch (error) {
           await this.postJobService.updateStatus(queueItem.id, 'failed', error.message)
+          await this.jobLogsService.createJobLog(queueItem.id, `작업 실패: ${error.message}`)
           this.logger.error(`작업 실패: ID ${queueItem.id} - ${error.message}`)
 
           // 실패해도 브라우저 작업 수 감소 및 브라우저 관리는 해야 함
