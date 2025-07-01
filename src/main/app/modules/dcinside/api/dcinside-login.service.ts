@@ -2,13 +2,9 @@ import type { DcinsideLoginDto } from './dto/dcinside-login.dto'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
-import { Page } from 'puppeteer-core'
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { chromium, Page } from 'playwright'
 import { ZodError } from 'zod'
 import { DcinsideLoginSchema } from './dto/dcinside-login.schema'
-
-puppeteer.use(StealthPlugin())
 
 @Injectable()
 export class DcinsideLoginService {
@@ -38,25 +34,27 @@ export class DcinsideLoginService {
         headless: params.headless ?? true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ko-KR,ko'],
       }
-      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+      if (process.env.PLAYWRIGHT_BROWSERS_PATH) {
+        launchOptions.executablePath = process.env.PLAYWRIGHT_BROWSERS_PATH
       }
-      browser = await puppeteer.launch(launchOptions)
-      const page: Page = await browser.newPage()
-      await page.setExtraHTTPHeaders({ 'accept-language': 'ko-KR,ko;q=0.9' })
+      browser = await chromium.launch(launchOptions)
+      const context = await browser.newContext({
+        extraHTTPHeaders: { 'accept-language': 'ko-KR,ko;q=0.9' },
+      })
+      const page: Page = await context.newPage()
 
       await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
       // 로그인 폼 입력 및 로그인 버튼 클릭 (구체적 셀렉터는 실제 DOM 확인 필요)
-      await page.type('#user_id', params.id, { delay: 30 })
-      await page.type('#pw', params.password, { delay: 30 })
+      await page.fill('#user_id', params.id)
+      await page.fill('#pw', params.password)
       await page.click('#login_ok')
       await sleep(2000)
 
       // 로그인 체크
       const isLoggedIn = await this.isLogin(page)
       if (isLoggedIn) {
-        // 쿠키 저장 (공통 쿠키 서비스 활용, browser.cookies 사용)
-        const cookies = await browser.cookies()
+        // 쿠키 저장 (공통 쿠키 서비스 활용, context.cookies 사용)
+        const cookies = await context.cookies()
         this.cookieService.saveCookies('dcinside', params.id, cookies)
         return { success: true, message: '로그인 성공' }
       } else {
@@ -74,8 +72,8 @@ export class DcinsideLoginService {
     try {
       await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
       await page.waitForSelector('#login_box', { timeout: 10000 })
-      const userNameExists = await page.$eval('#login_box .user_name', el => !!el)
-      return !!userNameExists
+      const userNameExists = (await page.locator('#login_box .user_name').count()) > 0
+      return userNameExists
     } catch {
       return false
     }
@@ -89,8 +87,8 @@ export class DcinsideLoginService {
       await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
 
       // 로그인 폼 입력 및 로그인 버튼 클릭
-      await page.type('#user_id', params.id, { delay: 30 })
-      await page.type('#pw', params.password, { delay: 30 })
+      await page.fill('#user_id', params.id)
+      await page.fill('#pw', params.password)
       await page.click('#login_ok')
       await sleep(2000)
 
@@ -98,8 +96,8 @@ export class DcinsideLoginService {
       const isLoggedIn = await this.isLogin(page)
       if (isLoggedIn) {
         // 쿠키 저장
-        const browser = page.browser()
-        const cookies = await browser.cookies()
+        const context = page.context()
+        const cookies = await context.cookies()
         this.cookieService.saveCookies('dcinside', params.id, cookies)
         return { success: true, message: '로그인 성공' }
       } else {

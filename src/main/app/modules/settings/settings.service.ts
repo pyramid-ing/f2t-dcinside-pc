@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/main/app/shared/prisma.service'
 import { OpenAI } from 'openai'
 
-interface AppSettings {
+export interface AppSettings {
   showBrowserWindow: boolean
   taskDelay: number
   actionDelay: number // 초 단위

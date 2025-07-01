@@ -2,7 +2,7 @@ import { sleep } from '@main/app/utils/sleep'
 import { Injectable, Logger } from '@nestjs/common'
 import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
-import { SettingsService } from 'src/main/app/modules/settings/settings.service'
+import { AppSettings, SettingsService } from 'src/main/app/modules/settings/settings.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ZodError } from 'zod'
 import { DcinsidePostingService, DcinsidePostParams } from './api/dcinside-posting.service'
@@ -10,7 +10,7 @@ import { DcinsideLoginService } from './api/dcinside-login.service'
 import { CookieService } from '../util/cookie.service'
 import { DcinsidePostSchema } from './api/dto/dcinside-post.schema'
 import { PostJobToParamsSchema } from './api/dto/post-job.schema'
-import type { Browser, Page } from 'puppeteer-core'
+import type { Browser, Page } from 'playwright'
 
 interface PostQueueItem {
   id: string
@@ -37,7 +37,7 @@ export class PostQueueService {
   private async getAppSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
     try {
       const setting = await this.settingsService.findByKey('app')
-      const data = setting?.data as any
+      const data = setting?.data as unknown as AppSettings
       return {
         showBrowserWindow: data?.showBrowserWindow ?? true,
         taskDelay: data?.taskDelay ?? 10,
@@ -85,7 +85,10 @@ export class PostQueueService {
     // 쿠키가 있으면 먼저 적용해보기
     if (cookies && cookies.length > 0) {
       this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
-      await browser.setCookie(...cookies)
+      const contexts = browser.contexts()
+      if (contexts.length > 0) {
+        await contexts[0].addCookies(cookies)
+      }
     }
 
     // 로그인 상태 확인
@@ -108,9 +111,12 @@ export class PostQueueService {
       }
 
       // 로그인 성공 후 새로운 쿠키 저장
-      const newCookies = await browser.cookies()
-      this.cookieService.saveCookies('dcinside', loginId, newCookies)
-      this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
+      const contexts = browser.contexts()
+      if (contexts.length > 0) {
+        const newCookies = await contexts[0].cookies()
+        this.cookieService.saveCookies('dcinside', loginId, newCookies)
+        this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
+      }
     } else {
       this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
     }

@@ -9,12 +9,8 @@ import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
-import { Browser, Page } from 'puppeteer-core'
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+import { Browser, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
-
-puppeteer.use(StealthPlugin())
 
 export type DcinsidePostParams = DcinsidePostDto
 
@@ -140,10 +136,12 @@ export class DcinsidePostingService {
   }
 
   private async solveCapcha(page: Page): Promise<void> {
-    const captchaImg = await page.$('#kcaptcha')
-    if (!captchaImg) return
+    const captchaImg = page.locator('#kcaptcha')
+    const captchaCount = await captchaImg.count()
+    if (captchaCount === 0) return
 
-    const captchaBase64 = await captchaImg.screenshot({ encoding: 'base64' })
+    const captchaBase64 = await captchaImg.screenshot({ type: 'png' })
+    const captchaBase64String = captchaBase64.toString('base64')
     const globalSettings = await this.settingsService.findByKey('global')
     const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
     if (!openAIApiKey) throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
@@ -180,7 +178,7 @@ export class DcinsidePostingService {
                 },
                 {
                   type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${captchaBase64}` },
+                  image_url: { url: `data:image/png;base64,${captchaBase64String}` },
                 },
               ],
             },
@@ -208,121 +206,101 @@ export class DcinsidePostingService {
       const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
       if (el) el.value = ''
     })
-    await page.type('input[name=kcaptcha_code]', answer)
+    await page.fill('input[name=kcaptcha_code]', answer)
   }
 
   private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
+    // UI 기반 팝업 대기 (커스텀 팝업 - 창 형태)
     try {
       // 커스텀 팝업이 나타날 때까지 대기 (최대 8초)
       await page.waitForSelector('.pop_wrap[style*="display: block"]', { timeout: 8000 })
 
       // 팝업 내용 추출
       const popupContent = await page.evaluate(() => {
-        const popupElement = document.querySelector('.pop_wrap[style*="display: block"]')
-        if (!popupElement) return null
-
-        // 팝업 내 텍스트 내용 추출
-        const txtbox = popupElement.querySelector('.txtbox')
-        if (txtbox) {
-          return txtbox.textContent?.trim() || null
-        }
-
-        // txtbox가 없으면 전체 내용에서 추출
-        const content = popupElement.textContent?.trim()
-        return content || null
+        const popup = document.querySelector('.pop_wrap[style*="display: block"]')
+        return popup ? popup.textContent?.trim() || '' : ''
       })
 
-      if (!popupContent) return null
-
-      this.logger.warn(`커스텀 팝업 감지: ${popupContent}`)
-
-      return { isCustomPopup: true, message: popupContent }
-    } catch (error) {
-      // 타임아웃이거나 팝업이 없으면 null 반환
+      // 팝업이 존재하면 메시지와 함께 반환
+      this.logger.warn(`커스텀 팝업 발견: ${popupContent}`)
+      return {
+        isCustomPopup: true,
+        message: popupContent,
+      }
+    } catch {
+      // 팝업이 나타나지 않으면 null 반환 (정상 상황)
       return null
     }
   }
 
   private async inputPassword(page: Page, password: string): Promise<void> {
-    if (await page.$('#password')) {
-      await page.type('#password', password.toString())
+    const passwordExists = (await page.locator('#password').count()) > 0
+    if (passwordExists) {
+      await page.fill('#password', password.toString())
     }
   }
 
   private async inputTitle(page: Page, title: string): Promise<void> {
     await page.waitForSelector('#subject', { timeout: 10000 })
-    await page.type('#subject', title)
+    await page.fill('#subject', title)
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
     try {
       await page.waitForSelector('.write_subject .subject_list li', { timeout: 5000 })
-
+      // 말머리 리스트에서 일치하는 항목 찾아서 클릭
       const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.write_subject .subject_list li'))
-
-        // headtext가 있으면 해당 말머리 찾기
-        if (headtext) {
-          const target = items.find(
-            li => li.getAttribute('data-val') === headtext || li.textContent?.trim() === headtext,
-          )
-          if (target) {
-            ;(target as HTMLElement).click()
-            return { success: true, selected: headtext }
+        for (const item of items) {
+          const anchor = item.querySelector('a')
+          if (anchor && anchor.textContent?.trim() === headtext) {
+            ;(anchor as HTMLElement).click()
+            return true
           }
         }
-
-        // headtext가 없거나 찾을 수 없으면 첫 번째 말머리 선택
-        if (items.length > 0) {
-          ;(items[0] as HTMLElement).click()
-          const firstHeadtext = items[0].textContent?.trim() || items[0].getAttribute('data-val') || '첫 번째 말머리'
-          return { success: true, selected: firstHeadtext }
-        }
-
-        return { success: false, selected: null }
+        return false
       }, headtext)
 
-      if (found.success) {
-        if (headtext && found.selected === headtext) {
-          this.logger.log(`말머리 선택 성공: ${found.selected}`)
-        } else {
-          this.logger.log(`말머리를 찾을 수 없어 첫 번째 말머리로 대체: ${found.selected}`)
-        }
-      } else {
-        this.logger.warn('사용 가능한 말머리가 없습니다.')
+      if (!found) {
+        this.logger.warn(`말머리 "${headtext}"를 찾을 수 없습니다.`)
+        throw new Error(`말머리 "${headtext}"를 찾을 수 없습니다.`)
       }
 
-      await sleep(300)
+      this.logger.log(`말머리 "${headtext}" 선택 완료`)
+      await sleep(1000)
     } catch (error) {
-      this.logger.warn(`말머리 선택 중 오류 발생: ${error.message}`)
+      if (error.message.includes('말머리')) {
+        throw error // 말머리 오류는 그대로 전파
+      }
+      this.logger.warn(`말머리 선택 중 오류 (무시하고 계속): ${error.message}`)
     }
   }
 
   private async inputContent(page: Page, contentHtml: string): Promise<void> {
+    // HTML 모드 체크박스 활성화
     await page.waitForSelector('#chk_html', { timeout: 10000 })
-    // 코드뷰(HTML) 모드로 전환
-    const htmlChecked = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
+
+    const htmlChecked = await page.locator('#chk_html').isChecked()
     if (!htmlChecked) {
       await page.click('#chk_html')
-      await sleep(300)
     }
-    // textarea.note-codable에 HTML 입력
+
+    // HTML 코드 입력
     await page.waitForSelector('.note-editor .note-codable', { timeout: 5000 })
     await page.evaluate(html => {
       const textarea = document.querySelector('.note-editor .note-codable') as HTMLTextAreaElement
       if (textarea) {
         textarea.value = html
-        // input 이벤트 트리거
-        const event = new Event('input', { bubbles: true })
-        textarea.dispatchEvent(event)
+        textarea.dispatchEvent(new Event('input', { bubbles: true }))
+        textarea.dispatchEvent(new Event('change', { bubbles: true }))
       }
     }, contentHtml)
-    await sleep(300)
-    // 코드뷰 해제 (WYSIWYG로 복귀)
-    const htmlChecked2 = await page.$eval('#chk_html', el => (el as HTMLInputElement).checked)
+
+    // HTML 모드 다시 해제 (일반 에디터로 전환하여 내용 확인)
+    await sleep(500)
+    const htmlChecked2 = await page.locator('#chk_html').isChecked()
     if (htmlChecked2) {
       await page.click('#chk_html')
-      await sleep(300)
     }
   }
 
@@ -363,95 +341,63 @@ export class DcinsidePostingService {
   }
 
   private async performImageUpload(page: Page, browser: any, imagePaths: string[]): Promise<void> {
-    let imageUploadError: Error | null = null
-
-    // 이미지 업로드 중 발생할 수 있는 다이얼로그 처리
+    // 이미지 업로드 다이얼로그 처리
     const handleImageUploadDialog = (dialog: any) => {
-      try {
-        const message = dialog.message()
-        this.logger.warn(`이미지 업로드 중 다이얼로그 발생: ${message}`)
+      const message = dialog.message()
+      this.logger.log(`이미지 업로드 다이얼로그: ${message}`)
 
-        // "이미지 업로드 중입니다" 메시지가 나오면 에러로 처리
-        if (message && message.includes('이미지 업로드 중입니다')) {
-          imageUploadError = new Error(
-            '이미지 업로드 중 에러 발생: 동일한 이미지가 이미 업로드 중이거나 처리할 수 없는 상태입니다.',
-          )
-          this.logger.error(`이미지 업로드 에러: ${message}`)
-        }
-
-        if (!dialog._handled) {
+      // 파일 업로드 다이얼로그인 경우 파일 선택
+      if (dialog.type() === 'beforeunload' || message.includes('업로드')) {
+        // 파일 경로들을 한 번에 설정
+        if (imagePaths && imagePaths.length > 0) {
+          // Playwright에서는 setInputFiles 사용
           dialog.accept()
         }
-      } catch (error) {
-        if (!error.message.includes('already handled')) {
-          this.logger.warn(`이미지 업로드 다이얼로그 처리 오류: ${error.message}`)
-        }
+      } else {
+        dialog.accept()
       }
     }
 
-    // 다이얼로그 이벤트 리스너 등록
-    page.on('dialog', handleImageUploadDialog)
-
-    let popup: Page | null = null
+    let popupPage: Page | null = null
     try {
-      // 1. 팝업 window 감지 리스너 먼저 설정
-      const popupPromise = new Promise<Page>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('이미지 팝업 윈도우 타임아웃 (10초)'))
-        }, 10000)
+      // 팝업이 열릴 때까지 대기하는 Promise 생성
+      const popupPromise = browser.waitForEvent('page')
 
-        browser.once('targetcreated', async (target: any) => {
-          clearTimeout(timeout)
-          try {
-            const popupPage = await target.page()
-            assertValidPopupPage(popupPage)
-            resolve(popupPage)
-          } catch (error) {
-            reject(error)
-          }
-        })
-      })
+      // 다이얼로그 이벤트 리스너 등록
+      page.on('dialog', handleImageUploadDialog)
 
-      // 2. 이미지 등록 버튼 클릭 (팝업 윈도우 오픈)
+      // 이미지 버튼 클릭하여 팝업 열기
       await page.click('button[aria-label="이미지"]')
 
-      // 3. 팝업 윈도우 대기
-      popup = await popupPromise
+      // 팝업 페이지 대기
+      popupPage = await popupPromise
+      assertValidPopupPage(popupPage)
 
-      // 팝업 창에서도 dialog 리스너 등록
-      popup.on('dialog', handleImageUploadDialog)
+      await popupPage.waitForLoadState('domcontentloaded')
+      this.logger.log('이미지 업로드 팝업 열림')
 
-      await popup.waitForSelector('input.file_add', { timeout: 10000 })
+      // 팝업에서 파일 업로드 처리
+      const fileInput = popupPage.locator('input[type="file"]')
+      await fileInput.setInputFiles(imagePaths)
 
-      // 3. 파일 업로드
-      await sleep(2000) // 팝업 안정화 대기
-      const input = await popup.$('input.file_add')
-      assertElementExists(input, '이미지 업로드 input을 찾을 수 없습니다.')
+      // 업로드 완료 대기
+      await this.waitForImageUploadComplete(popupPage, imagePaths.length)
 
-      await input.uploadFile(...imagePaths)
-      this.logger.log(`${imagePaths.length}개 이미지 업로드 시작`)
+      // '적용' 버튼 클릭
+      await this.clickApplyButtonSafely(popupPage)
 
-      // 4. 업로드 완료 대기 - 로딩 상태 확인
-      await this.waitForImageUploadComplete(popup, imagePaths.length)
-
-      // 5. 적용 버튼 클릭 (여러 방법으로 시도)
-      await this.clickApplyButtonSafely(popup)
+      this.logger.log('이미지 업로드 및 적용 완료')
+    } catch (error) {
+      this.logger.error(`이미지 업로드 중 오류: ${error.message}`)
+      throw error
     } finally {
-      // 다이얼로그 이벤트 리스너 제거
-      page.off('dialog', handleImageUploadDialog)
-      // 팝업이 존재하고 닫히지 않았다면 팝업의 dialog 리스너도 제거
-      try {
-        if (popup && !popup.isClosed()) {
-          popup.off('dialog', handleImageUploadDialog)
-        }
-      } catch (error) {
-        // 팝업이 이미 닫혔거나 접근할 수 없는 경우 무시
-      }
-    }
+      // 이벤트 리스너 제거
+      page.removeListener('dialog', handleImageUploadDialog)
 
-    // 이미지 업로드 중 에러가 발생했다면 에러 던지기
-    if (imageUploadError) {
-      throw imageUploadError
+      // 팝업 닫기
+      if (popupPage && !popupPage.isClosed()) {
+        await popupPage.close()
+      }
     }
   }
 
@@ -522,37 +468,34 @@ export class DcinsidePostingService {
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
-    // 갤닉네임 요소가 실제로 화면에 보이는지 확인
-    const isGallNickNameVisible = await page
-      .$eval('#gall_nick_name', el => {
-        const style = window.getComputedStyle(el)
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'
-      })
-      .catch(() => false)
+    try {
+      // 닉네임 입력 영역이 표시될 때까지 대기
+      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 10000 })
 
-    if (isGallNickNameVisible) {
-      // 갤닉네임이 보이는 경우 - 갤닉네임 지우고 #name으로 전환
-      await page.waitForSelector('#gall_nick_name', { visible: true, timeout: 10000 })
-      // x버튼 클릭해서 닉네임 입력란 활성화 (갤닉네임 지우고 #name으로 전환)
-      const xBtn = await page.$('#btn_gall_nick_name_x')
-      if (xBtn) {
+      // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
+      const xBtnExists = (await page.locator('#btn_gall_nick_name_x').count()) > 0
+      if (xBtnExists) {
         await page.click('#btn_gall_nick_name_x')
+        await sleep(500)
       }
-    }
 
-    // 갤닉네임 유무와 관계없이 최종적으로 #name 필드에 입력
-    await page.waitForSelector('#name')
-    const nameElement = await page.$('#name')
-    if (nameElement) {
-      await page.click('#name')
-      // 직접 value를 설정하여 기존 값 제거 후 새 닉네임 입력
-      await page.$eval(
-        '#name',
-        (el, value) => {
-          ;(el as HTMLInputElement).value = value
-        },
-        nickname,
-      )
+      // 닉네임 입력 필드 대기 및 활성화
+      await page.waitForSelector('#name')
+      const nameElementExists = (await page.locator('#name').count()) > 0
+      if (nameElementExists) {
+        await page.click('#name')
+        // 기존 내용 삭제 후 새 닉네임 입력
+        await page.locator('#name').evaluate((el: HTMLInputElement, nickname: string) => {
+          el.value = ''
+          el.value = nickname
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          el.dispatchEvent(new Event('change', { bubbles: true }))
+        }, nickname)
+
+        this.logger.log(`닉네임 입력 완료: ${nickname}`)
+      }
+    } catch (error) {
+      this.logger.warn(`닉네임 입력 중 오류 (무시하고 계속): ${error.message}`)
     }
   }
 
@@ -624,7 +567,7 @@ export class DcinsidePostingService {
           timeoutPromise,
           customPopupPromise,
           page
-            .waitForNavigation({ timeout: 10000 })
+            .waitForURL(/\/lists/, { timeout: 10000 })
             .then(() => null)
             .catch(() => null),
         ])
@@ -664,7 +607,7 @@ export class DcinsidePostingService {
       } finally {
         // 다이얼로그 이벤트 리스너와 타이머 정리
         if (dialogHandler) {
-          page.off('dialog', dialogHandler)
+          page.removeListener('dialog', dialogHandler)
         }
         if (timeoutId) {
           clearTimeout(timeoutId)
@@ -717,15 +660,15 @@ export class DcinsidePostingService {
           expectedUrl => {
             return window.location.href.includes('/lists') || window.location.href.includes(expectedUrl)
           },
-          { timeout: 15000 },
           this.buildGalleryUrl(galleryInfo),
+          { timeout: 15000 },
         ),
 
         // 2. 게시글 목록 테이블이 나타날 때까지 대기
         page.waitForSelector('table.gall_list', { timeout: 15000 }),
 
         // 3. 네비게이션 이벤트 대기
-        page.waitForNavigation({ timeout: 15000 }),
+        page.waitForURL(/\/lists/, { timeout: 15000 }),
       ])
 
       this.logger.log('게시글 목록 페이지로 이동 완료')
