@@ -799,6 +799,7 @@ export class DcinsidePostingService {
   async postArticle(
     postJob: PostJob,
     browserContext: BrowserContext,
+    page: Page,
     jobId: string,
   ): Promise<{ success: boolean; message: string; url?: string }> {
     try {
@@ -817,7 +818,6 @@ export class DcinsidePostingService {
         `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
       )
 
-      const page: Page = await browserContext.newPage()
       await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)

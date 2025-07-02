@@ -213,7 +213,6 @@ export class PostJobService {
           await sleep(appSettings.taskDelay * 1000)
         }
       } catch (error) {
-        console.error(error)
         await this.prismaService.postJob.updateMany({
           where: {
             id: {
@@ -253,7 +252,7 @@ export class PostJobService {
 
       // 작업 처리
       await this.jobLogsService.createJobLog(postJob.id, '포스팅 시작')
-      const result = await this.postingService.postArticle(postJob, context, postJob.id)
+      const result = await this.postingService.postArticle(postJob, context, page, postJob.id)
       await this.updateStatusWithUrl(postJob.id, 'completed', result.message, result.url)
       await this.jobLogsService.createJobLog(postJob.id, `포스팅 완료: ${result.url}`)
 
