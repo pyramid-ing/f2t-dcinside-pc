@@ -1,7 +1,7 @@
+import { app } from 'electron'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import path from 'node:path'
-import { app } from 'electron'
 import { LoggerConfig } from './logger.config'
 
 export class EnvConfig {
@@ -12,10 +12,13 @@ export class EnvConfig {
   public static isElectron = process.versions && process.versions.electron
   public static isPackaged = app?.isPackaged || false
   public static userDataPath = EnvConfig.isPackaged ? app.getPath('userData') : process.cwd()
+  public static userDataCustomPath = EnvConfig.isPackaged
+    ? path.join(EnvConfig.userDataPath, 'f2t')
+    : path.join(process.cwd(), 'static')
   public static resourcePath = EnvConfig.isPackaged ? process.resourcesPath : process.cwd()
 
   // 패키지된 앱에서는 userData 폴더에 DB를 저장
-  public static dbPath = EnvConfig.isPackaged ? path.join(EnvConfig.userDataPath, 'app.sqlite') : './db.sqlite'
+  public static dbPath = EnvConfig.isPackaged ? path.join(EnvConfig.userDataCustomPath, 'app.sqlite') : './db.sqlite'
 
   // 초기 DB 템플릿 경로 (resources 폴더)
   public static initialDbPath = EnvConfig.isPackaged
@@ -30,6 +33,8 @@ export class EnvConfig {
   public static initialize() {
     // 로거 초기화
     LoggerConfig.initialize()
+
+    process.env.PLAYWRIGHT_BROWSERS_PATH = this.getDefaultChromePath()
 
     this.setupEngineNames()
     if (this.isPackaged) {
@@ -91,8 +96,7 @@ export class EnvConfig {
     process.env.DATABASE_URL = this.dbUrl
     process.env.PRISMA_QUERY_ENGINE_BINARY = enginePath
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = libPath
-    process.env.PLAYWRIGHT_BROWSERS_PATH = this.getDefaultChromePath()
-    process.env.COOKIE_DIR = path.join(this.userDataPath, 'cookies')
+    process.env.COOKIE_DIR = path.join(this.userDataCustomPath, 'cookies')
   }
 
   private static initializeDatabase() {
