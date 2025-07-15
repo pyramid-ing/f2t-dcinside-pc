@@ -1,6 +1,6 @@
 import type { ValidationError } from '@nestjs/common'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
-import { HttpAdapterHost, NestFactory } from '@nestjs/core'
+import { NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
@@ -13,7 +13,6 @@ import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
 import { LoggerConfig } from './config/logger.config'
 import { environment } from './environments/environment'
-import { GlobalExceptionFilter } from './filters/global-exception.filter'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -231,9 +230,6 @@ async function bootstrap() {
         },
       }),
     )
-
-    const httpAdapter = app.get(HttpAdapterHost)
-    app.useGlobalFilters(new GlobalExceptionFilter(httpAdapter)) // HttpAdapterHost 주입
 
     // Support 10mb csv/json files for importing activities
     app.use(bodyParser.json({ limit: '10mb' }))

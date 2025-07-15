@@ -8,6 +8,8 @@ import { BrowserContext, Page } from 'playwright'
 import { PostJob } from '@prisma/client'
 import _ from 'lodash'
 import { sleep } from '@main/app/utils/sleep'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
 export class PostJobService {
@@ -156,7 +158,9 @@ export class PostJobService {
     if (!isLoggedIn) {
       // 로그인이 안되어 있으면 로그인 실행
       if (!loginPassword) {
-        throw new Error('로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.')
+        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+          message: '로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.',
+        })
       }
 
       this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
@@ -166,7 +170,7 @@ export class PostJobService {
       })
 
       if (!loginResult.success) {
-        throw new Error(`자동 로그인 실패: ${loginResult.message}`)
+        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: `자동 로그인 실패: ${loginResult.message}` })
       }
 
       // 로그인 성공 후 새로운 쿠키 저장

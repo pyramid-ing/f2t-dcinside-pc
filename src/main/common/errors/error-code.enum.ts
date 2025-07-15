@@ -1,0 +1,23 @@
+export enum ErrorCode {
+  // ✅ 서버 오류 (9000번대)
+  INTERNAL_ERROR = 9000,
+
+  // ✅ 유저 관련 (1000번대)
+  USER_NOT_FOUND = 1001,
+  USER_DUPLICATE = 1002,
+
+  // ✅ 인증 관련 (2000번대)
+  AUTH_REQUIRED = 2001,
+  TOKEN_EXPIRED = 2002,
+
+  // ✅ 권한 (3000번대)
+  NO_PERMISSION = 3001,
+
+  // ✅ 디시인사이드 포스팅/이미지/캡챠/갤러리 관련 (4000번대)
+  POST_PARAM_INVALID = 4001,
+  GALLERY_TYPE_UNSUPPORTED = 4002,
+  OPENAI_APIKEY_REQUIRED = 4003,
+  IMAGE_UPLOAD_FAILED = 4004,
+  POST_SUBMIT_FAILED = 4005,
+  CAPTCHA_FAILED = 4006,
+}

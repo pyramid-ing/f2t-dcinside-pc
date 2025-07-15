@@ -3,7 +3,7 @@ import { ElectronModule } from '@doubleshot/nest-electron'
 import { DcinsideModule } from '@main/app/modules/dcinside/dcinside.module'
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
-import { APP_FILTER, HttpAdapterHost } from '@nestjs/core'
+import { APP_FILTER } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
 import { app, BrowserWindow } from 'electron'
 import { GlobalExceptionFilter } from '../filters/global-exception.filter'
@@ -51,10 +51,10 @@ import { UtilModule } from '@main/app/modules/util/util.module'
     {
       // 의존성 주입이 가능하도록 module에도 설정해준다.
       provide: APP_FILTER,
-      useFactory: (httpAdapter: HttpAdapterHost) => {
-        return new GlobalExceptionFilter(httpAdapter)
+      useFactory: () => {
+        return new GlobalExceptionFilter()
       },
-      inject: [HttpAdapterHost],
+      inject: [],
     },
     PrismaService,
   ],

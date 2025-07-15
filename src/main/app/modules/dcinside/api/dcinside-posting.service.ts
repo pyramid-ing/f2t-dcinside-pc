@@ -11,6 +11,8 @@ import { ZodError } from 'zod/v4'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { PostJob } from '@prisma/client'
 import UserAgent from 'user-agents'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
 
@@ -34,32 +36,34 @@ interface ParsedPostJob {
 // Assertion functions
 function assertElementExists<T>(element: T | null, errorMessage: string): asserts element is T {
   if (!element) {
-    throw new Error(errorMessage)
+    throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: errorMessage })
   }
 }
 
 function assertValidGalleryUrl(url: string): asserts url is string {
   const urlMatch = url.match(/[?&]id=([^&]+)/)
   if (!urlMatch) {
-    throw new Error('갤러리 주소에서 id를 추출할 수 없습니다.')
+    throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '갤러리 주소에서 id를 추출할 수 없습니다.' })
   }
 }
 
 function assertOpenAIResponse(response: any): asserts response is { answer: string } {
   if (!response?.answer || typeof response.answer !== 'string') {
-    throw new Error('OpenAI 응답에서 answer 필드를 찾을 수 없습니다.')
+    throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+      message: 'OpenAI 응답에서 answer 필드를 찾을 수 없습니다.',
+    })
   }
 }
 
 function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
   if (!popupPage) {
-    throw new Error('이미지 팝업 윈도우를 찾을 수 없습니다.')
+    throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, { message: '이미지 팝업 윈도우를 찾을 수 없습니다.' })
   }
 }
 
 function assertRetrySuccess(success: boolean, errorMessage: string): asserts success is true {
   if (!success) {
-    throw new Error(errorMessage)
+    throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
   }
 }
 
@@ -154,9 +158,13 @@ export class DcinsidePostingService {
     } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.issues.map(err => `${err.path.join('.')}: ${err.message}`)
-        throw new Error(`포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`)
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+          message: `포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`,
+        })
       }
-      throw new Error(`포스팅 파라미터 검증 실패: ${error.message}`)
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+        message: `포스팅 파라미터 검증 실패: ${error.message}`,
+      })
     }
   }
 
@@ -223,7 +231,7 @@ export class DcinsidePostingService {
       case 'person':
         return `https://gall.dcinside.com/person/board/lists/?id=${id}`
       default:
-        throw new Error(`지원하지 않는 갤러리 타입: ${type}`)
+        throw new CustomHttpException(ErrorCode.GALLERY_TYPE_UNSUPPORTED, { type })
     }
   }
 
@@ -236,7 +244,7 @@ export class DcinsidePostingService {
     const captchaBase64String = captchaBase64.toString('base64')
     const globalSettings = await this.settingsService.findByKey('global')
     const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
-    if (!openAIApiKey) throw new Error('OpenAI API 키가 설정되어 있지 않습니다.')
+    if (!openAIApiKey) throw new CustomHttpException(ErrorCode.OPENAI_APIKEY_REQUIRED)
 
     const openai = new OpenAI({ apiKey: openAIApiKey })
 
@@ -281,7 +289,7 @@ export class DcinsidePostingService {
 
         const responseContent = response.choices[0]?.message?.content
         if (!responseContent) {
-          throw new Error('OpenAI 응답이 비어있습니다.')
+          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: 'OpenAI 응답이 비어있습니다.' })
         }
 
         const parsed = JSON.parse(responseContent)
@@ -355,7 +363,9 @@ export class DcinsidePostingService {
 
       if (!found) {
         this.logger.warn(`말머리 "${headtext}"를 찾을 수 없습니다.`)
-        throw new Error(`말머리 "${headtext}"를 찾을 수 없습니다.`)
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+          message: `말머리 "${headtext}"를 찾을 수 없습니다.`,
+        })
       }
 
       this.logger.log(`말머리 "${headtext}" 선택 완료`)
@@ -424,7 +434,7 @@ export class DcinsidePostingService {
       switch (imageFailureAction) {
         case 'fail':
           // 작업 실패 - 전체 포스팅 중단
-          throw new Error(errorMessage)
+          throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, { message: errorMessage })
         case 'skip':
           this.logger.log('이미지 업로드 실패하였으나 설정에 따라 이미지 없이 포스팅을 진행합니다.')
           break
@@ -551,7 +561,7 @@ export class DcinsidePostingService {
           this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
           return true
         }
-        throw new Error('팝업이 아직 닫히지 않았습니다.')
+        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '팝업이 아직 닫히지 않았습니다.' })
       },
       1000,
       10,
@@ -666,7 +676,7 @@ export class DcinsidePostingService {
 
         // 커스텀 팝업 결과 처리
         if (result && typeof result === 'object' && 'isCustomPopup' in result) {
-          throw new Error(`글 등록 실패: ${result.message}`)
+          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: `글 등록 실패: ${result.message}` })
         }
 
         const dialogMessage = result
@@ -676,7 +686,7 @@ export class DcinsidePostingService {
           // 캡챠 오류 메시지일 경우에만 재시도
           if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
             captchaTryCount += 1
-            if (captchaTryCount >= 3) throw new Error('캡챠 해제 실패(3회 시도)')
+            if (captchaTryCount >= 3) throw new CustomHttpException(ErrorCode.CAPTCHA_FAILED)
 
             // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
             try {
@@ -690,7 +700,7 @@ export class DcinsidePostingService {
             continue // while – 다시 등록 버튼 클릭 시도
           } else {
             // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
-            throw new Error(`글 등록 실패: ${dialogMessage}`)
+            throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: `글 등록 실패: ${dialogMessage}` })
           }
         }
 
@@ -766,7 +776,9 @@ export class DcinsidePostingService {
       this.logger.log('게시글 목록 페이지로 이동 완료')
     } catch (error) {
       this.logger.warn(`목록 페이지 이동 대기 중 타임아웃: ${error.message}`)
-      throw new Error('글 등록 후 목록 페이지 이동 실패 - 글 등록이 정상적으로 완료되지 않았습니다.')
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '글 등록 후 목록 페이지 이동 실패 - 글 등록이 정상적으로 완료되지 않았습니다.',
+      })
     }
   }
 
@@ -878,7 +890,7 @@ export class DcinsidePostingService {
     } catch (e) {
       this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
       await this.jobLogsService.createJobLog(jobId, `포스팅 실패: ${e.message}`)
-      throw new Error(e.message)
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: e.message })
     } finally {
       // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음
     }
