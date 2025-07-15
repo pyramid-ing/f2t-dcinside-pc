@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { Settings, SettingsService } from '@main/app/modules/settings/settings.service'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page } from 'playwright'
 import { PostJob } from '@prisma/client'
@@ -35,7 +35,7 @@ export class PostJobService implements JobProcessor {
       },
     })
 
-    const settings = await this.getSettings()
+    const settings = await this.settingsService.getSettings()
 
     const { browser, context } = await this.postingService.launch(!settings.showBrowserWindow)
     try {
@@ -145,19 +145,6 @@ export class PostJobService implements JobProcessor {
 
   async deletePostJob(id: string) {
     return this.prismaService.postJob.delete({ where: { id } })
-  }
-
-  private async getSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
-    try {
-      const setting = await this.settingsService.findByKey('app')
-      const data = setting?.data as unknown as Settings
-      return {
-        showBrowserWindow: data?.showBrowserWindow ?? true,
-        taskDelay: data?.taskDelay ?? 10,
-      }
-    } catch {
-      return { showBrowserWindow: true, taskDelay: 10 }
-    }
   }
 
   /**

@@ -1,7 +1,7 @@
 import { Tabs } from 'antd'
 import React, { useState } from 'react'
 import OpenAISettingsForm from './OpenAISettingsForm'
-import SettingsForm from '@render/features/settings/SettingsForm'
+import SettingsForm from './SettingsForm'
 
 const SettingsTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState('app')

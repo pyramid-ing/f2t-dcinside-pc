@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseInterceptors } from '@nestjs/common'
+import { Body, Controller, Post, Req, UploadedFile, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { DcinsideWorkflowService } from './dcinside-workflow.service'
 
@@ -8,7 +8,7 @@ export class DcinsideWorkflowController {
 
   @Post('excel-upload')
   @UseInterceptors(FileInterceptor('file'))
-  async excelUpload(@UploadedFile() file: any) {
+  async excelUpload(@UploadedFile() file: any, @Body() body: any, @Req() req: any) {
     return await this.workflowService.handleExcelUpload(file)
   }
 }

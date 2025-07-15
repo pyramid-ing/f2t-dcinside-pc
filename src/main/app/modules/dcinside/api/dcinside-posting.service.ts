@@ -242,8 +242,8 @@ export class DcinsidePostingService {
 
     const captchaBase64 = await captchaImg.screenshot({ type: 'png' })
     const captchaBase64String = captchaBase64.toString('base64')
-    const globalSettings = await this.settingsService.findByKey('global')
-    const openAIApiKey = (globalSettings?.data as any)?.openAIApiKey
+    const settings = await this.settingsService.getSettings()
+    const openAIApiKey = settings.openAIApiKey
     if (!openAIApiKey) throw new CustomHttpException(ErrorCode.OPENAI_APIKEY_REQUIRED)
 
     const openai = new OpenAI({ apiKey: openAIApiKey })
