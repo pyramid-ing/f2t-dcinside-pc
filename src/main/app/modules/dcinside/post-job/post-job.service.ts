@@ -39,7 +39,7 @@ export class PostJobService implements JobProcessor {
 
     const { browser, context } = await this.postingService.launch(!settings.showBrowserWindow)
     try {
-      await this.handlePostJob(context, job.postJob)
+      await this.handlePostJob(jobId, context, job.postJob)
 
       // 작업 간 딜레이
       await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
@@ -62,26 +62,26 @@ export class PostJobService implements JobProcessor {
   /**
    * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
    */
-  async handlePostJob(context: BrowserContext, postJob: PostJob) {
+  async handlePostJob(jobId: string, context: BrowserContext, postJob: PostJob) {
     const page = await context.newPage()
 
     try {
-      this.logger.log(`작업 시작: ID ${postJob.id})`)
-      await this.jobLogsService.createJobLog(postJob.id, '작업 시작')
+      this.logger.log(`작업 시작: ID ${jobId})`)
+      await this.jobLogsService.createJobLog(jobId, '작업 시작')
 
       // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
       if (postJob.loginId && postJob.loginPassword) {
-        await this.jobLogsService.createJobLog(postJob.id, `로그인 시도: ${postJob.loginId}`)
+        await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
         await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-        await this.jobLogsService.createJobLog(postJob.id, '로그인 성공')
+        await this.jobLogsService.createJobLog(jobId, '로그인 성공')
       } else {
         this.logger.log(`비로그인 모드로 진행`)
-        await this.jobLogsService.createJobLog(postJob.id, '비로그인 모드로 진행')
+        await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
       }
 
       // 작업 처리
-      await this.jobLogsService.createJobLog(postJob.id, '포스팅 시작')
-      const result = await this.postingService.postArticle(postJob, context, page, postJob.id)
+      await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
+      const result = await this.postingService.postArticle(postJob, context, page, jobId)
       // 포스팅 성공 시 Job 상태 변경
       if (postJob.jobId) {
         await this.prismaService.job.update({
@@ -93,12 +93,12 @@ export class PostJobService implements JobProcessor {
           },
         })
       }
-      await this.jobLogsService.createJobLog(postJob.id, `포스팅 완료: ${result.url}`)
+      await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
 
-      this.logger.log(`작업 완료: ID ${postJob.id}, URL: ${result.url}`)
+      this.logger.log(`작업 완료: ID ${jobId}, URL: ${result.url}`)
     } catch (error) {
-      await this.jobLogsService.createJobLog(postJob.id, `작업 실패: ${error.message}`, 'error')
-      this.logger.error(`작업 실패: ID ${postJob.id} - ${error.message}`)
+      await this.jobLogsService.createJobLog(jobId, `작업 실패: ${error.message}`, 'error')
+      this.logger.error(`작업 실패: ID ${jobId} - ${error.message}`)
       throw error
     } finally {
       await page.close()
