@@ -1,0 +1,4 @@
+---
+globs: **/*.prisma
+alwaysApply: false
+---

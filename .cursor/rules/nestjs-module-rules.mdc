@@ -1,0 +1,11 @@
+# NestJS 모듈 규칙
+
+1. 각 모듈은 독립적인 기능 단위로 구성되어야 합니다.
+2. 모듈은 controller, service, module 파일을 포함해야 합니다.
+3. 공통 기능은 common 모듈에 구현하세요.
+4. 모든 의존성은 모듈 레벨에서 명시적으로 선언되어야 합니다.
+5. 외부 서비스 통합은 해당 서비스명의 모듈에서 관리합니다.
+description:
+globs:
+alwaysApply: false
+---

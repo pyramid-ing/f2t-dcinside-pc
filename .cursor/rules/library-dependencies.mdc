@@ -1,0 +1,92 @@
+# 프로젝트 라이브러리 가이드
+
+## 프레임워크 & 런타임
+- Electron: 데스크톱 애플리케이션 프레임워크
+- NestJS: 백엔드 프레임워크
+- React: 프론트엔드 라이브러리
+- Vite: 빌드 도구
+
+## 백엔드 라이브러리
+
+### 코어
+- `@nestjs/common`: NestJS 코어
+- `@nestjs/config`: 환경 설정 관리
+- `@nestjs/platform-express`: Express 통합
+- `@nestjs/swagger`: API 문서화
+
+### 데이터베이스
+- `prisma`: ORM
+- `@prisma/client`: Prisma 클라이언트
+- SQLite: 로컬 데이터베이스
+
+### 유틸리티
+- `date-fns`: 날짜 처리
+- `axios`: HTTP 클라이언트
+- `winston`: 로깅
+- xlsx:  엑셀관리
+
+### 데이터 검증
+- `class-validator`: DTO 유효성 검증 (NestJS DTO에서 사용)
+- `class-transformer`: 객체 변환 및 직렬화
+
+### AI & 외부 서비스
+- `openai`: OpenAI API
+
+## 프론트엔드 라이브러리
+
+### 상태 관리
+- `recoil`: 전역 상태 관리
+- `react-query`: 서버 상태 관리
+
+### UI 컴포넌트
+- `antd`:
+- `@emotion/styled`: CSS-in-JS
+
+### 폼 & 검증
+- `zod`: 스키마 검증
+
+### 유틸리티
+- `date-fns`: 날짜 처리 (백엔드와 동일 라이브러리 사용)
+- `axios`: HTTP 클라이언트
+- `lodash`: 유틸리티 함수
+
+## 개발 도구
+
+### 타입스크립트
+- `typescript`: 타입스크립트
+- `ts-node`: TypeScript 실행
+- `@types/*`: 타입 정의
+
+### 린팅 & 포맷팅
+- `eslint`: 코드 린팅
+- `prettier`: 코드 포맷팅
+
+## 버전 관리 규칙
+
+1. 패키지 버전은 package.json에 고정되어야 함
+2. 주요 라이브러리 버전:
+   ```json
+   {
+     "dependencies": {
+       "@nestjs/common": "^10.0.0",
+       "prisma": "^5.0.0",
+       "react": "^18.0.0",
+       "date-fns": "^2.30.0",
+       "recoil": "^0.7.0",
+       "typescript": "^5.0.0",
+       "class-validator": "^0.14.0",
+       "class-transformer": "^0.5.1"
+     }
+   }
+   ```
+
+## 라이브러리 선택 기준
+
+1. 타입스크립트 지원 필수
+2. 활성화된 커뮤니티와 정기적인 업데이트
+3. 적절한 문서화
+4. 보안 취약점 없음
+
+## 테스트 관련 참고사항
+
+이 프로젝트는 자동화된 테스트를 사용하지 않습니다. 모든 기능 검증은 수동 테스트로 진행됩니다.

@@ -1,0 +1,17 @@
+# 프로젝트 구조 가이드
+
+이 프로젝트는 Electron 기반의 Google Blogger 포스팅 자동화 도구입니다.
+
+## 주요 디렉토리 구조:
+- src/main: Electron 메인 프로세스 코드
+- src/render: React 기반 렌더러 프로세스 코드
+- src/preload: Electron preload 스크립트
+- prisma: 데이터베이스 스키마 및 마이그레이션
+
+## 주요 진입점:
+- [src/main/index.ts](mdc:src/main/index.ts): 메인 프로세스 진입점
+- [src/render/index.tsx](mdc:src/render/index.tsx): 렌더러 프로세스 진입점
+description:
+globs:
+alwaysApply: false
+---

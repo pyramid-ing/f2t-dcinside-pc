@@ -1,0 +1,192 @@
+---
+alwaysApply: false
+---
+
+# 프론트엔드 구조 가이드 (src/render/)
+
+## 백엔드 통신 규칙
+
+### HTTP 통신 (NestJS)
+- 기본적인 서버 ↔ 프론트엔드 통신은 HTTP를 사용
+- 베이스 설정:
+  ```typescript
+  // src/render/api/apiClient.ts
+  export const api = axios.create({
+    baseURL: 'http://localhost:3554',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+  ```
+- 모든 API 요청은 `src/render/api/` 디렉토리의 클라이언트를 통해 수행
+
+### IPC 통신 (Electron)
+- IPC는 오직 다음 두 가지 경우에만 사용:
+  1. 외부 URL 열기 (externalUrl)
+     - 브라우저나 외부 애플리케이션으로 URL을 여는 경우
+     - 보안상의 이유로 반드시 IPC를 통해 처리
+  2. Electron 업데이트 관리
+     - 애플리케이션 업데이트 확인
+     - 업데이트 다운로드 및 설치
+     - 업데이트 진행 상태 모니터링
+- IPC 사용 시 `preload/index.ts`에 정의된 인터페이스만 사용
+- 그 외의 모든 통신은 HTTP를 통해 처리
+
+## 디렉토리 구조 및 용도 (`src/render/`)
+
+### 1. API 레이어 (`src/render/api/`)
+- `apiClient.ts`: 기본 API 클라이언트 설정 및 인터셉터
+- 도메인별 API 클라이언트 분리 (예: `bloggerApi.ts`, `settingsApi.ts`)
+- 모든 백엔드 통신은 반드시 API 클라이언트를 통해 수행
+- API 에러 처리는 `errorHelpers.ts`에서 중앙 관리
+
+### 2. 상태 관리 (`src/render/atoms/`)
+- 전역 상태 관리를 위한 Recoil atoms 정의
+- 도메인별로 파일 분리
+- 상태 의존성이 명확해야 함
+
+### 3. 컴포넌트 (`src/render/components/`)
+- `shared/`: 재사용 가능한 공통 컴포넌트
+- 특정 기능에 종속된 컴포넌트는 해당 기능명의 디렉토리에 배치
+  예: `ThumbnailEditor/` - 썸네일 편집 관련 컴포넌트
+
+### 4. 기능 모듈 (`src/render/features/`)
+- 주요 기능별로 디렉토리 분리
+- 각 기능은 독립적으로 동작 가능해야 함
+- 구조 예시:
+  ```
+  features/
+  ├── dashboard/        # 대시보드 관련 기능
+  ├── settings/         # 설정 관련 기능
+  └── work-management/  # 작업 관리 기능
+  ```
+
+### 5. 레이아웃 (`src/render/layouts/`)
+- 전역 레이아웃 컴포넌트 관리
+- `AppLayout.tsx`: 기본 레이아웃 구조
+- `AppHeader.tsx`, `AppSidebar.tsx`: 공통 UI 요소
+
+### 6. 페이지 (`src/render/pages/`)
+- 라우팅 가능한 최상위 컴포넌트
+- 페이지별로 단일 파일
+- 비즈니스 로직은 최소화하고 features의 컴포넌트 조합에 집중
+
+### 7. 타입 정의 (`src/render/types/`)
+- 전역적으로 사용되는 타입 정의
+- 도메인별 타입은 해당 기능 디렉토리 내에 위치
+
+### 8. 유틸리티 (`src/render/utils/`)
+- 순수 함수 및 헬퍼 함수
+- 도메인에 종속되지 않는 범용 유틸리티
+
+## 코드 작성 규칙
+
+1. 컴포넌트 분리 기준
+   - 단일 책임 원칙 준수
+   - 재사용 가능성이 높은 UI는 shared로 분리
+   - 특정 기능에 종속된 컴포넌트는 해당 feature 내부에 위치
+
+2. 상태 관리
+   - 전역 상태는 atoms에서 관리
+   - 컴포넌트 내부 상태는 최대한 지역적으로 유지
+   - Props drilling 피하기
+
+3. API 통신
+   - API 호출은 반드시 api/ 디렉토리의 클라이언트 사용
+   - 에러 처리는 errorHelpers.ts 활용
+   - 데이터 캐싱 고려
+   - HTTP 통신을 기본으로 사용하고, IPC는 필요한 경우에만 제한적으로 사용
+# 프론트엔드 구조 가이드 (src/render/)
+
+## 백엔드 통신 규칙
+
+### HTTP 통신 (NestJS)
+- 기본적인 서버 ↔ 프론트엔드 통신은 HTTP를 사용
+- 베이스 설정:
+  ```typescript
+  // src/render/api/apiClient.ts
+  export const api = axios.create({
+    baseURL: 'http://localhost:3554',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+  ```
+- 모든 API 요청은 `src/render/api/` 디렉토리의 클라이언트를 통해 수행
+
+### IPC 통신 (Electron)
+- IPC는 오직 다음 두 가지 경우에만 사용:
+  1. 외부 URL 열기 (externalUrl)
+     - 브라우저나 외부 애플리케이션으로 URL을 여는 경우
+     - 보안상의 이유로 반드시 IPC를 통해 처리
+  2. Electron 업데이트 관리
+     - 애플리케이션 업데이트 확인
+     - 업데이트 다운로드 및 설치
+     - 업데이트 진행 상태 모니터링
+- IPC 사용 시 `preload/index.ts`에 정의된 인터페이스만 사용
+- 그 외의 모든 통신은 HTTP를 통해 처리
+
+## 디렉토리 구조 및 용도 (`src/render/`)
+
+### 1. API 레이어 (`src/render/api/`)
+- `apiClient.ts`: 기본 API 클라이언트 설정 및 인터셉터
+- 도메인별 API 클라이언트 분리 (예: `bloggerApi.ts`, `settingsApi.ts`)
+- 모든 백엔드 통신은 반드시 API 클라이언트를 통해 수행
+- API 에러 처리는 `errorHelpers.ts`에서 중앙 관리
+
+### 2. 상태 관리 (`src/render/atoms/`)
+- 전역 상태 관리를 위한 Recoil atoms 정의
+- 도메인별로 파일 분리
+- 상태 의존성이 명확해야 함
+
+### 3. 컴포넌트 (`src/render/components/`)
+- `shared/`: 재사용 가능한 공통 컴포넌트
+- 특정 기능에 종속된 컴포넌트는 해당 기능명의 디렉토리에 배치
+  예: `ThumbnailEditor/` - 썸네일 편집 관련 컴포넌트
+
+### 4. 기능 모듈 (`src/render/features/`)
+- 주요 기능별로 디렉토리 분리
+- 각 기능은 독립적으로 동작 가능해야 함
+- 구조 예시:
+  ```
+  features/
+  ├── dashboard/        # 대시보드 관련 기능
+  ├── settings/         # 설정 관련 기능
+  └── work-management/  # 작업 관리 기능
+  ```
+
+### 5. 레이아웃 (`src/render/layouts/`)
+- 전역 레이아웃 컴포넌트 관리
+- `AppLayout.tsx`: 기본 레이아웃 구조
+- `AppHeader.tsx`, `AppSidebar.tsx`: 공통 UI 요소
+
+### 6. 페이지 (`src/render/pages/`)
+- 라우팅 가능한 최상위 컴포넌트
+- 페이지별로 단일 파일
+- 비즈니스 로직은 최소화하고 features의 컴포넌트 조합에 집중
+
+### 7. 타입 정의 (`src/render/types/`)
+- 전역적으로 사용되는 타입 정의
+- 도메인별 타입은 해당 기능 디렉토리 내에 위치
+
+### 8. 유틸리티 (`src/render/utils/`)
+- 순수 함수 및 헬퍼 함수
+- 도메인에 종속되지 않는 범용 유틸리티
+
+## 코드 작성 규칙
+
+1. 컴포넌트 분리 기준
+   - 단일 책임 원칙 준수
+   - 재사용 가능성이 높은 UI는 shared로 분리
+   - 특정 기능에 종속된 컴포넌트는 해당 feature 내부에 위치
+
+2. 상태 관리
+   - 전역 상태는 atoms에서 관리
+   - 컴포넌트 내부 상태는 최대한 지역적으로 유지
+   - Props drilling 피하기
+
+3. API 통신
+   - API 호출은 반드시 api/ 디렉토리의 클라이언트 사용
+   - 에러 처리는 errorHelpers.ts 활용
+   - 데이터 캐싱 고려
+   - HTTP 통신을 기본으로 사용하고, IPC는 필요한 경우에만 제한적으로 사용

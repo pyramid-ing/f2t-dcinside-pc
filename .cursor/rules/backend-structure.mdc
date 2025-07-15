@@ -1,0 +1,212 @@
+---
+globs: src/main/**/*
+alwaysApply: false
+---
+# 백엔드 구조 가이드 (NestJS)
+
+## 디렉토리 구조 및 용도
+
+### 1. 앱 설정 (`app/`)
+- `app.module.ts`: 루트 모듈, 전체 애플리케이션 설정
+- 환경 설정 및 전역 미들웨어 등록
+
+### 2. 설정 관리 (`config/`)
+- `custom-config.ts`: 커스텀 설정 정의
+- `env.interface.ts`: 환경 변수 타입 정의
+- 환경별 설정 분리 (`environments/`)
+
+### 3. 에러 처리 (`error/`, `filters/`)
+- 전역 에러 처리 표준화
+- `global-exception.filter.ts`: 모든 에러를 일관된 형식으로 처리
+- `error.types.ts`: 에러 타입 정의
+
+### 4. 모듈 구조 (`modules/`)
+각 모듈은 다음 구조를 따름:
+```
+module-name/
+├── dto/                      # DTO 클래스 정의
+│   ├── create-*.dto.ts      # 생성 요청 DTO
+│   ├── update-*.dto.ts      # 수정 요청 DTO
+│   └── response/            # 응답 DTO
+│       └── *-response.dto.ts
+├── module-name.module.ts     # 모듈 정의
+├── module-name.controller.ts # API 엔드포인트
+├── module-name.service.ts    # 비즈니스 로직
+└── module-name.types.ts      # 타입 정의
+```
+
+### DTO 작성 규칙
+1. class-validator 데코레이터 사용 필수
+2. 모든 속성에 대한 유효성 검사 규칙 정의
+3. 예시:
+```typescript
+import { IsString, IsNotEmpty, MinLength, IsOptional } from 'class-validator';
+
+export class CreatePostDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+}
+```
+
+#### 주요 모듈 설명:
+
+1. AI 모듈 (`ai/`)
+   - AI 서비스 통합 (OpenAI, Perplexity)
+   - 각 AI 서비스별 독립적인 서비스 클래스
+
+2. Google 모듈 (`google/`)
+   - Google 관련 기능을 하위 모듈로 구성
+   - OAuth, Blogger, Storage 등 기능별 분리
+   - 각 하위 모듈은 독립적으로 동작
+
+3. 작업 관리 모듈 (`job/`, `job-logs/`)
+   - 작업 큐 처리 및 로깅
+   - 작업 상태 관리
+   - 작업 이력 추적
+
+4. 공통 모듈 (`common/`)
+   - 프리즈마 서비스
+   - 공통 유틸리티
+   - 재사용 가능한 서비스
+
+## 코드 작성 규칙
+
+1. 모듈 설계 원칙
+   - 단일 책임 원칙 준수
+   - 모듈간 의존성 명확히 정의
+   - 순환 의존성 금지
+
+2. 에러 처리
+   - 모든 에러는 글로벌 필터로 처리
+   - 도메인별 커스텀 에러 클래스 정의
+   - 에러 메시지 표준화
+
+3. 의존성 주입
+   - 생성자 기반 의존성 주입 사용
+   - 인터페이스 기반 의존성 정의
+   - 테스트 용이성 고려
+
+4. API 설계
+   - RESTful 원칙 준수
+   - 명확한 URL 구조
+   - 적절한 HTTP 메서드 사용
+   - 요청/응답에 DTO 사용 필수
+
+5. 환경 설정
+   - 환경별 설정 분리
+   - 민감 정보는 환경 변수로 관리
+   - 설정 유효성 검증
+# 백엔드 구조 가이드 (NestJS)
+
+## 디렉토리 구조 및 용도
+
+### 1. 앱 설정 (`app/`)
+- `app.module.ts`: 루트 모듈, 전체 애플리케이션 설정
+- 환경 설정 및 전역 미들웨어 등록
+
+### 2. 설정 관리 (`config/`)
+- `custom-config.ts`: 커스텀 설정 정의
+- `env.interface.ts`: 환경 변수 타입 정의
+- 환경별 설정 분리 (`environments/`)
+
+### 3. 에러 처리 (`error/`, `filters/`)
+- 전역 에러 처리 표준화
+- `global-exception.filter.ts`: 모든 에러를 일관된 형식으로 처리
+- `error.types.ts`: 에러 타입 정의
+
+### 4. 모듈 구조 (`modules/`)
+각 모듈은 다음 구조를 따름:
+```
+module-name/
+├── dto/                      # DTO 클래스 정의
+│   ├── create-*.dto.ts      # 생성 요청 DTO
+│   ├── update-*.dto.ts      # 수정 요청 DTO
+│   └── response/            # 응답 DTO
+│       └── *-response.dto.ts
+├── module-name.module.ts     # 모듈 정의
+├── module-name.controller.ts # API 엔드포인트
+├── module-name.service.ts    # 비즈니스 로직
+└── module-name.types.ts      # 타입 정의
+```
+
+### DTO 작성 규칙
+1. class-validator 데코레이터 사용 필수
+2. 모든 속성에 대한 유효성 검사 규칙 정의
+3. 예시:
+```typescript
+import { IsString, IsNotEmpty, MinLength, IsOptional } from 'class-validator';
+
+export class CreatePostDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+}
+```
+
+#### 주요 모듈 설명:
+
+1. AI 모듈 (`ai/`)
+   - AI 서비스 통합 (OpenAI, Perplexity)
+   - 각 AI 서비스별 독립적인 서비스 클래스
+
+2. Google 모듈 (`google/`)
+   - Google 관련 기능을 하위 모듈로 구성
+   - OAuth, Blogger, Storage 등 기능별 분리
+   - 각 하위 모듈은 독립적으로 동작
+
+3. 작업 관리 모듈 (`job/`, `job-logs/`)
+   - 작업 큐 처리 및 로깅
+   - 작업 상태 관리
+   - 작업 이력 추적
+
+4. 공통 모듈 (`common/`)
+   - 프리즈마 서비스
+   - 공통 유틸리티
+   - 재사용 가능한 서비스
+
+## 코드 작성 규칙
+
+1. 모듈 설계 원칙
+   - 단일 책임 원칙 준수
+   - 모듈간 의존성 명확히 정의
+   - 순환 의존성 금지
+
+2. 에러 처리
+   - 모든 에러는 글로벌 필터로 처리
+   - 도메인별 커스텀 에러 클래스 정의
+   - 에러 메시지 표준화
+
+3. 의존성 주입
+   - 생성자 기반 의존성 주입 사용
+   - 인터페이스 기반 의존성 정의
+   - 테스트 용이성 고려
+
+4. API 설계
+   - RESTful 원칙 준수
+   - 명확한 URL 구조
+   - 적절한 HTTP 메서드 사용
+   - 요청/응답에 DTO 사용 필수
+
+5. 환경 설정
+   - 환경별 설정 분리
+   - 민감 정보는 환경 변수로 관리
+   - 설정 유효성 검증
