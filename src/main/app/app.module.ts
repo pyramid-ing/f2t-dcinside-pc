@@ -9,8 +9,9 @@ import { app, BrowserWindow } from 'electron'
 import { GlobalExceptionFilter } from '../filters/global-exception.filter'
 import customConfig from './config/custom-config'
 import { SettingsModule } from './modules/settings/settings.module'
-import { PrismaService } from './shared/prisma.service'
 import { UtilModule } from '@main/app/modules/util/util.module'
+import { CommonModule } from '@main/app/modules/common/common.module'
+import { JobModule } from '@main/app/modules/dcinside/job/job.module'
 
 @Module({
   imports: [
@@ -42,10 +43,12 @@ import { UtilModule } from '@main/app/modules/util/util.module'
       load: [customConfig],
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     UtilModule,
+    CommonModule,
+    JobModule,
     SettingsModule,
     DcinsideModule,
-    ScheduleModule.forRoot(),
   ],
   providers: [
     {
@@ -56,7 +59,6 @@ import { UtilModule } from '@main/app/modules/util/util.module'
       },
       inject: [],
     },
-    PrismaService,
   ],
   controllers: [],
 })

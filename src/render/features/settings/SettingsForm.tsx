@@ -1,9 +1,9 @@
-import type { AppSettings } from '../../types/settings'
+import type { Settings } from '../../types/settings'
 import { Button, Form, InputNumber, message, Radio, Space, Switch } from 'antd'
 import React, { useEffect, useState } from 'react'
-import { getAppSettingsFromServer, saveAppSettingsToServer } from '../../api'
+import { getSettings, updateSettings } from '@render/api'
 
-const AppSettingsForm: React.FC = () => {
+const SettingsForm: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -15,7 +15,7 @@ const AppSettingsForm: React.FC = () => {
   const loadSettings = async () => {
     try {
       setLoading(true)
-      const settings = await getAppSettingsFromServer()
+      const settings = await getSettings()
       form.setFieldsValue(settings)
     } catch (error) {
       console.error('앱 설정 로드 실패:', error)
@@ -25,16 +25,16 @@ const AppSettingsForm: React.FC = () => {
     }
   }
 
-  const handleSave = async (values: AppSettings) => {
+  const handleSave = async (values: Settings) => {
     try {
       setSaving(true)
-      const result = await saveAppSettingsToServer(values)
+      const settings = await getSettings()
+      const result = await updateSettings({
+        ...settings,
+        ...values,
+      })
 
-      if (result.success) {
-        message.success('설정이 저장되었습니다.')
-      } else {
-        message.error(result.error || '설정 저장에 실패했습니다.')
-      }
+      message.success('설정이 저장되었습니다.')
     } catch (error) {
       console.error('앱 설정 저장 실패:', error)
       message.error('설정 저장에 실패했습니다.')
@@ -119,4 +119,4 @@ const AppSettingsForm: React.FC = () => {
   )
 }
 
-export default AppSettingsForm
+export default SettingsForm

@@ -1,13 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { PrismaService } from 'src/main/app/shared/prisma.service'
+import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { Settings } from '@main/app/modules/settings/settings.types'
 import { OpenAI } from 'openai'
-
-export interface AppSettings {
-  showBrowserWindow: boolean
-  taskDelay: number
-  actionDelay: number // 초 단위
-  imageUploadFailureAction: 'fail' | 'skip'
-}
 
 @Injectable()
 export class SettingsService {
@@ -15,41 +9,42 @@ export class SettingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // 앱 설정 조회
-  async getAppSettings(): Promise<AppSettings> {
-    const settings = await this.findByKey('app')
-    return (
-      (settings?.data as unknown as AppSettings) || {
-        showBrowserWindow: true,
-        taskDelay: 10,
-        actionDelay: 1.0, // 1초
-        imageUploadFailureAction: 'fail',
-      }
-    )
-  }
-
-  // 모든 설정 조회
-  async findAll() {
-    return this.prisma.settings.findMany()
-  }
-
-  // key로 조회
-  async findByKey(key: string) {
-    return this.prisma.settings.findFirst({ where: { id: this.keyToId(key) } })
-  }
-
-  // key로 저장 (upsert)
-  async saveByKey(key: string, data: any) {
-    return this.prisma.settings.upsert({
-      where: { id: this.keyToId(key) },
-      update: { data },
-      create: { id: this.keyToId(key), data },
+  async getSettings(): Promise<Settings> {
+    const settings = await this.prisma.settings.findFirst({
+      where: { id: 1 },
     })
+
+    const defaultSettings: Settings = {
+      showBrowserWindow: false,
+      taskDelay: 10,
+      actionDelay: 0,
+      imageUploadFailureAction: 'skip',
+      openAIApiKey: '',
+    }
+    const merged = {
+      ...defaultSettings,
+      ...(settings?.data as unknown as Settings),
+    }
+    return merged
   }
 
-  // upsert 메서드 (컨트롤러에서 사용)
-  async upsert(key: string, data: any) {
-    return this.saveByKey(key, data)
+  async updateSettings(newSettings: Partial<Settings>) {
+    const currentSettings = await this.getSettings()
+    const mergedSettings = {
+      ...currentSettings,
+      ...newSettings,
+    }
+    await this.prisma.settings.upsert({
+      where: { id: 1 },
+      create: {
+        id: 1,
+        data: mergedSettings,
+      },
+      update: {
+        data: mergedSettings,
+      },
+    })
+    return mergedSettings
   }
 
   // OpenAI API 키 검증
@@ -82,23 +77,6 @@ export class SettingsService {
       }
     } catch (error) {
       this.logger.error('OpenAI API 키 검증 실패:', error)
-
-      if (error.status === 401) {
-        return { valid: false, error: '유효하지 않은 API 키입니다.' }
-      } else if (error.status === 429) {
-        return { valid: false, error: 'API 사용량 한도를 초과했습니다.' }
-      } else if (error.status === 403) {
-        return { valid: false, error: 'API 키에 필요한 권한이 없습니다.' }
-      } else {
-        return { valid: false, error: `API 키 검증 실패: ${error.message}` }
-      }
     }
-  }
-
-  // key를 id로 변환 (간단 매핑, 실제 운영시 key 컬럼 추가 권장)
-  private keyToId(key: string): number {
-    if (key === 'global') return 2
-    if (key === 'app') return 1
-    return 9999 // 기타
   }
 }

@@ -281,10 +281,10 @@ const UploadDcinsideExcelForm: React.FC = () => {
             setResults([])
             try {
               const res = await uploadDcinsideExcel(file)
-              setResults(res)
+              setResults(res.data)
 
-              const successCount = res.filter((r: UploadResult) => r.success).length
-              const totalCount = res.length
+              const successCount = res.data.filter((r: UploadResult) => r.success).length
+              const totalCount = res.data.length
 
               if (successCount === totalCount) {
                 message.success(`모든 ${totalCount}개 항목이 성공적으로 처리되었습니다.`)

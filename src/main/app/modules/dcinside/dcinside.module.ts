@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { RouterModule } from '@nestjs/core'
 import { DcinsideApiModule } from './api/api.module'
 import { DcinsideWorkflowModule } from './workflow/workflow.module'
+import { JobModule } from './job/job.module'
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { DcinsideWorkflowModule } from './workflow/workflow.module'
     ]),
     DcinsideApiModule,
     DcinsideWorkflowModule,
+    JobModule,
   ],
 })
 export class DcinsideModule {}

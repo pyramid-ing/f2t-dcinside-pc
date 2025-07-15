@@ -25,4 +25,20 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.IMAGE_UPLOAD_FAILED]: { status: 500, message: m => m?.message || '이미지 업로드 실패' },
   [ErrorCode.POST_SUBMIT_FAILED]: { status: 500, message: m => m?.message || '글 등록 실패' },
   [ErrorCode.CAPTCHA_FAILED]: { status: 400, message: () => '캡챠 해제 실패' },
+
+  [ErrorCode.JOB_NOT_FOUND]: { status: 404, message: () => '작업을 찾을 수 없습니다.' },
+  [ErrorCode.JOB_ID_REQUIRED]: { status: 400, message: () => '작업 ID가 제공되지 않았습니다.' },
+  [ErrorCode.JOB_ALREADY_PROCESSING]: { status: 409, message: () => '처리 중인 작업입니다.' },
+  [ErrorCode.JOB_BULK_RETRY_FAILED]: { status: 500, message: () => '벌크 재시도에 실패했습니다.' },
+  [ErrorCode.JOB_BULK_DELETE_FAILED]: { status: 500, message: () => '벌크 삭제에 실패했습니다.' },
+  [ErrorCode.JOB_DELETE_PROCESSING]: { status: 400, message: () => '처리 중인 작업은 삭제할 수 없습니다.' },
+  [ErrorCode.JOB_LOG_FETCH_FAILED]: { status: 500, message: () => '작업 로그를 가져오는데 실패했습니다.' },
+  [ErrorCode.JOB_RETRY_FAILED]: { status: 500, message: () => '작업 재시도에 실패했습니다.' },
+  [ErrorCode.JOB_DELETE_FAILED]: { status: 500, message: () => '작업 삭제에 실패했습니다.' },
+  [ErrorCode.JOB_FETCH_FAILED]: { status: 500, message: () => '작업 목록을 가져오는데 실패했습니다.' },
+  [ErrorCode.JOB_STATUS_INVALID]: {
+    status: 400,
+    message: meta => `현재 상태에서는 허용되지 않은 작업입니다.${meta?.status ? ` (현재 상태: ${meta.status})` : ''}`,
+  },
+  [ErrorCode.JOB_STATUS_CHANGE_FAILED]: { status: 500, message: () => '작업 상태 변경에 실패했습니다.' },
 }

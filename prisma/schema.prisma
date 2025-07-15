@@ -14,38 +14,63 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
+// 기본 Job 모델
+model Job {
+  id String @id @default(cuid())
+
+  type      String
+  subject   String? // 작업 제목
+  desc      String? // 작업 설명
+  status    String  @default("pending") // JobStatus: 'request' | 'pending' | 'processing' | 'completed' | 'failed'
+  priority  Int     @default(1)
+  resultMsg String? // 결과 메시지
+  resultUrl String? // 결과 URL
+  errorMsg  String? // 에러 메시지
+
+  scheduledAt DateTime
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 로그
+  logs JobLog[]
+
+  // 블로그 작업 관련 데이터
+  postJob PostJob?
+}
+
+model JobLog {
+  id String @id @default(cuid())
+
+  message String
+  level   String @default("info") // 'info' | 'warn' | 'error'
+
+  createdAt DateTime @default(now())
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
 model PostJob {
-  id            String   @id @default(uuid())
+  id String @id @default(uuid())
+
   galleryUrl    String
   title         String
   contentHtml   String
   password      String?
   nickname      String?
   headtext      String?
-  imagePaths    String?  // JSON stringified array
+  imagePaths    String? // JSON stringified array
   loginId       String?
   loginPassword String?
-  scheduledAt   DateTime
-  status        String   // "pending" | "completed" | "failed"
-  resultMsg     String?
-  resultUrl     String?
-  imagePosition String?  // '상단' 또는 '하단'
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  imagePosition String? // '상단' 또는 '하단'
 
-  // 관계 설정
-  jobLogs       JobLog[]
-}
-
-model JobLog {
-  id        String   @id @default(uuid())
-  jobId     String
-  message   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  // 관계 설정
-  postJob   PostJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-  @@index([jobId])
+  jobId String @unique // Job 모델과 1:1 관계
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
 }

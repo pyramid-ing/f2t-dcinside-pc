@@ -1,8 +1,8 @@
 import React from 'react'
-import ScheduledPostsTable from '../features/work-management/ScheduledPostsTable'
+import JobTable from '@render/features/work-management/JobTable'
 
 const ScheduledPostsPage: React.FC = () => {
-  return <ScheduledPostsTable />
+  return <JobTable />
 }
 
 export default ScheduledPostsPage

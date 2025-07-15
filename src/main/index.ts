@@ -12,7 +12,6 @@ import winston from 'winston'
 import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
 import { LoggerConfig } from './config/logger.config'
-import { environment } from './environments/environment'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -204,7 +203,7 @@ async function bootstrap() {
               prettyPrint: true,
             }),
           ),
-          level: environment.production ? 'info' : 'silly',
+          level: EnvConfig.isPackaged ? 'info' : 'silly',
         }),
       ],
     })

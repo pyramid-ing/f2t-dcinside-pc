@@ -1,7 +1,7 @@
 import { Button, Form, Input, message, Alert, Space } from 'antd'
 import { CheckCircleOutlined, LoadingOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
 import React, { useEffect, useState, useCallback } from 'react'
-import { getOpenAIApiKeyFromServer, saveOpenAIApiKeyToServer, validateOpenAIApiKey } from '../../api'
+import { getSettings, updateSettings, validateOpenAIApiKey } from '@render/api'
 
 interface ValidationState {
   status: 'idle' | 'validating' | 'valid' | 'invalid'
@@ -17,12 +17,12 @@ const OpenAISettingsForm: React.FC = () => {
 
   useEffect(() => {
     ;(async () => {
-      const key = await getOpenAIApiKeyFromServer()
-      form.setFieldsValue({ openAIApiKey: key })
+      const settings = await getSettings()
+      form.setFieldsValue({ openAIApiKey: settings.openAIApiKey })
 
       // 기존 키가 있으면 자동 검증
-      if (key) {
-        await handleValidateKey(key)
+      if (settings.openAIApiKey) {
+        await handleValidateKey(settings.openAIApiKey)
       }
     })()
   }, [form])
@@ -39,16 +39,16 @@ const OpenAISettingsForm: React.FC = () => {
     try {
       const result = await validateOpenAIApiKey(apiKey.trim())
 
-      if (result.valid) {
+      if (result.data.valid) {
         setValidation({
           status: 'valid',
           message: `유효한 API 키입니다.`,
-          model: result.model,
+          model: result.data.model,
         })
       } else {
         setValidation({
           status: 'invalid',
-          message: result.error || '알 수 없는 오류가 발생했습니다.',
+          message: result.data.error || '알 수 없는 오류가 발생했습니다.',
         })
       }
     } catch (error) {
@@ -86,7 +86,12 @@ const OpenAISettingsForm: React.FC = () => {
         return
       }
 
-      await saveOpenAIApiKeyToServer(values.openAIApiKey)
+      const setting = await getSettings()
+
+      await updateSettings({
+        ...setting,
+        openAIApiKey: values.openAIApiKey,
+      })
       message.success('OpenAI API 키가 저장되었습니다.')
     } catch {
       message.error('저장에 실패했습니다.')

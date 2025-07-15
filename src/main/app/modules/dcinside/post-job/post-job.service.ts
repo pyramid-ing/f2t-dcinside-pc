@@ -1,18 +1,18 @@
-import { PrismaService } from '@main/app/shared/prisma.service'
 import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { AppSettings, SettingsService } from '@main/app/modules/settings/settings.service'
+import { Settings, SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page } from 'playwright'
 import { PostJob } from '@prisma/client'
-import _ from 'lodash'
 import { sleep } from '@main/app/utils/sleep'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
 
 @Injectable()
-export class PostJobService {
+export class PostJobService implements JobProcessor {
   private readonly logger = new Logger(PostJobService.name)
 
   constructor(
@@ -23,14 +23,91 @@ export class PostJobService {
     private readonly cookieService: CookieService,
   ) {}
 
-  // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
-  async getPostJobs(options?: { status?: string; search?: string; orderBy?: string; order?: 'asc' | 'desc' }) {
-    const where: any = {}
+  canProcess(job: any): boolean {
+    return job.type === JobType.POST
+  }
 
-    // 상태 필터
-    if (options?.status) {
-      where.status = options.status
+  async process(jobId: string): Promise<void> {
+    const job = await this.prismaService.job.findUniqueOrThrow({
+      where: { id: jobId },
+      include: {
+        postJob: true,
+      },
+    })
+
+    const settings = await this.getSettings()
+
+    const { browser, context } = await this.postingService.launch(!settings.showBrowserWindow)
+    try {
+      await this.handlePostJob(context, job.postJob)
+
+      // 작업 간 딜레이
+      await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
+      await sleep(settings.taskDelay * 1000)
+    } catch (error) {
+      await this.prismaService.job.update({
+        where: {
+          id: jobId,
+        },
+        data: {
+          status: JobStatus.FAILED,
+          resultMsg: error.message,
+        },
+      })
+    } finally {
+      await browser.close()
     }
+  }
+
+  /**
+   * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
+   */
+  async handlePostJob(context: BrowserContext, postJob: PostJob) {
+    const page = await context.newPage()
+
+    try {
+      this.logger.log(`작업 시작: ID ${postJob.id})`)
+      await this.jobLogsService.createJobLog(postJob.id, '작업 시작')
+
+      // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
+      if (postJob.loginId && postJob.loginPassword) {
+        await this.jobLogsService.createJobLog(postJob.id, `로그인 시도: ${postJob.loginId}`)
+        await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+        await this.jobLogsService.createJobLog(postJob.id, '로그인 성공')
+      } else {
+        this.logger.log(`비로그인 모드로 진행`)
+        await this.jobLogsService.createJobLog(postJob.id, '비로그인 모드로 진행')
+      }
+
+      // 작업 처리
+      await this.jobLogsService.createJobLog(postJob.id, '포스팅 시작')
+      const result = await this.postingService.postArticle(postJob, context, page, postJob.id)
+      // 포스팅 성공 시 Job 상태 변경
+      if (postJob.jobId) {
+        await this.prismaService.job.update({
+          where: { id: postJob.jobId },
+          data: {
+            status: JobStatus.COMPLETED,
+            resultMsg: result.message,
+            resultUrl: result.url,
+          },
+        })
+      }
+      await this.jobLogsService.createJobLog(postJob.id, `포스팅 완료: ${result.url}`)
+
+      this.logger.log(`작업 완료: ID ${postJob.id}, URL: ${result.url}`)
+    } catch (error) {
+      await this.jobLogsService.createJobLog(postJob.id, `작업 실패: ${error.message}`, 'error')
+      this.logger.error(`작업 실패: ID ${postJob.id} - ${error.message}`)
+      throw error
+    } finally {
+      await page.close()
+    }
+  }
+
+  // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
+  async getPostJobs(options?: { search?: string; orderBy?: string; order?: 'asc' | 'desc' }) {
+    const where: any = {}
 
     // 검색 필터 (제목, 갤러리URL, 말머리에서 검색)
     if (options?.search) {
@@ -38,7 +115,6 @@ export class PostJobService {
         { title: { contains: options.search } },
         { galleryUrl: { contains: options.search } },
         { headtext: { contains: options.search } },
-        { resultMsg: { contains: options.search } },
       ]
     }
 
@@ -54,75 +130,27 @@ export class PostJobService {
     })
   }
 
-  // 예약 작업 상태/결과 갱신
-  async updateStatus(id: string, status: string, resultMsg?: string) {
-    return this.prismaService.postJob.update({
-      where: { id },
-      data: { status, resultMsg },
-    })
+  // PostJob 단일 조회, 생성, 수정, 삭제 등 포스팅 데이터만 관리
+  async getPostJobById(id: string) {
+    return this.prismaService.postJob.findUnique({ where: { id } })
   }
 
-  // 예약 작업 상태/결과/URL 갱신 (포스팅 완료 시 사용)
-  async updateStatusWithUrl(id: string, status: string, resultMsg?: string, resultUrl?: string) {
-    return this.prismaService.postJob.update({
-      where: { id },
-      data: { status, resultMsg, resultUrl },
-    })
+  async createPostJob(data: Omit<PostJob, 'id' | 'createdAt' | 'updatedAt'>) {
+    return this.prismaService.postJob.create({ data })
   }
 
-  // 특정 상태인 작업들 조회
-  async findByStatus(status: string) {
-    return this.prismaService.postJob.findMany({
-      where: { status },
-      orderBy: { scheduledAt: 'asc' },
-    })
+  async updatePostJob(id: string, data: Partial<Omit<PostJob, 'id' | 'createdAt' | 'updatedAt'>>) {
+    return this.prismaService.postJob.update({ where: { id }, data })
   }
 
-  // 실패한 작업 재시도 (상태를 pending으로 변경)
-  async retryPostJob(id: string) {
-    const job = await this.prismaService.postJob.findUnique({ where: { id } })
-
-    if (!job) {
-      return { success: false, message: '작업을 찾을 수 없습니다.' }
-    }
-
-    if (job.status !== 'failed') {
-      return { success: false, message: '실패한 작업만 재시도할 수 있습니다.' }
-    }
-
-    await this.prismaService.postJob.update({
-      where: { id },
-      data: {
-        status: 'pending',
-        resultMsg: null,
-        resultUrl: null,
-      },
-    })
-
-    return { success: true, message: '재시도 요청이 완료되었습니다.' }
-  }
-
-  // 작업 삭제
   async deletePostJob(id: string) {
-    const job = await this.prismaService.postJob.findUnique({ where: { id } })
-
-    if (!job) {
-      return { success: false, message: '작업을 찾을 수 없습니다.' }
-    }
-
-    if (job.status === 'processing') {
-      return { success: false, message: '실행 중인 작업은 삭제할 수 없습니다.' }
-    }
-
-    await this.prismaService.postJob.delete({ where: { id } })
-
-    return { success: true, message: '작업이 삭제되었습니다.' }
+    return this.prismaService.postJob.delete({ where: { id } })
   }
 
-  private async getAppSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
+  private async getSettings(): Promise<{ showBrowserWindow: boolean; taskDelay: number }> {
     try {
       const setting = await this.settingsService.findByKey('app')
-      const data = setting?.data as unknown as AppSettings
+      const data = setting?.data as unknown as Settings
       return {
         showBrowserWindow: data?.showBrowserWindow ?? true,
         taskDelay: data?.taskDelay ?? 10,
@@ -182,91 +210,48 @@ export class PostJobService {
     }
   }
 
-  async processPostJobs(): Promise<void> {
-    const postJobs = await this.prismaService.postJob.findMany({
-      where: {
-        status: 'pending',
-        scheduledAt: {
-          lte: new Date(),
-        },
-      },
-    })
-    await this.prismaService.postJob.updateMany({
-      where: {
-        id: {
-          in: postJobs.map(postJob => postJob.id),
-        },
-      },
-      data: {
-        status: 'processing',
-      },
-    })
-    const appSettings = await this.getAppSettings()
-
-    const groupedPostJobs = _.groupBy(postJobs, postJob => postJob.loginId)
-    for (const loginId in groupedPostJobs) {
-      const { browser, context } = await this.postingService.launch(!appSettings.showBrowserWindow)
-      try {
-        const postJobs = groupedPostJobs[loginId]
-
-        for (const postJob of postJobs) {
-          await this.handlePostJob(context, postJob)
-
-          // 작업 간 딜레이
-          this.logger.log(`작업 간 딜레이: ${appSettings.taskDelay}초`)
-          await sleep(appSettings.taskDelay * 1000)
-        }
-      } catch (error) {
-        await this.prismaService.postJob.updateMany({
-          where: {
-            id: {
-              in: postJobs.map(postJob => postJob.id),
-            },
-          },
-          data: {
-            status: 'failed',
-            resultMsg: error.message,
-          },
-        })
-      } finally {
-        await browser.close()
-      }
-    }
-  }
-
   /**
-   * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
+   * Job + PostJob을 1:1로 생성하는 메서드
    */
-  async handlePostJob(context: BrowserContext, postJob: PostJob) {
-    const page = await context.newPage()
-
-    try {
-      this.logger.log(`작업 시작: ID ${postJob.id})`)
-      await this.jobLogsService.createJobLog(postJob.id, '작업 시작')
-
-      // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
-      if (postJob.loginId && postJob.loginPassword) {
-        await this.jobLogsService.createJobLog(postJob.id, `로그인 시도: ${postJob.loginId}`)
-        await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-        await this.jobLogsService.createJobLog(postJob.id, '로그인 성공')
-      } else {
-        this.logger.log(`비로그인 모드로 진행`)
-        await this.jobLogsService.createJobLog(postJob.id, '비로그인 모드로 진행')
-      }
-
-      // 작업 처리
-      await this.jobLogsService.createJobLog(postJob.id, '포스팅 시작')
-      const result = await this.postingService.postArticle(postJob, context, page, postJob.id)
-      await this.updateStatusWithUrl(postJob.id, 'completed', result.message, result.url)
-      await this.jobLogsService.createJobLog(postJob.id, `포스팅 완료: ${result.url}`)
-
-      this.logger.log(`작업 완료: ID ${postJob.id}, URL: ${result.url}`)
-    } catch (error) {
-      await this.updateStatus(postJob.id, 'failed', error.message)
-      await this.jobLogsService.createJobLog(postJob.id, `작업 실패: ${error.message}`)
-      this.logger.error(`작업 실패: ID ${postJob.id} - ${error.message}`)
-    } finally {
-      await page.close()
-    }
+  async createJobWithPostJob(postJobData: {
+    galleryUrl: string
+    title: string
+    contentHtml: string
+    password?: string
+    nickname?: string
+    headtext?: string
+    imagePaths?: string
+    loginId?: string
+    loginPassword?: string
+    scheduledAt?: Date
+    imagePosition?: string
+  }) {
+    const job = await this.prismaService.job.create({
+      data: {
+        type: 'post',
+        subject: `[${postJobData.galleryUrl}] ${postJobData.title}`,
+        status: 'request',
+        scheduledAt: postJobData.scheduledAt || new Date(),
+        postJob: {
+          create: {
+            galleryUrl: postJobData.galleryUrl,
+            title: postJobData.title,
+            contentHtml: postJobData.contentHtml,
+            password: postJobData.password ?? null,
+            nickname: postJobData.nickname ?? null,
+            headtext: postJobData.headtext ?? null,
+            imagePaths: postJobData.imagePaths ?? null,
+            loginId: postJobData.loginId ?? null,
+            loginPassword: postJobData.loginPassword ?? null,
+            imagePosition: postJobData.imagePosition ?? null,
+          },
+        },
+      },
+      select: {
+        id: true,
+        postJob: { select: { id: true } },
+      },
+    })
+    return job
   }
 }

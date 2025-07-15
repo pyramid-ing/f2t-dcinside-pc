@@ -419,7 +419,7 @@ export class DcinsidePostingService {
     await moveCursorToPosition(page, imagePosition)
 
     // 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
-    const appSettings = await this.settingsService.getAppSettings()
+    const appSettings = await this.settingsService.getSettings()
 
     try {
       await this.performImageUpload(page, browserContext, imagePaths)
@@ -820,7 +820,7 @@ export class DcinsidePostingService {
       await this.jobLogsService.createJobLog(jobId, 'PostJob 데이터 파싱 완료')
 
       // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
-      const appSettings = await this.settingsService.getAppSettings()
+      const appSettings = await this.settingsService.getSettings()
       await this.jobLogsService.createJobLog(jobId, '앱 설정 가져오기 완료')
 
       // 1. 갤러리 정보 추출 (id와 타입)

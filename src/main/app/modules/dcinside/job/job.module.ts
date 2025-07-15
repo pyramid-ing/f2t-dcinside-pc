@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common'
+import { JobQueueProcessor } from './job-queue.processor'
+import { JobController } from './job.controller'
+import { ScheduleModule } from '@nestjs/schedule'
+import { CommonModule } from '@main/app/modules/common/common.module'
+import { PostJobModule } from '@main/app/modules/dcinside/post-job/post-job.module'
+import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.module'
+
+@Module({
+  imports: [ScheduleModule.forRoot(), CommonModule, PostJobModule, JobLogsModule],
+  providers: [JobQueueProcessor],
+  controllers: [JobController],
+  exports: [JobQueueProcessor],
+})
+export class JobModule {}
