@@ -215,9 +215,9 @@ export class PostJobService implements JobProcessor {
   }) {
     const job = await this.prismaService.job.create({
       data: {
-        type: 'post',
+        type: JobType.POST,
         subject: `[${postJobData.galleryUrl}] ${postJobData.title}`,
-        status: 'request',
+        status: JobStatus.PENDING,
         scheduledAt: postJobData.scheduledAt || new Date(),
         postJob: {
           create: {
