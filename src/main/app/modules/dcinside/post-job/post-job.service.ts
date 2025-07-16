@@ -10,6 +10,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
+import { getExternalIp } from '@main/app/utils/ip'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -37,7 +38,24 @@ export class PostJobService implements JobProcessor {
 
     const settings = await this.settingsService.getSettings()
 
-    const { browser, context } = await this.postingService.launch()
+    const { browser, context, proxyInfo } = await this.postingService.launch()
+    // 프록시 정보 로깅
+    if (proxyInfo) {
+      const proxyStr = proxyInfo.id ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}` : `${proxyInfo.ip}:${proxyInfo.port}`
+      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+    }
+    // 실제 외부 IP 로깅
+    try {
+      const ipCheckPage = await context.newPage()
+      const externalIp = await getExternalIp(ipCheckPage)
+      await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+      await ipCheckPage.close()
+    } catch (e) {
+      await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+    }
+
     try {
       await this.handlePostJob(jobId, context, job.postJob)
 
@@ -45,15 +63,7 @@ export class PostJobService implements JobProcessor {
       await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
       await sleep(settings.taskDelay * 1000)
     } catch (error) {
-      await this.prismaService.job.update({
-        where: {
-          id: jobId,
-        },
-        data: {
-          status: JobStatus.FAILED,
-          resultMsg: error.message,
-        },
-      })
+      throw error
     } finally {
       await browser.close()
     }
@@ -82,17 +92,7 @@ export class PostJobService implements JobProcessor {
       // 작업 처리
       await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
       const result = await this.postingService.postArticle(postJob, context, page, jobId)
-      // 포스팅 성공 시 Job 상태 변경
-      if (postJob.jobId) {
-        await this.prismaService.job.update({
-          where: { id: postJob.jobId },
-          data: {
-            status: JobStatus.COMPLETED,
-            resultMsg: result.message,
-            resultUrl: result.url,
-          },
-        })
-      }
+
       await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
 
       this.logger.log(`작업 완료: ID ${jobId}, URL: ${result.url}`)

@@ -101,6 +101,7 @@ export class DcinsidePostingService {
     let proxyArg = undefined
     let proxyAuth = undefined
     let lastError = null
+    let proxyInfo = null
 
     const settings = await this.settingsService.getSettings()
 
@@ -114,6 +115,7 @@ export class DcinsidePostingService {
           ...(proxy.id ? { username: proxy.id } : {}),
           ...(proxy.pw ? { password: proxy.pw } : {}),
         }
+        proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
         try {
           const browser = await chromium.launch({
             headless: !settings.showBrowserWindow,
@@ -128,7 +130,7 @@ export class DcinsidePostingService {
           await context.addInitScript(() => {
             window.sessionStorage.clear()
           })
-          return { browser, context }
+          return { browser, context, proxyInfo }
         } catch (err) {
           this.logger.warn(`프록시 브라우저 실행 실패: ${err.message}`)
           lastError = err
@@ -149,7 +151,7 @@ export class DcinsidePostingService {
         window.sessionStorage.clear()
       })
       if (lastError) this.logger.warn('프록시 없이 브라우저를 재시도합니다.')
-      return { browser, context }
+      return { browser, context, proxyInfo: null }
     } catch (err) {
       this.logger.error('브라우저 실행 실패: ' + err.message)
       throw err
@@ -158,7 +160,7 @@ export class DcinsidePostingService {
 
   async login(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
 
       // 로그인 폼 입력 및 로그인 버튼 클릭
       await page.fill('#user_id', params.id)
@@ -185,7 +187,7 @@ export class DcinsidePostingService {
 
   async isLogin(page: Page): Promise<boolean> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
       await page.waitForSelector('#login_box', { timeout: 10000 })
       const userNameExists = (await page.locator('#login_box .user_name').count()) > 0
       return userNameExists
@@ -355,7 +357,7 @@ export class DcinsidePostingService {
     // UI 기반 팝업 대기 (커스텀 팝업 - 창 형태)
     try {
       // 커스텀 팝업이 나타날 때까지 대기 (최대 8초)
-      await page.waitForSelector('.pop_wrap[style*="display: block"]', { timeout: 8000 })
+      await page.waitForSelector('.pop_wrap[style*="display: block"]', { timeout: 60_000 })
 
       // 팝업 내용 추출
       const popupContent = await page.evaluate(() => {
@@ -383,13 +385,13 @@ export class DcinsidePostingService {
   }
 
   private async inputTitle(page: Page, title: string): Promise<void> {
-    await page.waitForSelector('#subject', { timeout: 10000 })
+    await page.waitForSelector('#subject', { timeout: 60_000 })
     await page.fill('#subject', title)
   }
 
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
     try {
-      await page.waitForSelector('.write_subject .subject_list li', { timeout: 5000 })
+      await page.waitForSelector('.write_subject .subject_list li', { timeout: 60_000 })
       // 말머리 리스트에서 일치하는 항목 찾아서 클릭
       const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.write_subject .subject_list li'))
@@ -412,8 +414,13 @@ export class DcinsidePostingService {
 
       this.logger.log(`말머리 "${headtext}" 선택 완료`)
       await sleep(1000)
-    } catch (error) {
-      if (error.message.includes('말머리')) {
+    } catch (error: any) {
+      if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
+        const msg = `말머리 목록을 60초 내에 불러오지 못했습니다. (타임아웃)`
+        this.logger.warn(msg)
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: msg })
+      }
+      if (error.message && error.message.includes('말머리')) {
         throw error // 말머리 오류는 그대로 전파
       }
       this.logger.warn(`말머리 선택 중 오류 (무시하고 계속): ${error.message}`)
@@ -422,7 +429,7 @@ export class DcinsidePostingService {
 
   private async inputContent(page: Page, contentHtml: string): Promise<void> {
     // HTML 모드 체크박스 활성화
-    await page.waitForSelector('#chk_html', { timeout: 10000 })
+    await page.waitForSelector('#chk_html', { timeout: 60_000 })
 
     const htmlChecked = await page.locator('#chk_html').isChecked()
     if (!htmlChecked) {
@@ -430,7 +437,7 @@ export class DcinsidePostingService {
     }
 
     // HTML 코드 입력
-    await page.waitForSelector('.note-editor .note-codable', { timeout: 5000 })
+    await page.waitForSelector('.note-editor .note-codable', { timeout: 60_000 })
     await page.evaluate(html => {
       const textarea = document.querySelector('.note-editor .note-codable') as HTMLTextAreaElement
       if (textarea) {
@@ -548,7 +555,7 @@ export class DcinsidePostingService {
   private async waitForImageUploadComplete(popup: Page, expectedImageCount: number): Promise<void> {
     this.logger.log('이미지 업로드 완료 대기 중...')
 
-    const maxWaitTime = 60000 // 최대 60초 대기
+    const maxWaitTime = 60_000 // 최대 60초 대기
     const startTime = Date.now()
 
     while (Date.now() - startTime < maxWaitTime) {
@@ -595,7 +602,7 @@ export class DcinsidePostingService {
     await retry(
       async () => {
         // 적용 버튼 존재 확인
-        await popup.waitForSelector('.btn_apply', { timeout: 5000 })
+        await popup.waitForSelector('.btn_apply', { timeout: 60_000 })
         await popup.click('.btn_apply')
         // 클릭 후 팝업 닫힘 확인 (1초 대기)
         await sleep(1000)
@@ -614,7 +621,7 @@ export class DcinsidePostingService {
   private async inputNickname(page: Page, nickname: string): Promise<void> {
     try {
       // 닉네임 입력 영역이 표시될 때까지 대기
-      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 10000 })
+      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 60_000 })
 
       // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
       const xBtnExists = (await page.locator('#btn_gall_nick_name_x').count()) > 0
@@ -692,11 +699,10 @@ export class DcinsidePostingService {
           page.once('dialog', dialogHandler)
         })
 
-        // 타임아웃 프로미스 (8초)
         const timeoutPromise: Promise<null> = new Promise(resolve => {
           timeoutId = setTimeout(() => {
             resolve(null)
-          }, 8000)
+          }, 60_000)
         })
 
         // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
@@ -711,7 +717,7 @@ export class DcinsidePostingService {
           timeoutPromise,
           customPopupPromise,
           page
-            .waitForURL(/\/lists/, { timeout: 10000 })
+            .waitForURL(/\/lists/, { timeout: 60_000 })
             .then(() => null)
             .catch(() => null),
         ])
@@ -765,7 +771,7 @@ export class DcinsidePostingService {
     let postUrl = null
     try {
       // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
-      await page.waitForSelector('table.gall_list', { timeout: 10000 })
+      await page.waitForSelector('table.gall_list', { timeout: 60_000 })
       postUrl = await page.evaluate(title => {
         const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
         for (const row of rows) {
@@ -805,18 +811,23 @@ export class DcinsidePostingService {
             return window.location.href.includes('/lists') || window.location.href.includes(expectedUrl)
           },
           this.buildGalleryUrl(galleryInfo),
-          { timeout: 15000 },
+          { timeout: 60_000 },
         ),
 
         // 2. 게시글 목록 테이블이 나타날 때까지 대기
-        page.waitForSelector('table.gall_list', { timeout: 15000 }),
+        page.waitForSelector('table.gall_list', { timeout: 60_000 }),
 
         // 3. 네비게이션 이벤트 대기
-        page.waitForURL(/\/lists/, { timeout: 15000 }),
+        page.waitForURL(/\/lists/, { timeout: 60_000 }),
       ])
 
       this.logger.log('게시글 목록 페이지로 이동 완료')
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
+        const msg = '게시글 목록 페이지로 60초 내에 이동하지 못했습니다. (타임아웃)'
+        this.logger.warn(msg)
+        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+      }
       this.logger.warn(`목록 페이지 이동 대기 중 타임아웃: ${error.message}`)
       throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
         message: '글 등록 후 목록 페이지 이동 실패 - 글 등록이 정상적으로 완료되지 않았습니다.',
@@ -829,9 +840,27 @@ export class DcinsidePostingService {
       async () => {
         const listUrl = this.buildGalleryUrl(galleryInfo)
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
-        await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 20000 })
+        try {
+          await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        } catch (error: any) {
+          if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
+            const msg = '갤러리 목록 페이지를 60초 내에 불러오지 못했습니다. (타임아웃)'
+            this.logger.warn(msg)
+            throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+          }
+          throw error
+        }
         // 글쓰기 버튼 클릭 (goWrite)
-        await page.waitForSelector('a.btn_write.txt', { timeout: 10000 })
+        try {
+          await page.waitForSelector('a.btn_write.txt', { timeout: 60_000 })
+        } catch (error: any) {
+          if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
+            const msg = '글쓰기 버튼을 60초 내에 찾지 못했습니다. (타임아웃)'
+            this.logger.warn(msg)
+            throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+          }
+          throw error
+        }
         await page.click('a.btn_write.txt')
         await sleep(4000)
         // 글쓰기 페이지로 정상 이동했는지 확인
@@ -930,9 +959,8 @@ export class DcinsidePostingService {
 
       return { success: true, message: '글 등록 성공', url: finalUrl }
     } catch (e) {
-      this.logger.error(`디시인사이드 글 등록 실패: ${e.message}`)
       await this.jobLogsService.createJobLog(jobId, `포스팅 실패: ${e.message}`)
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: e.message })
+      throw e
     } finally {
       // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음
     }
