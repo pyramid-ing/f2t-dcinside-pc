@@ -6,14 +6,78 @@ on:
       - master
   workflow_dispatch: # 수동 실행 가능
 
+# 워크플로우 권한 설정
+permissions:
+  contents: write  # 태그 생성 및 릴리즈 생성 권한
+  actions: read    # 액션 읽기 권한
+
 jobs:
+  # 버전 체크 Job (빌드 전에 실행)
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.version-check.outputs.version-changed }}
+      current-version: ${{ steps.package-version.outputs.version }}
+      tag-name: ${{ steps.package-version.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 모든 히스토리 가져오기 (태그 비교용)
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Get package version
+        id: package-version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "tag=v$version" >> $GITHUB_OUTPUT
+
+      - name: Check if version changed
+        id: version-check
+        if: github.ref == 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          currentVersion="${{ steps.package-version.outputs.version }}"
+          if git tag -l "v$currentVersion" | grep -q "v$currentVersion"; then
+            echo "version-changed=false" >> $GITHUB_OUTPUT
+            echo "✅ Version $currentVersion already exists as a tag - skipping build"
+          else
+            echo "version-changed=true" >> $GITHUB_OUTPUT
+            echo "🚀 New version detected: $currentVersion - proceeding with build"
+          fi
+
+      - name: Skip build notification
+        if: steps.version-check.outputs.version-changed == 'false'
+        run: |
+          echo "⏭️ Build skipped: Version ${{ steps.package-version.outputs.version }} has not changed"
+
   build:
-    runs-on: windows-latest
+    needs: check-version
+    # 버전이 변경되었거나 태그 푸시인 경우에만 실행
+    if: needs.check-version.outputs.version-changed == 'true' || startsWith(github.ref, 'refs/tags/')
+
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       # 1. 리포지토리 클론
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 모든 히스토리 가져오기 (태그 비교용)
+          token: ${{ secrets.GH_TOKEN }}  # 태그 푸시 권한
 
       # 2. Node.js 환경 설정
       - name: Setup Node.js
@@ -28,11 +92,19 @@ jobs:
           version: 10.12.1
           run_install: false # 자동 설치 비활성화
 
-      # 4. pnpm 캐시 설정
-      - name: Get pnpm store directory
+      # 4. pnpm 캐시 설정 (Windows)
+      - name: Get pnpm store directory (Windows)
+        if: matrix.platform == 'win'
         shell: pwsh
         run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
+
+      # 4. pnpm 캐시 설정 (macOS)
+      - name: Get pnpm store directory (macOS)
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Setup pnpm cache
         uses: actions/cache@v4
@@ -44,7 +116,6 @@ jobs:
 
       # 5. pnpm 의존성 설치
       - name: Install dependencies
-        shell: pwsh
         run: |
           pnpm config set network-timeout 300000
           pnpm config set fetch-retries 5
@@ -61,24 +132,93 @@ jobs:
       - name: Build initial database
         run: node scripts/build-initial-db.js
 
-      # 8. package.json에서 버전 읽기
-      - name: Get package version
-        id: package-version
+      # 8. 새 태그 생성 (버전이 변경된 경우, Windows에서만 실행)
+      - name: Create and push tag
+        if: needs.check-version.outputs.version-changed == 'true' && matrix.platform == 'win'
         shell: pwsh
         run: |
-          $version = node -p "require('./package.json').version"
-          echo "version=$version" >> $env:GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ needs.check-version.outputs.tag-name }}"
+          git push origin "${{ needs.check-version.outputs.tag-name }}"
 
       # 9. Electron 빌드
-      - name: Build Windows App
+      - name: Build ${{ matrix.platform }} App
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: pnpm build
-        shell: pwsh
 
-      # 10. 빌드된 파일 업로드
+      # 10. 빌드된 파일 업로드 (Artifacts)
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: f2t-dcinside-windows-v${{ steps.package-version.outputs.version }}
+          name: winsoft-dcinside-${{ matrix.platform }}-v${{ needs.check-version.outputs.current-version }}
           path: dist/electron
+
+
+  # 12. GitHub Release 생성 (모든 빌드 완료 후 실행)
+  release:
+    needs: [check-version, build]
+    if: startsWith(github.ref, 'refs/tags/') || needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: winsoft-dcinside-win-v${{ needs.check-version.outputs.current-version }}
+          path: ./artifacts/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: winsoft-dcinside-mac-v${{ needs.check-version.outputs.current-version }}
+          path: ./artifacts/macos
+
+      - name: Remove duplicate files
+        run: |
+          # Remove builder-debug.yml to prevent upload conflicts
+          find ./artifacts -name "builder-debug.yml" -delete
+          
+          # List remaining files for debugging
+          echo "Files to be uploaded:"
+          find ./artifacts -type f | sort
+
+      - name: Extract Release Notes from CHANGELOG
+        id: release-notes
+        shell: bash
+        run: |
+          version="${{ needs.check-version.outputs.current-version }}"
+          changelog_path="CHANGELOG.md"
+          
+          # 기본값은 공란
+          release_notes=""
+          
+          if [[ -f "$changelog_path" ]]; then
+            # 현재 버전의 변경사항 추출
+            release_notes=$(sed -n "/## \[$version\]/,/## \[/{/## \[$version\]/d;/## \[/q;p}" "$changelog_path")
+            release_notes=$(echo "$release_notes" | sed '/^$/d' | sed 's/^[[:space:]]*//')
+          fi
+          
+          # GitHub Actions output으로 설정 (멀티라인 처리)
+          delimiter="EOF$(shuf -i 1000-9999 -n 1)"
+          echo "notes<<$delimiter" >> $GITHUB_OUTPUT
+          echo "$release_notes" >> $GITHUB_OUTPUT
+          echo "$delimiter" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-version.outputs.tag-name }}
+          name: Release ${{ needs.check-version.outputs.tag-name }}
+          body: ${{ steps.release-notes.outputs.notes }}
+          files: |
+            ./artifacts/windows/*
+            ./artifacts/macos/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
