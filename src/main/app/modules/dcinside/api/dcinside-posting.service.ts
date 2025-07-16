@@ -13,6 +13,7 @@ import { PostJob } from '@prisma/client'
 import UserAgent from 'user-agents'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { getProxyByMethod } from '@main/app/modules/util/browser-manager.service'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
 
@@ -96,22 +97,63 @@ export class DcinsidePostingService {
     private readonly jobLogsService: JobLogsService,
   ) {}
 
-  async launch(headless: boolean) {
-    const browser = await chromium.launch({
-      headless,
-      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-    })
+  async launch() {
+    let proxyArg = undefined
+    let proxyAuth = undefined
+    let lastError = null
 
-    const context = await browser.newContext({
-      viewport: { width: 1200, height: 1142 },
-      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-    })
-    // 세션 스토리지 초기화
-    await context.addInitScript(() => {
-      window.sessionStorage.clear()
-    })
+    const settings = await this.settingsService.getSettings()
 
-    return { browser, context }
+    if (settings?.proxies && settings.proxies.length > 0) {
+      const method = settings.proxyChangeMethod || 'random'
+      const { proxy } = getProxyByMethod(settings.proxies, method)
+      if (proxy) {
+        proxyArg = `--proxy-server=${proxy.ip}:${proxy.port}`
+        proxyAuth = {
+          server: `${proxy.ip}:${proxy.port}`,
+          ...(proxy.id ? { username: proxy.id } : {}),
+          ...(proxy.pw ? { password: proxy.pw } : {}),
+        }
+        try {
+          const browser = await chromium.launch({
+            headless: !settings.showBrowserWindow,
+            executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+            args: [proxyArg],
+          })
+          const context = await browser.newContext({
+            viewport: { width: 1200, height: 1142 },
+            userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+            proxy: proxyAuth,
+          })
+          await context.addInitScript(() => {
+            window.sessionStorage.clear()
+          })
+          return { browser, context }
+        } catch (err) {
+          this.logger.warn(`프록시 브라우저 실행 실패: ${err.message}`)
+          lastError = err
+        }
+      }
+    }
+    // fallback: 프록시 없이 재시도
+    try {
+      const browser = await chromium.launch({
+        headless: !settings.showBrowserWindow,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+      })
+      const context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      })
+      await context.addInitScript(() => {
+        window.sessionStorage.clear()
+      })
+      if (lastError) this.logger.warn('프록시 없이 브라우저를 재시도합니다.')
+      return { browser, context }
+    } catch (err) {
+      this.logger.error('브라우저 실행 실패: ' + err.message)
+      throw err
+    }
   }
 
   async login(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {

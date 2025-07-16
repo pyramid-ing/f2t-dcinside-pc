@@ -37,7 +37,7 @@ export class PostJobService implements JobProcessor {
 
     const settings = await this.settingsService.getSettings()
 
-    const { browser, context } = await this.postingService.launch(!settings.showBrowserWindow)
+    const { browser, context } = await this.postingService.launch()
     try {
       await this.handlePostJob(jobId, context, job.postJob)
 

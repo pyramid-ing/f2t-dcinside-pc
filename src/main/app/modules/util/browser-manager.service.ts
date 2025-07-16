@@ -13,6 +13,39 @@ interface ManagedBrowser {
   context: BrowserContext
 }
 
+/**
+ * 프록시 목록에서 랜덤으로 1개 선택
+ */
+export function getRandomProxy(
+  proxies: { ip: string; port: number; id?: string; pw?: string }[],
+): { ip: string; port: number; id?: string; pw?: string } | undefined {
+  if (!proxies || proxies.length === 0) return undefined
+  const idx = Math.floor(Math.random() * proxies.length)
+  return proxies[idx]
+}
+
+/**
+ * 프록시 변경 방식에 따라 프록시 선택
+ */
+export function getProxyByMethod(
+  proxies: { ip: string; port: number; id?: string; pw?: string }[],
+  method: 'random' | 'sequential' | 'fixed' = 'random',
+  lastIndex = 0,
+): { proxy: any; nextIndex: number } {
+  if (!proxies || proxies.length === 0) return { proxy: undefined, nextIndex: 0 }
+  if (method === 'random') {
+    return { proxy: getRandomProxy(proxies), nextIndex: lastIndex }
+  }
+  if (method === 'sequential') {
+    const idx = lastIndex % proxies.length
+    return { proxy: proxies[idx], nextIndex: idx + 1 }
+  }
+  if (method === 'fixed') {
+    return { proxy: proxies[0], nextIndex: lastIndex }
+  }
+  return { proxy: getRandomProxy(proxies), nextIndex: lastIndex }
+}
+
 @Injectable()
 export class BrowserManagerService {
   private readonly logger = new Logger(BrowserManagerService.name)

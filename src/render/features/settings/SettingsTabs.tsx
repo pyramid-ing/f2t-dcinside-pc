@@ -2,6 +2,7 @@ import { Tabs } from 'antd'
 import React, { useState } from 'react'
 import OpenAISettingsForm from './OpenAISettingsForm'
 import SettingsForm from './SettingsForm'
+import ProxySettingsForm from './ProxySettingsForm'
 
 const SettingsTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState('app')
@@ -17,6 +18,11 @@ const SettingsTabs: React.FC = () => {
           key: 'app',
           label: '앱 설정',
           children: <SettingsForm />,
+        },
+        {
+          key: 'proxy',
+          label: '프록시 설정',
+          children: <ProxySettingsForm />,
         },
         {
           key: 'openai',

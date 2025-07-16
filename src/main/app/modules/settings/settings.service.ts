@@ -20,6 +20,8 @@ export class SettingsService {
       actionDelay: 0,
       imageUploadFailureAction: 'skip',
       openAIApiKey: '',
+      proxies: [],
+      proxyChangeMethod: 'random',
     }
     const merged = {
       ...defaultSettings,

@@ -4,4 +4,18 @@ export interface Settings {
   actionDelay: number // 포스팅 과정 중 각 동작 사이의 딜레이 (초)
   imageUploadFailureAction: 'fail' | 'skip' // 이미지 업로드 실패 시 처리 방식 ('fail' = 작업 실패, 'skip' = 이미지 무시하고 진행)
   openAIApiKey: string
+  /**
+   * 프록시 목록
+   * 예: [{ ip: '1.2.3.4', port: 8080, id: 'user', pw: 'pass' }]
+   */
+  proxies?: {
+    ip: string
+    port: number
+    id?: string
+    pw?: string
+  }[]
+  /**
+   * 프록시 변경 방식 (예: 'random', 'sequential', 'fixed')
+   */
+  proxyChangeMethod?: 'random' | 'sequential' | 'fixed'
 }

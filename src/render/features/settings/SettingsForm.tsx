@@ -1,5 +1,5 @@
 import type { Settings } from '../../types/settings'
-import { Button, Form, InputNumber, message, Radio, Space, Switch } from 'antd'
+import { Button, Form, InputNumber, message, Radio, Space, Switch, Input, Modal } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { getSettings, updateSettings } from '@render/api'
 
@@ -7,6 +7,9 @@ const SettingsForm: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [proxyModalOpen, setProxyModalOpen] = useState(false)
+  const [editingProxy, setEditingProxy] = useState<any | null>(null)
+  const proxies: any[] = Form.useWatch('proxies', form) || []
 
   useEffect(() => {
     loadSettings()
