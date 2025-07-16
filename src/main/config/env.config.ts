@@ -109,11 +109,9 @@ export class EnvConfig {
             fs.mkdirSync(dbDir, { recursive: true })
           }
 
-          // 초기 DB를 userData로 이동
-          fs.renameSync(this.initialDbPath, this.dbPath)
-          LoggerConfig.info(`초기 데이터베이스 이동 완료: ${this.initialDbPath} → ${this.dbPath}`)
-        } else if (fs.existsSync(this.dbPath)) {
-          LoggerConfig.info(`기존 데이터베이스 사용: ${this.dbPath}`)
+          // 초기 DB를 userData로 복사
+          fs.copyFileSync(this.initialDbPath, this.dbPath)
+          LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
         }
       }
     } catch (error) {
