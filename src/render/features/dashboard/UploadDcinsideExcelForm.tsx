@@ -201,6 +201,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
       width: '12%',
       align: 'center' as const,
       render: (url: string) => {
+        if (!url) return <Tag color="red">-</Tag>
         const match = url.match(/id=(\w+)/)
         const galleryId = match ? match[1] : url
         return (
@@ -281,7 +282,16 @@ const UploadDcinsideExcelForm: React.FC = () => {
             setResults([])
             try {
               const res = await uploadDcinsideExcel(file)
-              setResults(res.data)
+              const flatResults = res.data.map((item: any) => {
+                if (item.job && item.job.postJob) {
+                  return {
+                    ...item,
+                    ...item.job.postJob,
+                  }
+                }
+                return item
+              })
+              setResults(flatResults)
 
               const successCount = res.data.filter((r: UploadResult) => r.success).length
               const totalCount = res.data.length
