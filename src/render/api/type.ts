@@ -21,17 +21,6 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
 export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 
-export interface BlogJobDetail {
-  id: string
-  jobId: string
-  title: string
-  content: string
-  status: string
-  publishedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
 export interface BaseJob {
   id: string
   type: JobType
@@ -53,8 +42,7 @@ export interface BaseJob {
 
 export interface PostJob extends BaseJob {
   type: typeof JOB_TYPE.POST
-  blogJob: PostJobDetail
-  topicJob: null
+  postJob: PostJobDetail
 }
 
 export interface PostJobDetail {

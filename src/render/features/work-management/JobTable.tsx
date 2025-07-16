@@ -276,11 +276,11 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-// 갤러리 ID 추출 함수 추가
+// 갤러리 ID 추출 함수 개선 (?id= 파라미터에서 추출)
 function extractGalleryId(url: string): string {
   if (!url) return '-'
   try {
-    const match = url.match(/gallery\/([\w-]+)/)
+    const match = url.match(/[?&]id=([^&]+)/)
     return match ? match[1] : url
   } catch {
     return url
@@ -706,18 +706,23 @@ const JobTable: React.FC = () => {
             ),
           },
           {
-            title: '타입',
-            dataIndex: 'type',
-            width: 100,
+            title: '갤러리',
+            dataIndex: 'galleryUrl',
+            width: 120,
+            sorter: true,
             align: 'center',
-            render: (type: JobType) => (
-              <Tag
-                color={type === JOB_TYPE.POST ? 'blue' : 'purple'}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setTypeFilter(type)}
+            render: (url: string, row: PostJob) => (
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  background: '#f5f5f5',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                }}
               >
-                {jobTypeLabels[type]}
-              </Tag>
+                {extractGalleryId(row.postJob.galleryUrl)}
+              </span>
             ),
           },
           {
@@ -727,25 +732,24 @@ const JobTable: React.FC = () => {
             sorter: true,
             ellipsis: { showTitle: false },
             render: (text: string, row: PostJob) => (
-              <span title={text} style={{ cursor: row.resultUrl ? 'pointer' : 'default' }}>
-                {row.status === JOB_STATUS.COMPLETED && row.resultUrl ? (
+              <span title={text} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                {
                   <a
                     href={row.resultUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
                       color: '#1890ff',
+                      fontSize: '12px',
+                      marginLeft: 4,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '2px',
                     }}
                   >
-                    {text || '-'}
-                    <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
+                    {row.postJob.title} <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
                   </a>
-                ) : (
-                  text || '-'
-                )}
+                }
               </span>
             ),
           },
@@ -814,26 +818,6 @@ const JobTable: React.FC = () => {
               )
             },
             sorter: true,
-          },
-          {
-            title: '갤러리',
-            dataIndex: 'galleryUrl',
-            width: 120,
-            sorter: true,
-            align: 'center',
-            render: (url: string) => (
-              <span
-                style={{
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  background: '#f5f5f5',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                }}
-              >
-                {extractGalleryId(url)}
-              </span>
-            ),
           },
           {
             title: '말머리',
@@ -912,8 +896,7 @@ const JobTable: React.FC = () => {
             key: 'startedAt',
             width: 170,
             align: 'center',
-            render: (value: string) =>
-              value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-'),
             sorter: true,
           },
           {
@@ -922,8 +905,16 @@ const JobTable: React.FC = () => {
             key: 'completedAt',
             width: 170,
             align: 'center',
-            render: (value: string) =>
-              value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-'),
+            sorter: true,
+          },
+          {
+            title: '생성시간',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 170,
+            align: 'center',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-'),
             sorter: true,
           },
           {
