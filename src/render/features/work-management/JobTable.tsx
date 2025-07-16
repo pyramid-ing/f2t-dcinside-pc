@@ -907,6 +907,26 @@ const JobTable: React.FC = () => {
             sorter: true,
           },
           {
+            title: '시작시간',
+            dataIndex: 'startedAt',
+            key: 'startedAt',
+            width: 170,
+            align: 'center',
+            render: (value: string) =>
+              value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-',
+            sorter: true,
+          },
+          {
+            title: '완료시간',
+            dataIndex: 'completedAt',
+            key: 'completedAt',
+            width: 170,
+            align: 'center',
+            render: (value: string) =>
+              value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-',
+            sorter: true,
+          },
+          {
             title: '액션',
             dataIndex: 'action',
             width: 150,
