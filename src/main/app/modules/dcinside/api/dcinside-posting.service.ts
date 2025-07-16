@@ -88,6 +88,16 @@ async function moveCursorToPosition(page: any, position: '상단' | '하단') {
   }, position)
 }
 
+// reCAPTCHA(리캡챠) 감지 함수: 모든 프레임에서 검사
+async function detectRecaptcha(page: Page): Promise<boolean> {
+  for (const frame of page.frames()) {
+    if (await frame.$('#rc-anchor-container')) {
+      return true
+    }
+  }
+  return false
+}
+
 @Injectable()
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
@@ -189,8 +199,8 @@ export class DcinsidePostingService {
     try {
       await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
       await page.waitForSelector('#login_box', { timeout: 10000 })
-      const userNameExists = (await page.locator('#login_box .user_name').count()) > 0
-      return userNameExists
+      const userName = await page.waitForSelector('#login_box .user_name', { timeout: 5000 }).catch(() => null)
+      return !!userName
     } catch {
       return false
     }
@@ -378,7 +388,7 @@ export class DcinsidePostingService {
   }
 
   private async inputPassword(page: Page, password: string): Promise<void> {
-    const passwordExists = (await page.locator('#password').count()) > 0
+    const passwordExists = await page.waitForSelector('#password', { timeout: 60_000 })
     if (passwordExists) {
       await page.fill('#password', password.toString())
     }
@@ -624,16 +634,16 @@ export class DcinsidePostingService {
       await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 60_000 })
 
       // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
-      const xBtnExists = (await page.locator('#btn_gall_nick_name_x').count()) > 0
-      if (xBtnExists) {
+      const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 5000 }).catch(() => null)
+      if (xBtn) {
         await page.click('#btn_gall_nick_name_x')
         await sleep(500)
       }
 
       // 닉네임 입력 필드 대기 및 활성화
-      await page.waitForSelector('#name')
-      const nameElementExists = (await page.locator('#name').count()) > 0
-      if (nameElementExists) {
+      await page.waitForSelector('#name', { timeout: 60_000 })
+      const nameElement = await page.waitForSelector('#name', { timeout: 5000 }).catch(() => null)
+      if (nameElement) {
         await page.click('#name')
         // 기존 내용 삭제 후 새 닉네임 입력
         await page.locator('#name').evaluate((el: HTMLInputElement, nickname: string) => {
@@ -655,6 +665,12 @@ export class DcinsidePostingService {
     let captchaTryCount = 0
 
     while (true) {
+      // 리캡챠 감지: 등록 시도 전 검사 (모든 프레임)
+      if (await detectRecaptcha(page)) {
+        throw new CustomHttpException(ErrorCode.RECAPTCHA_NOT_SUPPORTED, {
+          message: '리캡챠는 현재 지원하지 않습니다.',
+        })
+      }
       await this.solveCapcha(page)
 
       let dialogHandler: ((dialog: any) => Promise<void>) | null = null
