@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 수정된 버그를 여기에 추가
 
+## [1.5.2]
+- DB버그 복제 수정
+
 ## [1.5.1]
 - 안정성 향상
 - 작업현황 다중작업(다중 삭제 등)
