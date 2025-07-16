@@ -732,8 +732,9 @@ const JobTable: React.FC = () => {
             sorter: true,
             ellipsis: { showTitle: false },
             render: (text: string, row: PostJob) => (
-              <span title={text} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                {
+              <span title={row.postJob?.title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                {row.postJob?.title || '-'}
+                {row.resultUrl && (
                   <a
                     href={row.resultUrl}
                     target="_blank"
@@ -747,9 +748,9 @@ const JobTable: React.FC = () => {
                       gap: '2px',
                     }}
                   >
-                    {row.postJob.title} <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
+                    등록된 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
                   </a>
-                }
+                )}
               </span>
             ),
           },
@@ -825,10 +826,10 @@ const JobTable: React.FC = () => {
             width: 100,
             sorter: true,
             align: 'center',
-            render: (text: string) =>
-              text ? (
+            render: (text: string, row) =>
+              row.postJob.headtext ? (
                 <Tag color="blue" style={{ fontSize: '11px' }}>
-                  {text}
+                  {row.postJob.headtext}
                 </Tag>
               ) : (
                 '-'
