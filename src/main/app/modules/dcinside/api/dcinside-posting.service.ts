@@ -935,18 +935,6 @@ export class DcinsidePostingService {
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
-      if (parsedPostJob.nickname) {
-        await this.inputNickname(page, parsedPostJob.nickname)
-        await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
-        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      }
-
-      if (parsedPostJob.password) {
-        await this.inputPassword(page, parsedPostJob.password)
-        await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
-        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      }
-
       await this.inputContent(page, parsedPostJob.contentHtml)
       await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
@@ -958,6 +946,18 @@ export class DcinsidePostingService {
         await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
       }
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+      if (parsedPostJob.nickname) {
+        await this.inputNickname(page, parsedPostJob.nickname)
+        await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
+        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      }
+
+      if (parsedPostJob.password) {
+        await this.inputPassword(page, parsedPostJob.password)
+        await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
+        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      }
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
       await this.jobLogsService.createJobLog(jobId, '캡챠 처리 및 글 등록 시작')

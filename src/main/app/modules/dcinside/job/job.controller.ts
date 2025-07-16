@@ -107,7 +107,6 @@ export class JobController {
             data: {
               status: JobStatus.REQUEST,
               resultMsg: null,
-              resultUrl: null,
               errorMsg: null,
             },
           })
@@ -257,7 +256,6 @@ export class JobController {
         data: {
           status: JobStatus.REQUEST,
           resultMsg: null,
-          resultUrl: null,
           errorMsg: null,
         },
       })

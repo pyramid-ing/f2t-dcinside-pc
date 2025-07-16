@@ -59,11 +59,12 @@ export class PostJobService implements JobProcessor {
     }
 
     try {
-      await this.handlePostJob(jobId, context, job.postJob)
+      if (settings?.taskDelay > 0) {
+        await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
+        await sleep(settings.taskDelay * 1000)
+      }
 
-      // 작업 간 딜레이
-      await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
-      await sleep(settings.taskDelay * 1000)
+      await this.handlePostJob(jobId, context, job.postJob)
     } catch (error) {
       throw error
     } finally {
