@@ -23,7 +23,8 @@ async function main() {
       data: {
         showBrowserWindow: true,
         taskDelay: 10,
-        imageUploadFailureAction: 'fail'
+        imageUploadFailureAction: 'fail',
+        proxyEnabled: false
       }
     }
   })

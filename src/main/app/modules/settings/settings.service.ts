@@ -22,6 +22,7 @@ export class SettingsService {
       openAIApiKey: '',
       proxies: [],
       proxyChangeMethod: 'random',
+      proxyEnabled: false,
     }
     const merged = {
       ...defaultSettings,

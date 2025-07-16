@@ -115,7 +115,7 @@ export class DcinsidePostingService {
 
     const settings = await this.settingsService.getSettings()
 
-    if (settings?.proxies && settings.proxies.length > 0) {
+    if (settings?.proxyEnabled && settings?.proxies && settings.proxies.length > 0) {
       const method = settings.proxyChangeMethod || 'random'
       const { proxy } = getProxyByMethod(settings.proxies, method)
       if (proxy) {

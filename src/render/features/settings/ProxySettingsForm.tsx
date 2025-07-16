@@ -1,5 +1,5 @@
 import type { Settings } from '../../types/settings'
-import { Button, Form, Input, Modal, Radio, message, Space } from 'antd'
+import { Button, Form, Input, Modal, Radio, message, Space, Switch } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { getSettings, updateSettings } from '@render/api'
 
@@ -97,6 +97,9 @@ const ProxySettingsForm: React.FC = () => {
           proxyChangeMethod: 'random',
         }}
       >
+        <Form.Item label="프록시 사용" name="proxyEnabled" valuePropName="checked" initialValue={false}>
+          <Switch checkedChildren="사용" unCheckedChildren="미사용" />
+        </Form.Item>
         <Form.Item label="프록시 변경 방식" name="proxyChangeMethod" initialValue="random">
           <Radio.Group>
             <Radio value="random">랜덤</Radio>

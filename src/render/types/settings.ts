@@ -18,4 +18,6 @@ export interface Settings {
    * 프록시 변경 방식 (예: 'random', 'sequential', 'fixed')
    */
   proxyChangeMethod?: 'random' | 'sequential' | 'fixed'
+  /** 프록시 사용 여부 */
+  proxyEnabled?: boolean
 }
