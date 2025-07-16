@@ -41,7 +41,9 @@ export class PostJobService implements JobProcessor {
     const { browser, context, proxyInfo } = await this.postingService.launch()
     // 프록시 정보 로깅
     if (proxyInfo) {
-      const proxyStr = proxyInfo.id ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}` : `${proxyInfo.ip}:${proxyInfo.port}`
+      const proxyStr = proxyInfo.id
+        ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+        : `${proxyInfo.ip}:${proxyInfo.port}`
       await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
     } else {
       await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
@@ -95,7 +97,15 @@ export class PostJobService implements JobProcessor {
 
       await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
 
-      this.logger.log(`작업 완료: ID ${jobId}, URL: ${result.url}`)
+      // 포스팅 성공 시 resultUrl을 PostJob에 저장
+      if (result.url) {
+        await this.prismaService.postJob.update({
+          where: { id: postJob.id },
+          data: { resultUrl: result.url },
+        })
+      }
+
+      return result
     } catch (error) {
       await this.jobLogsService.createJobLog(jobId, `작업 실패: ${error.message}`, 'error')
       this.logger.error(`작업 실패: ID ${jobId} - ${error.message}`)
@@ -212,6 +222,7 @@ export class PostJobService implements JobProcessor {
     loginPassword?: string
     scheduledAt?: Date
     imagePosition?: string
+    resultUrl?: string
   }) {
     const job = await this.prismaService.job.create({
       data: {
@@ -231,6 +242,7 @@ export class PostJobService implements JobProcessor {
             loginId: postJobData.loginId ?? null,
             loginPassword: postJobData.loginPassword ?? null,
             imagePosition: postJobData.imagePosition ?? null,
+            ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
           },
         },
       },

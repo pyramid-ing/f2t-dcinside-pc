@@ -24,7 +24,6 @@ model Job {
   status    String  @default("pending") // JobStatus: 'request' | 'pending' | 'processing' | 'completed' | 'failed'
   priority  Int     @default(1)
   resultMsg String? // 결과 메시지
-  resultUrl String? // 결과 URL
   errorMsg  String? // 에러 메시지
 
   scheduledAt DateTime
@@ -67,6 +66,7 @@ model PostJob {
   loginId       String?
   loginPassword String?
   imagePosition String? // '상단' 또는 '하단'
+  resultUrl     String? // 결과 URL
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

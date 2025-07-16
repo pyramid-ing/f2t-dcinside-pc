@@ -731,34 +731,38 @@ const JobTable: React.FC = () => {
             width: 300,
             sorter: true,
             ellipsis: { showTitle: false },
-            render: (text: string, row: PostJob) => (
-              <span title={row.postJob?.title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                {row.postJob?.title || '-'}
-                {row.resultUrl && (
-                  <a
-                    href={row.resultUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: '#1890ff',
-                      fontSize: '12px',
-                      marginLeft: 4,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '2px',
-                    }}
-                  >
-                    등록된 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
-                  </a>
-                )}
-              </span>
-            ),
+            render: (text: string, row: PostJob) => {
+              const resultUrl = row.resultUrl || row.postJob?.resultUrl
+              return (
+                <span title={row.postJob?.title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  {row.postJob?.title || '-'}
+                  {resultUrl && (
+                    <a
+                      href={resultUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        color: '#1890ff',
+                        fontSize: '12px',
+                        marginLeft: 4,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                      }}
+                    >
+                      등록된 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
+                    </a>
+                  )}
+                </span>
+              )
+            },
           },
           {
             title: '결과',
             dataIndex: 'resultMsg',
             width: 350,
             render: (v: string, row: PostJob) => {
+              const resultUrl = row.resultUrl || row.postJob?.resultUrl
               const latestLog = latestLogs[row.id]
               const displayMessage = latestLog ? latestLog.message : v || getDefaultMessage(row.status)
               const statusType = getStatusType(row.status)
@@ -774,10 +778,10 @@ const JobTable: React.FC = () => {
                       최신 로그: {new Date(latestLog.createdAt).toLocaleString('ko-KR')}
                     </div>
                   )}
-                  {row.status === JOB_STATUS.COMPLETED && row.resultUrl && (
+                  {row.status === JOB_STATUS.COMPLETED && resultUrl && (
                     <div className="result-url">
                       <a
-                        href={row.resultUrl}
+                        href={resultUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -804,9 +808,9 @@ const JobTable: React.FC = () => {
                 >
                   <ResultCell>
                     <div className={`result-text hover-hint ${statusType}-text`}>{displayMessage}</div>
-                    {row.status === JOB_STATUS.COMPLETED && row.resultUrl && (
+                    {row.status === JOB_STATUS.COMPLETED && resultUrl && (
                       <a
-                        href={row.resultUrl}
+                        href={resultUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: '#1890ff', fontSize: '12px' }}

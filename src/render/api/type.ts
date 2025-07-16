@@ -58,6 +58,7 @@ export interface PostJobDetail {
   loginId?: string
   loginPassword?: string
   imagePosition?: string
+  resultUrl?: string
 
   createdAt?: Date
   updatedAt?: Date
