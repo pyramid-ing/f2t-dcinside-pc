@@ -783,27 +783,23 @@ export class DcinsidePostingService {
   }
 
   private async extractPostUrl(page: Page, title: string): Promise<string> {
-    const currentUrl = page.url()
-    let postUrl = null
-    try {
-      // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
-      await page.waitForSelector('table.gall_list', { timeout: 60_000 })
-      postUrl = await page.evaluate(title => {
-        const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
-        for (const row of rows) {
-          const titTd = row.querySelector('td.gall_tit.ub-word')
-          if (!titTd) continue
-          const a = titTd.querySelector('a')
-          if (!a) continue
-          // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
-          const text = a.textContent?.replace(/\s+/g, ' ').trim()
-          if (text === title) {
-            return a.getAttribute('href')
-          }
+    // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
+    await page.waitForSelector('table.gall_list', { timeout: 60_000 })
+    let postUrl = await page.evaluate(title => {
+      const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
+      for (const row of rows) {
+        const titTd = row.querySelector('td.gall_tit.ub-word')
+        if (!titTd) continue
+        const a = titTd.querySelector('a')
+        if (!a) continue
+        // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
+        const text = a.textContent?.replace(/\s+/g, ' ').trim()
+        if (text === title) {
+          return a.getAttribute('href')
         }
-        return null
-      }, title)
-    } catch {}
+      }
+      return null
+    }, title)
 
     if (postUrl) {
       if (postUrl.startsWith('/')) {
@@ -811,8 +807,13 @@ export class DcinsidePostingService {
       } else {
         return postUrl
       }
+    } else {
+      // 제목 추출 실패 시 에러 처리
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message:
+          '등록은 되었으나 알수 없는 이유로 게시글을 찾을수 없습니다. 링크 등 제목,내용이 부적절 할 경우가 의심됩니다.',
+      })
     }
-    return currentUrl
   }
 
   private async waitForListPageNavigation(page: Page, galleryInfo: GalleryInfo): Promise<void> {
