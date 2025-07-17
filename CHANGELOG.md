@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 수정된 버그를 여기에 추가
 
+## [1.5.3]
+- 비번 공백해결
+- 게시글목록 찾을 수 없는 에러 수정
+
 ## [1.5.2]
 - DB버그 복제 수정
 
