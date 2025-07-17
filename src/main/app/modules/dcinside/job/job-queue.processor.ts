@@ -51,29 +51,25 @@ export class JobQueueProcessor implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async processNextJobs() {
-    try {
-      // 현재 processing 중인 job이 있는지 확인
-      const processingCount = await this.prisma.job.count({
-        where: { status: JobStatus.PROCESSING },
+    // 현재 processing 중인 job이 있는지 확인
+    const processingCount = await this.prisma.job.count({
+      where: { status: JobStatus.PROCESSING },
+    })
+
+    if (processingCount === 0) {
+      // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
+      const requestJobs = await this.prisma.job.findMany({
+        where: {
+          status: JobStatus.REQUEST,
+          scheduledAt: { lte: new Date() },
+        },
+        orderBy: [{ priority: 'desc' }, { scheduledAt: 'asc' }],
+        take: 1, // 한 번에 하나만 처리
       })
 
-      if (processingCount === 0) {
-        // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
-        const requestJobs = await this.prisma.job.findMany({
-          where: {
-            status: JobStatus.REQUEST,
-            scheduledAt: { lte: new Date() },
-          },
-          orderBy: [{ priority: 'desc' }, { scheduledAt: 'asc' }],
-          take: 1, // 한 번에 하나만 처리
-        })
-
-        for (const job of requestJobs) {
-          await this.processJob(job)
-        }
+      for (const job of requestJobs) {
+        await this.processJob(job)
       }
-    } catch (error) {
-      this.logger.error('Error processing jobs:', error)
     }
   }
 
