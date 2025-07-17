@@ -390,7 +390,7 @@ export class DcinsidePostingService {
   private async inputPassword(page: Page, password: string): Promise<void> {
     const passwordExists = await page.waitForSelector('#password', { timeout: 60_000 })
     if (passwordExists) {
-      await page.fill('#password', password.toString())
+      await page.fill('#password', password.trim().toString())
     }
   }
 
