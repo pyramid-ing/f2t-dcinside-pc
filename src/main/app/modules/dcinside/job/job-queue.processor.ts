@@ -59,7 +59,7 @@ export class JobQueueProcessor implements OnModuleInit {
 
       if (processingCount === 0) {
         // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
-        const pendingJobs = await this.prisma.job.findMany({
+        const requestJobs = await this.prisma.job.findMany({
           where: {
             status: JobStatus.REQUEST,
             scheduledAt: { lte: new Date() },
@@ -68,7 +68,7 @@ export class JobQueueProcessor implements OnModuleInit {
           take: 1, // 한 번에 하나만 처리
         })
 
-        for (const job of pendingJobs) {
+        for (const job of requestJobs) {
           await this.processJob(job)
         }
       }
