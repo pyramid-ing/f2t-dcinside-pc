@@ -976,10 +976,7 @@ export class DcinsidePostingService {
 
       return { success: true, message: '글 등록 성공', url: finalUrl }
     } catch (e) {
-      await this.jobLogsService.createJobLog(jobId, `포스팅 실패: ${e.message}`)
       throw e
-    } finally {
-      // 브라우저는 외부에서 관리되므로 여기서 종료하지 않음
     }
   }
 }

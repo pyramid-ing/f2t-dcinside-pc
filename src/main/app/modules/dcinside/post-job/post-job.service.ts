@@ -108,8 +108,6 @@ export class PostJobService implements JobProcessor {
 
       return result
     } catch (error) {
-      await this.jobLogsService.createJobLog(jobId, `작업 실패: ${error.message}`, 'error')
-      this.logger.error(`작업 실패: ID ${jobId} - ${error.message}`)
       throw error
     } finally {
       await page.close()
