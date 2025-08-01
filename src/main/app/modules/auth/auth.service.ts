@@ -42,6 +42,7 @@ export class AuthService {
       // 라이센스 등록 성공 시 설정에 저장
       await this.settingsService.updateSettings({
         licenseKey: registerLicenseDto.license_key,
+        licenseCache: undefined, // 캐시 무효화
       })
 
       return {

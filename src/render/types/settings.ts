@@ -6,6 +6,15 @@ export interface Settings {
   openAIApiKey: string
   licenseKey?: string // 라이센스 키
   /**
+   * 라이센스 캐시 정보
+   */
+  licenseCache?: {
+    lastChecked: number // 마지막 체크 시간 (timestamp)
+    isValid: boolean // 라이센스 유효성
+    permissions: string[] // 권한 목록
+    expiresAt?: number // 만료 시간 (timestamp)
+  }
+  /**
    * 프록시 목록
    * 예: [{ ip: '1.2.3.4', port: 8080, id: 'user', pw: 'pass' }]
    */
