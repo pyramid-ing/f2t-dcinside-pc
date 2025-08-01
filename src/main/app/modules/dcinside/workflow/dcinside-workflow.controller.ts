@@ -5,7 +5,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
 
-@Controller('dcinside/workflow')
+@Controller('posting')
 export class DcinsideWorkflowController {
   constructor(private readonly dcinsideWorkflowService: DcinsideWorkflowService) {}
 
