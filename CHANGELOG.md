@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 수정된 버그를 여기에 추가
 
+## [1.6.1]
+- 라이센스키 등록방식
+
 ## [1.6.0]
 - 라이센스키 추가
 
