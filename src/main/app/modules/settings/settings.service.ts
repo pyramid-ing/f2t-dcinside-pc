@@ -20,6 +20,7 @@ export class SettingsService {
       actionDelay: 0,
       imageUploadFailureAction: 'skip',
       openAIApiKey: '',
+      licenseKey: '',
       proxies: [],
       proxyChangeMethod: 'random',
       proxyEnabled: false,

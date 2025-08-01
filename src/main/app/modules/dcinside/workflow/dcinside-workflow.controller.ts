@@ -1,17 +1,35 @@
-import { Body, Controller, Post, Req, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common'
+import { Controller, Post, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { DcinsideWorkflowService } from './dcinside-workflow.service'
-import { AuthGuard, Permissions } from '../../auth/auth.guard'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
 
-@Controller('posting')
+@Controller('dcinside/workflow')
 export class DcinsideWorkflowController {
-  constructor(private readonly workflowService: DcinsideWorkflowService) {}
+  constructor(private readonly dcinsideWorkflowService: DcinsideWorkflowService) {}
 
   @UseGuards(AuthGuard)
   @Permissions('posting')
-  @Post('excel-upload')
+  @Post('upload-excel')
   @UseInterceptors(FileInterceptor('file'))
-  async excelUpload(@UploadedFile() file: any, @Body() body: any, @Req() req: any) {
-    return await this.workflowService.handleExcelUpload(file)
+  async uploadExcel(@UploadedFile() file: any) {
+    try {
+      if (!file) {
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+          message: '파일이 업로드되지 않았습니다.',
+        })
+      }
+
+      const result = await this.dcinsideWorkflowService.handleExcelUpload(file)
+      return result
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+        message: '엑셀 파일 처리 중 오류가 발생했습니다.',
+      })
+    }
   }
 }

@@ -1,13 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Patch, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobQueueProcessor } from './job-queue.processor'
-import { Prisma } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus } from './job.types'
-import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
+import { Prisma } from '@prisma/client'
 
-// 작업 타입 상수
 export const JOB_TYPE = {
   POST: 'post',
   GENERATE_TOPIC: 'generate_topic',

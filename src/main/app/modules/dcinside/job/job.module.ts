@@ -5,9 +5,10 @@ import { ScheduleModule } from '@nestjs/schedule'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { PostJobModule } from '@main/app/modules/dcinside/post-job/post-job.module'
 import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.module'
+import { SettingsModule } from '@main/app/modules/settings/settings.module'
 
 @Module({
-  imports: [ScheduleModule.forRoot(), CommonModule, PostJobModule, JobLogsModule],
+  imports: [ScheduleModule.forRoot(), CommonModule, PostJobModule, JobLogsModule, SettingsModule],
   providers: [JobQueueProcessor],
   controllers: [JobController],
   exports: [JobQueueProcessor],

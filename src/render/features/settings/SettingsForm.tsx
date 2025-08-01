@@ -22,7 +22,7 @@ const SettingsForm: React.FC = () => {
       form.setFieldsValue(settings)
     } catch (error) {
       console.error('앱 설정 로드 실패:', error)
-      message.error('설정을 불러오는데 실패했습니다.')
+      message.error(error.message)
     } finally {
       setLoading(false)
     }
@@ -40,7 +40,7 @@ const SettingsForm: React.FC = () => {
       message.success('설정이 저장되었습니다.')
     } catch (error) {
       console.error('앱 설정 저장 실패:', error)
-      message.error('설정 저장에 실패했습니다.')
+      message.error(error.message)
     } finally {
       setSaving(false)
     }
