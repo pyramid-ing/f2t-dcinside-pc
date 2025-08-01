@@ -25,15 +25,19 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest()
-    const keymasterEndpoint = this.configService.get('keymaster.endpoint')
-    const keymasterService = this.configService.get('keymaster.service')
+    const supabaseEndpoint = this.configService.get('supabase.endpoint')
+    const supabaseService = this.configService.get('supabase.service')
+    const supabaseAnonKey = this.configService.get('supabase.anonKey')
 
     const requiredPermissions = this.reflector.get<string[]>(PERMISSIONS_KEY, context.getHandler()) ?? []
 
     const key = await machineId()
     try {
-      const { data } = await axios.get<LicenseRes>(`${keymasterEndpoint}/auth/${keymasterService}/check-license`, {
+      const { data } = await axios.get<LicenseRes>(`${supabaseEndpoint}/functions/v1/checkLicense/${supabaseService}`, {
         params: { key },
+        headers: {
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
       })
       const isValid = requiredPermissions.every(permission => data.license.permissions.includes(permission))
       if (isValid) {
@@ -46,7 +50,7 @@ export class AuthGuard implements CanActivate {
     } catch (err) {
       // axios 에러인 경우 (네트워크 오류, 서버 오류 등)
       if (axios.isAxiosError(err)) {
-        if (err.response?.status === 403) {
+        if (err.response?.status === 401) {
           throw new CustomHttpException(ErrorCode.LICENSE_INVALID)
         } else if (err.response?.status === 404) {
           throw new CustomHttpException(ErrorCode.LICENSE_NOT_FOUND)
