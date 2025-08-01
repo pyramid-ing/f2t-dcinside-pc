@@ -152,7 +152,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: winsoft-dcinside-${{ matrix.platform }}-v${{ needs.check-version.outputs.current-version }}
+          name: winsoft-dc-${{ matrix.platform }}-v${{ needs.check-version.outputs.current-version }}
           path: dist/electron
 
 
@@ -169,13 +169,13 @@ jobs:
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
-          name: winsoft-dcinside-win-v${{ needs.check-version.outputs.current-version }}
+          name: winsoft-dc-win-v${{ needs.check-version.outputs.current-version }}
           path: ./artifacts/windows
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
-          name: winsoft-dcinside-mac-v${{ needs.check-version.outputs.current-version }}
+          name: winsoft-dc-mac-v${{ needs.check-version.outputs.current-version }}
           path: ./artifacts/macos
 
       - name: Remove duplicate files

@@ -3,8 +3,8 @@
  * @see https://www.electron.build/configuration/configuration
  */
 const config = {
-  appId: 'com.winsoft.dcinside',
-  productName: 'winsoft-dcinside',
+  appId: 'com.winsoft.dc',
+  productName: 'winsoft-dc',
   artifactName: '${productName}-${version}.${ext}',
   directories: {
     output: 'dist/electron',
@@ -14,7 +14,7 @@ const config = {
     {
       provider: 'github',
       owner: 'pyramid-ing',
-      repo: 'f2t-dcinside-pc',
+      repo: 'f2t-dc-pc',
       releaseType: 'release',
     },
   ],
