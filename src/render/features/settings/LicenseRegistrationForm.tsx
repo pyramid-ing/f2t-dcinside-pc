@@ -101,10 +101,6 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
           <Input placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" style={{ fontFamily: 'monospace' }} />
         </Form.Item>
 
-        <Form.Item label="기기 ID">
-          <Input value={machineId} disabled />
-        </Form.Item>
-
         <Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" loading={loading}>
