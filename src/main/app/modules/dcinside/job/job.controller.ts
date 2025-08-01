@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Patch } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Query, Patch, UseGuards } from '@nestjs/common'
 import { JobQueueProcessor } from './job-queue.processor'
 import { Prisma } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus } from './job.types'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
 
 // 작업 타입 상수
 export const JOB_TYPE = {
@@ -73,6 +74,8 @@ export class JobController {
     }
   }
 
+  @UseGuards(AuthGuard)
+  @Permissions('posting')
   @Post('bulk/retry')
   async retryJobs(@Body() body: { jobIds: string[] }) {
     try {
@@ -240,6 +243,8 @@ export class JobController {
     }
   }
 
+  @UseGuards(AuthGuard)
+  @Permissions('posting')
   @Post(':id/retry')
   async retryJob(@Param('id') jobId: string) {
     try {
@@ -336,6 +341,8 @@ export class JobController {
     }
   }
 
+  @UseGuards(AuthGuard)
+  @Permissions('posting')
   @Post(':id/pending-to-request')
   async pendingToRequest(@Param('id') jobId: string) {
     try {

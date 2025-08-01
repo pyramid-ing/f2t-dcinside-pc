@@ -13,6 +13,16 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   // 권한
   [ErrorCode.NO_PERMISSION]: { status: 403, message: () => '권한이 없습니다.' },
 
+  // 라이센스 관련
+  [ErrorCode.LICENSE_INVALID]: { status: 403, message: () => '유효하지 않은 라이센스입니다.' },
+  [ErrorCode.LICENSE_EXPIRED]: { status: 403, message: () => '라이센스가 만료되었습니다.' },
+  [ErrorCode.LICENSE_NOT_FOUND]: { status: 403, message: () => '라이센스를 찾을 수 없습니다.' },
+  [ErrorCode.LICENSE_CHECK_FAILED]: { status: 500, message: () => '라이센스 확인에 실패했습니다.' },
+  [ErrorCode.LICENSE_PERMISSION_DENIED]: {
+    status: 403,
+    message: meta => `권한이 없습니다.${meta?.permissions ? ` (필요한 권한: ${meta.permissions.join(', ')})` : ''}`,
+  },
+
   // 유저 관련
   [ErrorCode.USER_NOT_FOUND]: { status: 404, message: () => '사용자를 찾을 수 없습니다.' },
   [ErrorCode.USER_DUPLICATE]: { status: 409, message: () => '이미 존재하는 사용자입니다.' },
@@ -25,6 +35,7 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.IMAGE_UPLOAD_FAILED]: { status: 500, message: m => m?.message || '이미지 업로드 실패' },
   [ErrorCode.POST_SUBMIT_FAILED]: { status: 500, message: m => m?.message || '글 등록 실패' },
   [ErrorCode.CAPTCHA_FAILED]: { status: 400, message: () => '캡챠 해제 실패' },
+  [ErrorCode.RECAPTCHA_NOT_SUPPORTED]: { status: 400, message: () => 'reCAPTCHA는 지원하지 않습니다.' },
 
   [ErrorCode.JOB_NOT_FOUND]: { status: 404, message: () => '작업을 찾을 수 없습니다.' },
   [ErrorCode.JOB_ID_REQUIRED]: { status: 400, message: () => '작업 ID가 제공되지 않았습니다.' },

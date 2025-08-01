@@ -16,4 +16,4 @@ export async function getExternalIp(page: Page): Promise<string> {
   } catch (e) {
     throw new Error('외부 IP 조회 실패: ' + (e instanceof Error ? e.message : e))
   }
-} 
+}

@@ -388,8 +388,8 @@ const JobTable: React.FC = () => {
       } else {
         message.error('message' in res ? res.message : '재시도 실패')
       }
-    } catch {
-      message.error('재시도 실패')
+    } catch (error: any) {
+      message.error(error?.message || '재시도 실패')
     }
   }
 
@@ -402,8 +402,8 @@ const JobTable: React.FC = () => {
       } else {
         message.error('message' in res ? res.message : '삭제 실패')
       }
-    } catch {
-      message.error('삭제 실패')
+    } catch (error: any) {
+      message.error(error?.message || '삭제 실패')
     }
   }
 

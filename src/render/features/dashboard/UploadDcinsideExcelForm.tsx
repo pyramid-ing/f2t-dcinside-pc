@@ -302,7 +302,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
                 message.warning(`${totalCount}개 중 ${successCount}개 성공, ${totalCount - successCount}개 실패`)
               }
             } catch (e: any) {
-              message.error(e.message || '업로드에 실패했습니다.')
+              message.error(e.response?.data?.message || e.message || '업로드에 실패했습니다.')
             } finally {
               setLoading(false)
             }

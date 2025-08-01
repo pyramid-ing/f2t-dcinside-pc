@@ -55,6 +55,7 @@
     "lodash": "^4.17.21",
     "multer": "2.0.1",
     "nest-winston": "^1.10.2",
+    "node-machine-id": "^1.1.12",
     "openai": "^5.5.1",
     "playwright": "^1.49.1",
     "prisma": "^6.9.0",

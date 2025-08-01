@@ -12,6 +12,7 @@ import { SettingsModule } from './modules/settings/settings.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { JobModule } from '@main/app/modules/dcinside/job/job.module'
+import { AuthModule } from '@main/app/modules/auth/auth.module'
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { JobModule } from '@main/app/modules/dcinside/job/job.module'
     JobModule,
     SettingsModule,
     DcinsideModule,
+    AuthModule,
   ],
   providers: [
     {

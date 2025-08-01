@@ -13,6 +13,13 @@ export enum ErrorCode {
   // ✅ 권한 (3000번대)
   NO_PERMISSION = 3001,
 
+  // ✅ 라이센스 관련 (3500번대)
+  LICENSE_INVALID = 3501,
+  LICENSE_EXPIRED = 3502,
+  LICENSE_NOT_FOUND = 3503,
+  LICENSE_CHECK_FAILED = 3504,
+  LICENSE_PERMISSION_DENIED = 3505,
+
   // ✅ 디시인사이드 포스팅/이미지/캡챠/갤러리 관련 (4000번대)
   POST_PARAM_INVALID = 4001,
   GALLERY_TYPE_UNSUPPORTED = 4002,
