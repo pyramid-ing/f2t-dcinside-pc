@@ -14,7 +14,7 @@ const config = {
     {
       provider: 'github',
       owner: 'pyramid-ing',
-      repo: 'f2t-dc-pc',
+      repo: 'f2t-dcinside-pc',
       releaseType: 'release',
     },
   ],
