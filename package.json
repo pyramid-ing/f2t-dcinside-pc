@@ -107,7 +107,10 @@
     "onlyBuiltDependencies": [
       "@nestjs/core",
       "electron"
-    ]
+    ],
+    "overrides": {
+      "pnpm": "10.12.1"
+    }
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged"
