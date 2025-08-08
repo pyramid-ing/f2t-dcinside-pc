@@ -199,7 +199,7 @@ export class DcinsidePostingService {
     try {
       await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
       await page.waitForSelector('#login_box', { timeout: 10000 })
-      const userName = await page.waitForSelector('#login_box .user_name', { timeout: 5000 }).catch(() => null)
+      const userName = await page.waitForSelector('#login_box .user_name', { timeout: 5000 })
       return !!userName
     } catch {
       return false
@@ -402,6 +402,7 @@ export class DcinsidePostingService {
   private async selectHeadtext(page: Page, headtext: string): Promise<void> {
     try {
       await page.waitForSelector('.write_subject .subject_list li', { timeout: 60_000 })
+      await sleep(500)
       // 말머리 리스트에서 일치하는 항목 찾아서 클릭
       const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.write_subject .subject_list li'))
@@ -414,6 +415,7 @@ export class DcinsidePostingService {
         }
         return false
       }, headtext)
+      await sleep(500)
 
       if (!found) {
         this.logger.warn(`말머리 "${headtext}"를 찾을 수 없습니다.`)
@@ -631,20 +633,20 @@ export class DcinsidePostingService {
   private async inputNickname(page: Page, nickname: string): Promise<void> {
     try {
       // 닉네임 입력 영역이 표시될 때까지 대기
-      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 60_000 })
+      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 30_000 })
 
       // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
-      const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 5000 }).catch(() => null)
+      const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 10_000 })
       if (xBtn) {
         await page.click('#btn_gall_nick_name_x')
         await sleep(500)
       }
 
       // 닉네임 입력 필드 대기 및 활성화
-      await page.waitForSelector('#name', { timeout: 60_000 })
-      const nameElement = await page.waitForSelector('#name', { timeout: 5000 }).catch(() => null)
+      const nameElement = await page.waitForSelector('#name', { timeout: 10_000 })
       if (nameElement) {
         await page.click('#name')
+        await sleep(500)
         // 기존 내용 삭제 후 새 닉네임 입력
         await page.locator('#name').evaluate((el: HTMLInputElement, nickname: string) => {
           el.value = ''
@@ -652,6 +654,7 @@ export class DcinsidePostingService {
           el.dispatchEvent(new Event('input', { bubbles: true }))
           el.dispatchEvent(new Event('change', { bubbles: true }))
         }, nickname)
+        await sleep(500)
 
         this.logger.log(`닉네임 입력 완료: ${nickname}`)
       }
