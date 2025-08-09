@@ -15,3 +15,19 @@ export const updateSettings = async (settings: Partial<Settings>): Promise<Setti
   const response = await api.post('/settings', settings)
   return response.data
 }
+
+export const uploadProxyExcel = async (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await api.post('/settings/proxies/upload-excel', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+  return res.data as { success: boolean; count?: number; message?: string }
+}
+
+export const downloadProxySampleExcel = async (): Promise<Blob> => {
+  const res = await api.get('/settings/proxies/sample-excel', { responseType: 'blob' })
+  return res.data as Blob
+}

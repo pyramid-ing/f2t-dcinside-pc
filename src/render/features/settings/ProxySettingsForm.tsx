@@ -1,7 +1,9 @@
 import type { Settings } from '../../types/settings'
-import { Button, Form, Input, Modal, Radio, message, Space, Switch } from 'antd'
+import { Button, Form, Input, Modal, Radio, Upload, message, Space, Switch } from 'antd'
+import { UploadOutlined } from '@ant-design/icons'
 import React, { useEffect, useState } from 'react'
 import { getSettings, updateSettings } from '@render/api'
+import { uploadProxyExcel, downloadProxySampleExcel } from '@render/api'
 
 const ProxySettingsForm: React.FC = () => {
   const [form] = Form.useForm()
@@ -11,6 +13,10 @@ const ProxySettingsForm: React.FC = () => {
   const [editingProxy, setEditingProxy] = useState<any | null>(null)
   const proxies: any[] = Form.useWatch('proxies', form) || []
   const [proxyForm] = Form.useForm()
+  const [uploading, setUploading] = useState(false)
+  const [excelFile, setExcelFile] = useState<File | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -86,6 +92,79 @@ const ProxySettingsForm: React.FC = () => {
     form.setFieldsValue({ proxies: next })
   }
 
+  const beforeUpload = (file: File) => {
+    const isExcel = file.type.includes('sheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+    if (!isExcel) {
+      message.error('엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.')
+      return Upload.LIST_IGNORE
+    }
+    setExcelFile(file)
+    return false
+  }
+
+  const handleUploadExcel = async () => {
+    if (!excelFile) {
+      message.warning('엑셀 파일을 선택해주세요.')
+      return
+    }
+    try {
+      setUploading(true)
+      const res = await uploadProxyExcel(excelFile)
+      if (res.success) {
+        message.success(`프록시 ${res.count ?? 0}건이 업로드되었습니다.`)
+        await loadSettings()
+        setExcelFile(null)
+      } else {
+        message.error(res.message || '업로드에 실패했습니다.')
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.message || e.message || '업로드에 실패했습니다.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDownloadSample = async () => {
+    try {
+      setDownloading(true)
+      const blob = await downloadProxySampleExcel()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'proxy-sample.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      message.error(e.message || '예시 엑셀 다운로드 실패')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleClearProxies = async () => {
+    Modal.confirm({
+      title: '프록시 목록 초기화',
+      content: '등록된 프록시를 모두 삭제하시겠습니까?',
+      okText: '삭제',
+      okType: 'danger',
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          setClearing(true)
+          await updateSettings({ proxies: [] })
+          form.setFieldsValue({ proxies: [] })
+          message.success('프록시 목록을 초기화했습니다.')
+        } catch (e: any) {
+          message.error(e.response?.data?.message || e.message || '초기화에 실패했습니다.')
+        } finally {
+          setClearing(false)
+        }
+      },
+    })
+  }
+
   return (
     <div>
       <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>프록시 설정</h3>
@@ -109,6 +188,20 @@ const ProxySettingsForm: React.FC = () => {
         </Form.Item>
         <Form.Item label="프록시 목록">
           <Button onClick={() => handleAddOrEditProxy()}>프록시 추가</Button>
+          <div style={{ marginTop: 10, marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Upload beforeUpload={beforeUpload} maxCount={1} accept=".xlsx,.xls">
+              <Button icon={<UploadOutlined />}>엑셀 선택</Button>
+            </Upload>
+            <Button type="primary" onClick={handleUploadExcel} loading={uploading} disabled={!excelFile}>
+              엑셀 업로드로 등록
+            </Button>
+            <Button onClick={handleDownloadSample} loading={downloading}>
+              예시 엑셀 다운로드
+            </Button>
+            <Button danger onClick={handleClearProxies} loading={clearing}>
+              프록시 초기화
+            </Button>
+          </div>
           <div style={{ marginTop: 10 }}>
             {proxies.length === 0 && <div style={{ color: '#888' }}>등록된 프록시가 없습니다.</div>}
             {proxies.map((proxy, idx) => (
@@ -155,9 +248,6 @@ const ProxySettingsForm: React.FC = () => {
           <Space>
             <Button type="primary" htmlType="submit" loading={saving}>
               저장
-            </Button>
-            <Button onClick={loadSettings} disabled={saving || loading}>
-              초기화
             </Button>
           </Space>
         </Form.Item>

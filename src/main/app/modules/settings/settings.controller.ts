@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Logger, Post } from '@nestjs/common'
+import { Body, Controller, Get, Header, Logger, Post, Res, UploadedFile, UseInterceptors } from '@nestjs/common'
+import { FileInterceptor } from '@nestjs/platform-express'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
+import type { Response } from 'express'
 
 @Controller('settings')
 export class SettingsController {
@@ -20,5 +22,19 @@ export class SettingsController {
   @Post('validate-openai-key')
   async validateOpenAIKey(@Body() body: { apiKey: string }) {
     return this.settingsService.validateOpenAIKey(body.apiKey)
+  }
+
+  @Post('proxies/upload-excel')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadProxyExcel(@UploadedFile() file: any) {
+    return this.settingsService.importProxiesFromExcel(file)
+  }
+
+  @Get('proxies/sample-excel')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  async downloadProxySample(@Res() res: Response) {
+    const { buffer, filename } = await this.settingsService.generateProxySampleExcel()
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    return res.send(buffer)
   }
 }
