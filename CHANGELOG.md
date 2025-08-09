@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 수정된 버그를 여기에 추가
 
+## [1.7.0]
+- 대량 프록시등록하게만들기 → 엑셀 업로드
+- 닉네임 최적화
+
 ## [1.6.4]
 - 닉네임, 말머리 간혈적 오류 안정성 향상
 
