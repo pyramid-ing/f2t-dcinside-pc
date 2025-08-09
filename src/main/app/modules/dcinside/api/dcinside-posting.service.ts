@@ -638,7 +638,7 @@ export class DcinsidePostingService {
       // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
       const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 10_000 })
       if (xBtn) {
-        await page.click('#btn_gall_nick_name_x')
+        await xBtn.click()
         await sleep(500)
       }
 
@@ -649,7 +649,6 @@ export class DcinsidePostingService {
         await sleep(500)
         // 기존 내용 삭제 후 새 닉네임 입력
         await page.locator('#name').evaluate((el: HTMLInputElement, nickname: string) => {
-          el.value = ''
           el.value = nickname
           el.dispatchEvent(new Event('input', { bubbles: true }))
           el.dispatchEvent(new Event('change', { bubbles: true }))
