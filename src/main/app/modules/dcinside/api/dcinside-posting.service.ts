@@ -148,24 +148,19 @@ export class DcinsidePostingService {
       }
     }
     // fallback: 프록시 없이 재시도
-    try {
-      const browser = await chromium.launch({
-        headless: !settings.showBrowserWindow,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-      })
-      const context = await browser.newContext({
-        viewport: { width: 1200, height: 1142 },
-        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-      })
-      await context.addInitScript(() => {
-        window.sessionStorage.clear()
-      })
-      if (lastError) this.logger.warn('프록시 없이 브라우저를 재시도합니다.')
-      return { browser, context, proxyInfo: null }
-    } catch (err) {
-      this.logger.error('브라우저 실행 실패: ' + err.message)
-      throw err
-    }
+    const browser = await chromium.launch({
+      headless: !settings.showBrowserWindow,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+    })
+    const context = await browser.newContext({
+      viewport: { width: 1200, height: 1142 },
+      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+    })
+    await context.addInitScript(() => {
+      window.sessionStorage.clear()
+    })
+    if (lastError) this.logger.warn('프록시 없이 브라우저를 재시도합니다.')
+    return { browser, context, proxyInfo: null }
   }
 
   async login(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {
@@ -631,35 +626,28 @@ export class DcinsidePostingService {
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
-    try {
-      // 닉네임 입력 영역이 표시될 때까지 대기
-      await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 30_000 })
+    // 닉네임 입력 영역이 표시될 때까지 대기
+    await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 30_000 })
 
-      // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
-      const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 10_000 })
-      if (xBtn) {
-        await xBtn.click()
-        await sleep(500)
-      }
-
-      // 닉네임 입력 필드 대기 및 활성화
-      const nameElement = await page.waitForSelector('#name', { timeout: 10_000 })
-      if (nameElement) {
-        await page.click('#name')
-        await sleep(500)
-        // 기존 내용 삭제 후 새 닉네임 입력
-        await page.locator('#name').evaluate((el: HTMLInputElement, nickname: string) => {
-          el.value = nickname
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-          el.dispatchEvent(new Event('change', { bubbles: true }))
-        }, nickname)
-        await sleep(500)
-
-        this.logger.log(`닉네임 입력 완료: ${nickname}`)
-      }
-    } catch (error) {
-      this.logger.warn(`닉네임 입력 중 오류 (무시하고 계속): ${error.message}`)
+    // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
+    const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 10_000 })
+    if (xBtn) {
+      await xBtn.click()
+      await sleep(500)
     }
+
+    await page.waitForSelector('#name', { timeout: 60_000 })
+    await page.evaluate(_nickname => {
+      const $nickname = document.querySelector('#name') as HTMLTextAreaElement
+
+      if ($nickname) {
+        $nickname.value = _nickname
+        $nickname.dispatchEvent(new Event('input', { bubbles: true }))
+        $nickname.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+    }, nickname)
+
+    this.logger.log(`닉네임 입력 완료: ${nickname}`)
   }
 
   private async submitPostAndHandleErrors(page: Page): Promise<void> {
@@ -904,81 +892,77 @@ export class DcinsidePostingService {
     page: Page,
     jobId: string,
   ): Promise<{ success: boolean; message: string; url?: string }> {
-    try {
-      // 0. PostJob 데이터 파싱
-      const parsedPostJob = this.parsePostJobData(postJob)
-      await this.jobLogsService.createJobLog(jobId, 'PostJob 데이터 파싱 완료')
+    // 0. PostJob 데이터 파싱
+    const parsedPostJob = this.parsePostJobData(postJob)
+    await this.jobLogsService.createJobLog(jobId, 'PostJob 데이터 파싱 완료')
 
-      // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
-      const appSettings = await this.settingsService.getSettings()
-      await this.jobLogsService.createJobLog(jobId, '앱 설정 가져오기 완료')
+    // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
+    const appSettings = await this.settingsService.getSettings()
+    await this.jobLogsService.createJobLog(jobId, '앱 설정 가져오기 완료')
 
-      // 1. 갤러리 정보 추출 (id와 타입)
-      const galleryInfo = this.extractGalleryInfo(parsedPostJob.galleryUrl)
-      await this.jobLogsService.createJobLog(
-        jobId,
-        `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
-      )
+    // 1. 갤러리 정보 추출 (id와 타입)
+    const galleryInfo = this.extractGalleryInfo(parsedPostJob.galleryUrl)
+    await this.jobLogsService.createJobLog(
+      jobId,
+      `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
+    )
 
-      await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
+    await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
 
-      // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
-      await this.navigateToWritePage(page, galleryInfo)
-      await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
+    // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
+    await this.navigateToWritePage(page, galleryInfo)
+    await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+    // 3. 입력폼 채우기
+    await this.inputTitle(page, parsedPostJob.title)
+    await this.jobLogsService.createJobLog(jobId, `제목 입력 완료: "${parsedPostJob.title}"`)
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+    if (parsedPostJob.headtext) {
+      await this.selectHeadtext(page, parsedPostJob.headtext)
+      await this.jobLogsService.createJobLog(jobId, `말머리 선택 완료: "${parsedPostJob.headtext}"`)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-
-      // 3. 입력폼 채우기
-      await this.inputTitle(page, parsedPostJob.title)
-      await this.jobLogsService.createJobLog(jobId, `제목 입력 완료: "${parsedPostJob.title}"`)
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-
-      if (parsedPostJob.headtext) {
-        await this.selectHeadtext(page, parsedPostJob.headtext)
-        await this.jobLogsService.createJobLog(jobId, `말머리 선택 완료: "${parsedPostJob.headtext}"`)
-        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      }
-
-      await this.inputContent(page, parsedPostJob.contentHtml)
-      await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-
-      // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
-      if (parsedPostJob.imagePaths && parsedPostJob.imagePaths.length > 0) {
-        await this.jobLogsService.createJobLog(jobId, `이미지 업로드 시작: ${parsedPostJob.imagePaths.length}개 이미지`)
-        await this.uploadImages(page, browserContext, parsedPostJob.imagePaths, parsedPostJob.imagePosition)
-        await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
-      }
-      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-
-      if (parsedPostJob.nickname) {
-        await this.inputNickname(page, parsedPostJob.nickname)
-        await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
-        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      }
-
-      if (parsedPostJob.password) {
-        await this.inputPassword(page, parsedPostJob.password)
-        await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
-        await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
-      }
-
-      // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
-      await this.jobLogsService.createJobLog(jobId, '캡챠 처리 및 글 등록 시작')
-      await this.submitPostAndHandleErrors(page)
-      await this.jobLogsService.createJobLog(jobId, '글 등록 완료')
-
-      // 글 등록 완료 후 목록 페이지로 이동 대기
-      await this.waitForListPageNavigation(page, galleryInfo)
-      await this.jobLogsService.createJobLog(jobId, '목록 페이지 이동 완료')
-
-      // 글 등록이 성공하여 목록으로 이동했을 시점
-      // 글 목록으로 이동 후, 최신글 URL 추출 시도
-      const finalUrl = await this.extractPostUrl(page, parsedPostJob.title)
-      await this.jobLogsService.createJobLog(jobId, `최종 URL 추출 완료: ${finalUrl}`)
-
-      return { success: true, message: '글 등록 성공', url: finalUrl }
-    } catch (e) {
-      throw e
     }
+
+    await this.inputContent(page, parsedPostJob.contentHtml)
+    await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+    // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
+    if (parsedPostJob.imagePaths && parsedPostJob.imagePaths.length > 0) {
+      await this.jobLogsService.createJobLog(jobId, `이미지 업로드 시작: ${parsedPostJob.imagePaths.length}개 이미지`)
+      await this.uploadImages(page, browserContext, parsedPostJob.imagePaths, parsedPostJob.imagePosition)
+      await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
+    }
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+
+    if (parsedPostJob.nickname) {
+      await this.inputNickname(page, parsedPostJob.nickname)
+      await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    }
+
+    if (parsedPostJob.password) {
+      await this.inputPassword(page, parsedPostJob.password)
+      await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    }
+
+    // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
+    await this.jobLogsService.createJobLog(jobId, '캡챠 처리 및 글 등록 시작')
+    await this.submitPostAndHandleErrors(page)
+    await this.jobLogsService.createJobLog(jobId, '글 등록 완료')
+
+    // 글 등록 완료 후 목록 페이지로 이동 대기
+    await this.waitForListPageNavigation(page, galleryInfo)
+    await this.jobLogsService.createJobLog(jobId, '목록 페이지 이동 완료')
+
+    // 글 등록이 성공하여 목록으로 이동했을 시점
+    // 글 목록으로 이동 후, 최신글 URL 추출 시도
+    const finalUrl = await this.extractPostUrl(page, parsedPostJob.title)
+    await this.jobLogsService.createJobLog(jobId, `최종 URL 추출 완료: ${finalUrl}`)
+
+    return { success: true, message: '글 등록 성공', url: finalUrl }
   }
 }
