@@ -626,24 +626,27 @@ export class DcinsidePostingService {
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
-    // 닉네임 입력 영역이 표시될 때까지 대기
-    await page.waitForSelector('#gall_nick_name', { state: 'visible', timeout: 30_000 })
+    // 닉네임 입력 영역 또는 입력창이 표시될 때까지 대기
+    await page.waitForSelector('#gall_nick_name, #name', { state: 'visible', timeout: 30_000 })
 
-    // 닉네임 입력창 X 버튼이 있으면 클릭하여 활성화
-    const xBtn = await page.waitForSelector('#btn_gall_nick_name_x', { timeout: 10_000 })
-    if (xBtn) {
-      await xBtn.click()
-      await sleep(500)
+    // 기본닉네임 해제(X 버튼) - 존재할 때만 클릭 (없으면 무시)
+    try {
+      const xBtnLocator = page.locator('#btn_gall_nick_name_x')
+      if ((await xBtnLocator.count()) > 0) {
+        await xBtnLocator.click()
+        await sleep(500)
+      }
+    } catch (_) {
+      // X 버튼이 없거나 클릭 실패 시 무시하고 계속 진행
     }
 
-    await page.waitForSelector('#name', { timeout: 60_000 })
+    await page.waitForSelector('#name', { state: 'visible', timeout: 60_000 })
     await page.evaluate(_nickname => {
-      const $nickname = document.querySelector('#name') as HTMLTextAreaElement
-
-      if ($nickname) {
-        $nickname.value = _nickname
-        $nickname.dispatchEvent(new Event('input', { bubbles: true }))
-        $nickname.dispatchEvent(new Event('change', { bubbles: true }))
+      const nicknameInput = document.querySelector('#name') as HTMLInputElement | HTMLTextAreaElement | null
+      if (nicknameInput) {
+        nicknameInput.value = _nickname
+        nicknameInput.dispatchEvent(new Event('input', { bubbles: true }))
+        nicknameInput.dispatchEvent(new Event('change', { bubbles: true }))
       }
     }, nickname)
 
