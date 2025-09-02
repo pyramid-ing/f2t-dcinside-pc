@@ -6,9 +6,10 @@ import { DcinsideApiModule } from '@main/app/modules/dcinside/api/api.module'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { CommonModule } from '@main/app/modules/common/common.module'
+import { UtilModule } from '@main/app/modules/util/util.module'
 
 @Module({
-  imports: [JobLogsModule, DcinsideApiModule, CommonModule],
+  imports: [JobLogsModule, DcinsideApiModule, CommonModule, UtilModule],
   controllers: [PostJobController],
   providers: [PostJobService, SettingsService, CookieService],
   exports: [PostJobService],

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { Settings } from '@main/app/modules/settings/settings.types'
+import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
 import { OpenAI } from 'openai'
 import * as XLSX from 'xlsx'
 
@@ -25,6 +25,11 @@ export class SettingsService {
       proxies: [],
       proxyChangeMethod: 'random',
       proxyEnabled: false,
+      ipMode: IpMode.NONE,
+      tethering: {
+        attempts: 3,
+        waitSeconds: 3,
+      },
     }
     const merged = {
       ...defaultSettings,

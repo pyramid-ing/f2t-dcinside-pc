@@ -30,4 +30,22 @@ export interface Settings {
   proxyChangeMethod?: 'random' | 'sequential' | 'fixed'
   /** 프록시 사용 여부 */
   proxyEnabled?: boolean
+
+  /**
+   * IP 변경 모드 (none | proxy | tethering)
+   */
+  ipMode?: IpMode
+
+  /** 테더링 설정 */
+  tethering?: {
+    adbPath?: string
+    attempts?: number
+    waitSeconds?: number
+  }
+}
+
+export enum IpMode {
+  NONE = 'none',
+  PROXY = 'proxy',
+  TETHERING = 'tethering',
 }

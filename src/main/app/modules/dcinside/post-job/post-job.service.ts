@@ -11,6 +11,8 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
 import { getExternalIp } from '@main/app/utils/ip'
+import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { IpMode } from '@main/app/modules/settings/settings.types'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -22,6 +24,7 @@ export class PostJobService implements JobProcessor {
     private readonly postingService: DcinsidePostingService,
     private readonly settingsService: SettingsService,
     private readonly cookieService: CookieService,
+    private readonly tetheringService: TetheringService,
   ) {}
 
   canProcess(job: any): boolean {
@@ -37,6 +40,23 @@ export class PostJobService implements JobProcessor {
     })
 
     const settings = await this.settingsService.getSettings()
+
+    // 테더링 모드면 포스팅 전 IP 변경
+    if (settings?.ipMode === IpMode.TETHERING) {
+      try {
+        const prev = this.tetheringService.getCurrentIp()
+        await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
+        const changed = await this.tetheringService.checkIpChanged(prev, {
+          attempts: settings?.tethering?.attempts ?? 3,
+          waitSeconds: settings?.tethering?.waitSeconds ?? 3,
+          adbPath: settings?.tethering?.adbPath,
+        })
+        await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
+      } catch (e: any) {
+        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
+        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+      }
+    }
 
     const { browser, context, proxyInfo } = await this.postingService.launch()
     // 프록시 정보 로깅

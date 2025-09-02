@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import LicenseRegistrationForm from './LicenseRegistrationForm'
 import OpenAISettingsForm from './OpenAISettingsForm'
 import SettingsForm from './SettingsForm'
-import ProxySettingsForm from './ProxySettingsForm'
+import IpSettingsForm from './ip/IpSettingsForm'
 
 const SettingsTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState('app')
@@ -36,9 +36,9 @@ const SettingsTabs: React.FC = () => {
           children: <SettingsForm />,
         },
         {
-          key: 'proxy',
-          label: '프록시 설정',
-          children: <ProxySettingsForm />,
+          key: 'ip',
+          label: 'IP 설정',
+          children: <IpSettingsForm />,
         },
         {
           key: 'openai',

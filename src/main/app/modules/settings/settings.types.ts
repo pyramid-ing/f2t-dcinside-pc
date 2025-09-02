@@ -30,4 +30,27 @@ export interface Settings {
   proxyChangeMethod?: 'random' | 'sequential' | 'fixed'
   /** 프록시 사용 여부 */
   proxyEnabled?: boolean
+
+  /**
+   * IP 변경 모드
+   * - none: 변경 안 함
+   * - proxy: 프록시 사용
+   * - tethering: 안드로이드 USB 테더링으로 변경
+   */
+  ipMode?: IpMode
+
+  /**
+   * 테더링 설정
+   */
+  tethering?: {
+    adbPath?: string // adb 경로 (선택)
+    attempts?: number // 변경 재시도 횟수 (기본 3)
+    waitSeconds?: number // 재시도 대기 (초) (기본 3)
+  }
+}
+
+export enum IpMode {
+  NONE = 'none',
+  PROXY = 'proxy',
+  TETHERING = 'tethering',
 }

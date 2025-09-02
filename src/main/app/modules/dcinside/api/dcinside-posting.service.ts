@@ -14,6 +14,7 @@ import UserAgent from 'user-agents'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { getProxyByMethod } from '@main/app/modules/util/browser-manager.service'
+import { IpMode } from '@main/app/modules/settings/settings.types'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
 
@@ -115,7 +116,8 @@ export class DcinsidePostingService {
 
     const settings = await this.settingsService.getSettings()
 
-    if (settings?.proxyEnabled && settings?.proxies && settings.proxies.length > 0) {
+    // ipMode가 proxy일 때만 프록시 적용
+    if (settings?.ipMode === IpMode.PROXY && settings?.proxies && settings.proxies.length > 0) {
       const method = settings.proxyChangeMethod || 'random'
       const { proxy } = getProxyByMethod(settings.proxies, method)
       if (proxy) {
@@ -159,7 +161,7 @@ export class DcinsidePostingService {
     await context.addInitScript(() => {
       window.sessionStorage.clear()
     })
-    if (lastError) this.logger.warn('프록시 없이 브라우저를 재시도합니다.')
+    if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
     return { browser, context, proxyInfo: null }
   }
 

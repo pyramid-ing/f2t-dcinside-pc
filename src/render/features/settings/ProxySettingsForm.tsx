@@ -1,12 +1,16 @@
 import type { Settings } from '../../types/settings'
-import { Button, Form, Input, Modal, Radio, Upload, message, Space, Switch } from 'antd'
+import type { FormInstance } from 'antd'
+import { Button, Form, Input, Modal, Radio, Upload, message } from 'antd'
 import { UploadOutlined } from '@ant-design/icons'
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { getSettings, updateSettings } from '@render/api'
 import { uploadProxyExcel, downloadProxySampleExcel } from '@render/api'
 
-const ProxySettingsForm: React.FC = () => {
-  const [form] = Form.useForm()
+interface Props {
+  form: FormInstance<Partial<Settings>>
+}
+
+const ProxySettingsForm: React.FC<Props> = ({ form }) => {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [proxyModalOpen, setProxyModalOpen] = useState(false)
@@ -18,9 +22,7 @@ const ProxySettingsForm: React.FC = () => {
   const [downloading, setDownloading] = useState(false)
   const [clearing, setClearing] = useState(false)
 
-  useEffect(() => {
-    loadSettings()
-  }, [])
+  // 부모 폼 컨텍스트에서 사용됨. 초기 로드는 부모에서 수행.
 
   const loadSettings = async () => {
     try {
@@ -35,22 +37,7 @@ const ProxySettingsForm: React.FC = () => {
     }
   }
 
-  const handleSave = async (values: Settings) => {
-    try {
-      setSaving(true)
-      const settings = await getSettings()
-      const result = await updateSettings({
-        ...settings,
-        ...values,
-      })
-      message.success('프록시 설정이 저장되었습니다.')
-    } catch (error) {
-      console.error('프록시 설정 저장 실패:', error)
-      message.error('프록시 설정 저장에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const handleSave = undefined
 
   // 프록시 추가/수정 핸들러
   const handleAddOrEditProxy = (proxy?: any, idx?: number) => {
@@ -167,91 +154,72 @@ const ProxySettingsForm: React.FC = () => {
 
   return (
     <div>
-      <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>프록시 설정</h3>
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSave}
-        initialValues={{
-          proxyChangeMethod: 'random',
-        }}
+      <h3 style={{ marginBottom: '20px', fontSize: '16px', fontWeight: 600 }}>프록시설정</h3>
+      <Form.Item label="프록시 변경 방식" name="proxyChangeMethod" initialValue="random">
+        <Radio.Group>
+          <Radio value="random">랜덤</Radio>
+          <Radio value="sequential">순차</Radio>
+          <Radio value="fixed">고정</Radio>
+        </Radio.Group>
+      </Form.Item>
+      <Form.Item label="프록시 목록">
+        <Button onClick={() => handleAddOrEditProxy()}>프록시 추가</Button>
+        <div style={{ marginTop: 10, marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Upload beforeUpload={beforeUpload} maxCount={1} accept=".xlsx,.xls">
+            <Button icon={<UploadOutlined />}>엑셀 선택</Button>
+          </Upload>
+          <Button type="primary" onClick={handleUploadExcel} loading={uploading} disabled={!excelFile}>
+            엑셀 업로드로 등록
+          </Button>
+          <Button onClick={handleDownloadSample} loading={downloading}>
+            예시 엑셀 다운로드
+          </Button>
+          <Button danger onClick={handleClearProxies} loading={clearing}>
+            프록시 초기화
+          </Button>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          {proxies.length === 0 && <div style={{ color: '#888' }}>등록된 프록시가 없습니다.</div>}
+          {proxies.map((proxy, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ flex: 1 }}>
+                {proxy.ip}:{proxy.port} {proxy.id && `(ID: ${proxy.id})`}
+              </span>
+              <Button size="small" onClick={() => handleAddOrEditProxy(proxy, idx)} style={{ marginRight: 4 }}>
+                수정
+              </Button>
+              <Button size="small" danger onClick={() => handleDeleteProxy(idx)}>
+                삭제
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Form.Item>
+      <Form.Item name="proxies" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
+
+      <Modal
+        open={proxyModalOpen}
+        onOk={handleProxyModalOk}
+        onCancel={handleProxyModalCancel}
+        title={editingProxy?.idx !== undefined ? '프록시 수정' : '프록시 추가'}
       >
-        <Form.Item label="프록시 사용" name="proxyEnabled" valuePropName="checked" initialValue={false}>
-          <Switch checkedChildren="사용" unCheckedChildren="미사용" />
-        </Form.Item>
-        <Form.Item label="프록시 변경 방식" name="proxyChangeMethod" initialValue="random">
-          <Radio.Group>
-            <Radio value="random">랜덤</Radio>
-            <Radio value="sequential">순차</Radio>
-            <Radio value="fixed">고정</Radio>
-          </Radio.Group>
-        </Form.Item>
-        <Form.Item label="프록시 목록">
-          <Button onClick={() => handleAddOrEditProxy()}>프록시 추가</Button>
-          <div style={{ marginTop: 10, marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Upload beforeUpload={beforeUpload} maxCount={1} accept=".xlsx,.xls">
-              <Button icon={<UploadOutlined />}>엑셀 선택</Button>
-            </Upload>
-            <Button type="primary" onClick={handleUploadExcel} loading={uploading} disabled={!excelFile}>
-              엑셀 업로드로 등록
-            </Button>
-            <Button onClick={handleDownloadSample} loading={downloading}>
-              예시 엑셀 다운로드
-            </Button>
-            <Button danger onClick={handleClearProxies} loading={clearing}>
-              프록시 초기화
-            </Button>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            {proxies.length === 0 && <div style={{ color: '#888' }}>등록된 프록시가 없습니다.</div>}
-            {proxies.map((proxy, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ flex: 1 }}>
-                  {proxy.ip}:{proxy.port} {proxy.id && `(ID: ${proxy.id})`}
-                </span>
-                <Button size="small" onClick={() => handleAddOrEditProxy(proxy, idx)} style={{ marginRight: 4 }}>
-                  수정
-                </Button>
-                <Button size="small" danger onClick={() => handleDeleteProxy(idx)}>
-                  삭제
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Form.Item>
-        <Form.Item name="proxies" style={{ display: 'none' }}>
-          <Input />
-        </Form.Item>
-        {/* 프록시 추가/수정 모달 */}
-        <Modal
-          open={proxyModalOpen}
-          onOk={handleProxyModalOk}
-          onCancel={handleProxyModalCancel}
-          title={editingProxy?.idx !== undefined ? '프록시 수정' : '프록시 추가'}
-        >
-          <Form form={proxyForm} layout="vertical">
-            <Form.Item label="IP" name="proxy_ip" rules={[{ required: true, message: 'IP를 입력하세요.' }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item label="Port" name="proxy_port" rules={[{ required: true, message: '포트를 입력하세요.' }]}>
-              <Input type="number" />
-            </Form.Item>
-            <Form.Item label="ID" name="proxy_id">
-              <Input />
-            </Form.Item>
-            <Form.Item label="PW" name="proxy_pw">
-              <Input />
-            </Form.Item>
-          </Form>
-        </Modal>
-        <Form.Item>
-          <Space>
-            <Button type="primary" htmlType="submit" loading={saving}>
-              저장
-            </Button>
-          </Space>
-        </Form.Item>
-      </Form>
+        <Form form={proxyForm} layout="vertical">
+          <Form.Item label="IP" name="proxy_ip" rules={[{ required: true, message: 'IP를 입력하세요.' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item label="Port" name="proxy_port" rules={[{ required: true, message: '포트를 입력하세요.' }]}>
+            <Input type="number" />
+          </Form.Item>
+          <Form.Item label="ID" name="proxy_id">
+            <Input />
+          </Form.Item>
+          <Form.Item label="PW" name="proxy_pw">
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }
