@@ -290,6 +290,9 @@ export class DcinsidePostingService {
     const captchaImg = page.locator('#kcaptcha')
     const captchaCount = await captchaImg.count()
     if (captchaCount === 0) return
+    // 캡챠 클릭해서 리프레쉬
+    await captchaImg.click()
+    await sleep(2000)
 
     const captchaBase64 = await captchaImg.screenshot({ type: 'png' })
     const captchaBase64String = captchaBase64.toString('base64')
@@ -303,7 +306,7 @@ export class DcinsidePostingService {
     const answer = await retry(
       async () => {
         const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-5',
           messages: [
             {
               role: 'system',
@@ -334,8 +337,21 @@ export class DcinsidePostingService {
               ],
             },
           ],
-          temperature: 0,
-          max_completion_tokens: 50,
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'captcha_schema',
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  answer: { type: 'string' },
+                },
+                required: ['answer'],
+              },
+              strict: true,
+            },
+          },
         })
 
         const responseContent = response.choices[0]?.message?.content

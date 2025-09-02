@@ -56,7 +56,7 @@
     "multer": "2.0.1",
     "nest-winston": "^1.10.2",
     "node-machine-id": "^1.1.12",
-    "openai": "^5.5.1",
+    "openai": "^5.17.0",
     "playwright": "^1.49.1",
     "prisma": "^6.9.0",
     "react": "^18.3.1",
