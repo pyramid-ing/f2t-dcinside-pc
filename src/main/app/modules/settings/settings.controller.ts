@@ -2,12 +2,16 @@ import { Body, Controller, Get, Header, Logger, Post, Res, UploadedFile, UseInte
 import { FileInterceptor } from '@nestjs/platform-express'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import type { Response } from 'express'
+import { TetheringService } from '@main/app/modules/util/tethering.service'
 
 @Controller('settings')
 export class SettingsController {
   private readonly logger = new Logger(SettingsController.name)
 
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly tetheringService: TetheringService,
+  ) {}
 
   @Get()
   async getSettings() {
@@ -36,5 +40,11 @@ export class SettingsController {
     const { buffer, filename } = await this.settingsService.generateProxySampleExcel()
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
     return res.send(buffer)
+  }
+
+  @Post('tethering/check-connection')
+  async checkTetheringConnection(@Body() body: { adbPath?: string }) {
+    const result = this.tetheringService.checkAdbConnectionStatus(body?.adbPath)
+    return result
   }
 }

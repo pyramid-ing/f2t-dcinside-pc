@@ -31,3 +31,14 @@ export const downloadProxySampleExcel = async (): Promise<Blob> => {
   const res = await api.get('/settings/proxies/sample-excel', { responseType: 'blob' })
   return res.data as Blob
 }
+
+export const checkTetheringConnection = async (
+  adbPath?: string,
+): Promise<{
+  adbFound: boolean
+  connected: boolean
+  output: string
+}> => {
+  const res = await api.post('/settings/tethering/check-connection', { adbPath })
+  return res.data
+}

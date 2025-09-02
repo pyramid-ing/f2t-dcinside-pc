@@ -49,4 +49,30 @@ export class TetheringService {
     }
     throw new Error(`${attempts}회 시도에도 IP가 변경되지 않았습니다.`)
   }
+
+  checkAdbConnectionStatus(adbPath?: string): { adbFound: boolean; connected: boolean; output: string } {
+    try {
+      const adb = adbPath?.trim() || 'adb'
+      // adb 버전 확인 (설치 여부)
+      let output = ''
+      try {
+        output += execSync(`${adb} version`).toString()
+      } catch (_) {
+        return { adbFound: false, connected: false, output: 'adb not found' }
+      }
+
+      // 장치 연결 확인
+      const devicesOut = execSync(`${adb} devices`).toString()
+      output += '\n' + devicesOut
+      // "device" 상태가 붙은 라인이 하나라도 있으면 연결됨
+      const lines = devicesOut
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l && !l.toLowerCase().includes('list of devices attached'))
+      const connected = lines.some(l => /\bdevice\b$/i.test(l))
+      return { adbFound: true, connected, output }
+    } catch (e: any) {
+      return { adbFound: false, connected: false, output: e?.message || String(e) }
+    }
+  }
 }
