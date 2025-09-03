@@ -144,17 +144,17 @@ export class JobQueueProcessor implements OnModuleInit {
   @Cron(CronExpression.EVERY_MINUTE)
   async processScheduledDeletions() {
     const now = new Date()
-    const targets = await this.prisma.postJob.findMany({
+    const postJobs = await this.prisma.postJob.findMany({
       where: {
         deleteAt: { lte: now },
         deletedAt: null,
         resultUrl: { not: null },
-      } as any,
+      },
       include: { job: true },
     })
 
-    for (const post of targets) {
-      const jobId = post.jobId
+    for (const postJob of postJobs) {
+      const jobId = postJob.jobId
       try {
         await this.jobLogsService.createJobLog(jobId, '삭제 예정시간 도달. 삭제를 시작합니다.')
 
@@ -164,11 +164,11 @@ export class JobQueueProcessor implements OnModuleInit {
         try {
           let isMember = false
           // 로그인 필요 시 처리
-          if (post.loginId && post.loginPassword) {
-            await this.jobLogsService.createJobLog(jobId, `삭제용 로그인 시도: ${post.loginId}`)
+          if (postJob.loginId && postJob.loginPassword) {
+            await this.jobLogsService.createJobLog(jobId, `삭제용 로그인 시도: ${postJob.loginId}`)
             const loginRes = await this.postingService.login(page, {
-              id: post.loginId,
-              password: post.loginPassword,
+              id: postJob.loginId,
+              password: postJob.loginPassword,
             })
             if (!loginRes.success) {
               throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: loginRes.message })
@@ -177,10 +177,10 @@ export class JobQueueProcessor implements OnModuleInit {
             isMember = true
           }
 
-          await this.postingService.deleteArticleByResultUrl(post as any, page, jobId, isMember)
+          await this.postingService.deleteArticleByResultUrl(postJob, page, jobId, isMember)
 
           await this.prisma.postJob.update({
-            where: { id: post.id },
+            where: { id: postJob.id },
             data: { deletedAt: new Date() } as any,
           })
           await this.jobLogsService.createJobLog(jobId, '게시글 삭제 완료')
@@ -202,7 +202,7 @@ export class JobQueueProcessor implements OnModuleInit {
         // 에러 발생 시에도 재시도되지 않도록 삭제 완료로 간주 처리
         try {
           await this.prisma.postJob.update({
-            where: { id: post.id },
+            where: { id: postJob.id },
             data: { deletedAt: new Date() } as any,
           })
           await this.jobLogsService.createJobLog(jobId, '에러로 인해 삭제 완료 처리(더 이상 재시도하지 않음).')
