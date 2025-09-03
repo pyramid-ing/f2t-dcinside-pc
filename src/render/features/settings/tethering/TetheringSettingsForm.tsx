@@ -5,6 +5,8 @@ import { Form, Input, Space, message, Button } from 'antd'
 import { CheckCircleTwoTone, CloseCircleTwoTone } from '@ant-design/icons'
 import { checkTetheringConnection } from '@render/api/settingsApi'
 import { getSettings } from '@render/api'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 type TetheringFormValues = {
   tethering?: NonNullable<Settings['tethering']>
@@ -24,6 +26,8 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
     connected: boolean
     output: string
   }>(null)
+  const { canAccess } = usePermissions()
+  const canUseTethering = canAccess(Permission.TETHERING)
 
   useEffect(() => {
     if (!parentForm) {
@@ -46,10 +50,16 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
       <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 600 }}>테더링 설정</h3>
       {/* 부모 Form 컨텍스트에서 동작하는 Form.Item만 렌더 */}
       <Form.Item label="ADB 경로" name={['tethering', 'adbPath']}>
-        <Input placeholder="기본: adb (PATH에 등록되어 있어야 합니다)" />
+        <Input placeholder="기본: adb (PATH에 등록되어 있어야 합니다)" disabled={!canUseTethering} />
       </Form.Item>
+      {!canUseTethering && (
+        <div style={{ color: '#ff4d4f', marginTop: -8, marginBottom: 12, fontSize: 12 }}>
+          테더링 권한이 없습니다. 라이센스에 테더링 권한이 필요합니다.
+        </div>
+      )}
       <div style={{ marginBottom: 12 }}>
         <Button
+          disabled={!canUseTethering}
           onClick={async () => {
             try {
               setChecking(true)
@@ -92,10 +102,10 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
       </div>
       <Space size={12} style={{ display: 'flex' }}>
         <Form.Item label="재시도 횟수" name={['tethering', 'attempts']} style={{ flex: 1 }}>
-          <Input type="number" min={1} />
+          <Input type="number" min={1} disabled={!canUseTethering} />
         </Form.Item>
         <Form.Item label="대기(초)" name={['tethering', 'waitSeconds']} style={{ flex: 1 }}>
-          <Input type="number" min={1} />
+          <Input type="number" min={1} disabled={!canUseTethering} />
         </Form.Item>
       </Space>
       <div style={{ color: '#888', marginTop: 4 }}>포스팅마다 안드로이드 모바일 데이터 토글로 IP를 바꿉니다.</div>

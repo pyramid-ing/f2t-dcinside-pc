@@ -5,11 +5,16 @@ import { Button, Form, Radio, message } from 'antd'
 import ProxySettingsForm from '../ProxySettingsForm'
 import TetheringSettingsForm from '../tethering/TetheringSettingsForm'
 import { getSettings, updateSettings } from '@render/api'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 const IpSettingsForm: React.FC = () => {
   const [form] = Form.useForm<Partial<Settings>>()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const { canAccess } = usePermissions()
+  const canUseTethering = canAccess(Permission.TETHERING)
 
   useEffect(() => {
     ;(async () => {
@@ -26,6 +31,13 @@ const IpSettingsForm: React.FC = () => {
   }, [form])
 
   const ipMode: IpMode = Form.useWatch('ipMode', form) || IpMode.NONE
+
+  // 테더링 권한이 없는데 테더링이 선택되어 있으면 NONE으로 되돌림
+  useEffect(() => {
+    if (!canUseTethering && ipMode === IpMode.TETHERING) {
+      form.setFieldsValue({ ipMode: IpMode.NONE })
+    }
+  }, [canUseTethering, ipMode, form])
 
   const handleSave = async (values: Partial<Settings>) => {
     try {
@@ -53,8 +65,26 @@ const IpSettingsForm: React.FC = () => {
         <Form.Item label="IP 변경 모드" name="ipMode">
           <Radio.Group>
             <Radio value={IpMode.NONE}>사용 안 함</Radio>
-            <Radio value={IpMode.PROXY}>프록시</Radio>
-            <Radio value={IpMode.TETHERING}>테더링</Radio>
+            <Radio value={IpMode.PROXY}>
+              <span>
+                프록시
+                <span style={{ marginLeft: 8, fontSize: 12, color: '#52c41a' }}>사용 가능</span>
+              </span>
+            </Radio>
+            <Radio value={IpMode.TETHERING} disabled={!canUseTethering}>
+              <span>
+                테더링
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 12,
+                    color: canUseTethering ? '#52c41a' : '#999',
+                  }}
+                >
+                  {canUseTethering ? '사용 가능' : '권한 필요'}
+                </span>
+              </span>
+            </Radio>
           </Radio.Group>
         </Form.Item>
 

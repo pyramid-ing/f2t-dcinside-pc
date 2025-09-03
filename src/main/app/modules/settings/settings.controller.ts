@@ -1,8 +1,20 @@
-import { Body, Controller, Get, Header, Logger, Post, Res, UploadedFile, UseInterceptors } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Logger,
+  Post,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import type { Response } from 'express'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 
 @Controller('settings')
 export class SettingsController {
@@ -42,6 +54,8 @@ export class SettingsController {
     return res.send(buffer)
   }
 
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.TETHERING)
   @Post('tethering/check-connection')
   async checkTetheringConnection(@Body() body: { adbPath?: string }) {
     const result = this.tetheringService.checkAdbConnectionStatus(body?.adbPath)

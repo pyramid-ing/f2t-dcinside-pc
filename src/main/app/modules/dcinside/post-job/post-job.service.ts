@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page } from 'playwright'
 import { PostJob } from '@prisma/client'
@@ -12,6 +11,9 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
 import { getExternalIp } from '@main/app/utils/ip'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { Permission } from '@main/app/modules/auth/auth.guard'
+import { assertPermission } from '@main/app/utils/permission.assert'
 import { IpMode } from '@main/app/modules/settings/settings.types'
 
 @Injectable()
@@ -41,8 +43,9 @@ export class PostJobService implements JobProcessor {
 
     const settings = await this.settingsService.getSettings()
 
-    // 테더링 모드면 포스팅 전 IP 변경
+    // 테더링 모드면 권한 확인 후 포스팅 전 IP 변경
     if (settings?.ipMode === IpMode.TETHERING) {
+      await this.checkPermission(Permission.TETHERING)
       try {
         const prev = this.tetheringService.getCurrentIp()
         await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
@@ -90,6 +93,11 @@ export class PostJobService implements JobProcessor {
     } finally {
       await browser.close()
     }
+  }
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+    const licenseCache = settings.licenseCache
+    assertPermission(licenseCache, permission)
   }
 
   /**
