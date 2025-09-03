@@ -996,6 +996,7 @@ export class DcinsidePostingService {
     browserContext: BrowserContext,
     page: Page,
     jobId: string,
+    isMember?: boolean,
   ): Promise<{ success: boolean; message: string; url?: string }> {
     // 0. PostJob 데이터 파싱
     const parsedPostJob = this.parsePostJobData(postJob)
@@ -1042,13 +1043,13 @@ export class DcinsidePostingService {
     }
     await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
-    if (parsedPostJob.nickname) {
+    if (!isMember && parsedPostJob.nickname) {
       await this.inputNickname(page, parsedPostJob.nickname)
       await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
     }
 
-    if (parsedPostJob.password) {
+    if (!isMember && parsedPostJob.password) {
       await this.inputPassword(page, parsedPostJob.password)
       await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환

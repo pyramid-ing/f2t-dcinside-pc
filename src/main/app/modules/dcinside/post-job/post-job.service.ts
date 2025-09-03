@@ -15,6 +15,8 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { assertPermission } from '@main/app/utils/permission.assert'
 import { IpMode } from '@main/app/modules/settings/settings.types'
+import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
+import UserAgent from 'user-agents'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -27,6 +29,7 @@ export class PostJobService implements JobProcessor {
     private readonly settingsService: SettingsService,
     private readonly cookieService: CookieService,
     private readonly tetheringService: TetheringService,
+    private readonly browserManager: BrowserManagerService,
   ) {}
 
   canProcess(job: any): boolean {
@@ -61,37 +64,82 @@ export class PostJobService implements JobProcessor {
       }
     }
 
-    const { browser, context, proxyInfo } = await this.postingService.launch()
-    // 프록시 정보 로깅
-    if (proxyInfo) {
-      const proxyStr = proxyInfo.id
-        ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
-        : `${proxyInfo.ip}:${proxyInfo.port}`
-      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
-    } else {
-      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
-    }
-    // 실제 외부 IP 로깅
-    try {
-      const ipCheckPage = await context.newPage()
-      const externalIp = await getExternalIp(ipCheckPage)
-      await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
-      await ipCheckPage.close()
-    } catch (e) {
-      await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
-    }
+    if (settings?.ipMode === IpMode.PROXY) {
+      const { browser, context, proxyInfo } = await this.postingService.launch()
+      // 프록시 정보 로깅
+      if (proxyInfo) {
+        const proxyStr = proxyInfo.id
+          ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+          : `${proxyInfo.ip}:${proxyInfo.port}`
+        await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+      }
 
-    try {
+      // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
+      try {
+        const ipCheckPage = await context.newPage()
+        const externalIp = await getExternalIp(ipCheckPage)
+        await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+        await ipCheckPage.close()
+      } catch (e) {
+        await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+      }
+
+      try {
+        if (settings?.taskDelay > 0) {
+          await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
+          await sleep(settings.taskDelay * 1000)
+        }
+        // 프록시 모드는 매 작업마다 새 페이지 생성/종료 (기존 동작 유지)
+        const page = await context.newPage()
+        try {
+          await this.handlePostJob(jobId, context, page, job.postJob)
+        } finally {
+          await page.close()
+        }
+      } catch (error) {
+        throw error
+      } finally {
+        await browser.close()
+      }
+    } else {
+      // 테더링/NONE 모드: 브라우저/페이지 재사용
+      const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+        headless: !settings.showBrowserWindow,
+      })
+      let context = browser.contexts()[0]
+      if (!context) {
+        context = await browser.newContext({
+          viewport: { width: 1200, height: 1142 },
+          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+        })
+        await context.addInitScript(() => {
+          window.sessionStorage.clear()
+        })
+      }
+
+      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
+      let page = context.pages()[0]
+      if (!page) {
+        page = await context.newPage()
+      }
+
+      // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
+      try {
+        const externalIp = await getExternalIp(page)
+        await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+      } catch (e) {
+        await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+      }
+
       if (settings?.taskDelay > 0) {
         await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
         await sleep(settings.taskDelay * 1000)
       }
 
-      await this.handlePostJob(jobId, context, job.postJob)
-    } catch (error) {
-      throw error
-    } finally {
-      await browser.close()
+      // 동일 페이지에서 포스팅 처리 (페이지 종료/브라우저 종료 없음)
+      await this.handlePostJob(jobId, context, page, job.postJob)
     }
   }
   private async checkPermission(permission: Permission): Promise<void> {
@@ -103,43 +151,36 @@ export class PostJobService implements JobProcessor {
   /**
    * 큐 처리 (엑셀 순서대로, 세션별 브라우저 관리)
    */
-  async handlePostJob(jobId: string, context: BrowserContext, postJob: PostJob) {
-    const page = await context.newPage()
+  async handlePostJob(jobId: string, context: BrowserContext, page: Page, postJob: PostJob) {
+    this.logger.log(`작업 시작: ID ${jobId})`)
+    await this.jobLogsService.createJobLog(jobId, '작업 시작')
 
-    try {
-      this.logger.log(`작업 시작: ID ${jobId})`)
-      await this.jobLogsService.createJobLog(jobId, '작업 시작')
-
-      // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
-      if (postJob.loginId && postJob.loginPassword) {
-        await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
-        await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-        await this.jobLogsService.createJobLog(jobId, '로그인 성공')
-      } else {
-        this.logger.log(`비로그인 모드로 진행`)
-        await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
-      }
-
-      // 작업 처리
-      await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
-      const result = await this.postingService.postArticle(postJob, context, page, jobId)
-
-      await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
-
-      // 포스팅 성공 시 resultUrl을 PostJob에 저장
-      if (result.url) {
-        await this.prismaService.postJob.update({
-          where: { id: postJob.id },
-          data: { resultUrl: result.url },
-        })
-      }
-
-      return result
-    } catch (error) {
-      throw error
-    } finally {
-      await page.close()
+    // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
+    if (postJob.loginId && postJob.loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+    } else {
+      this.logger.log(`비로그인 모드로 진행`)
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
     }
+
+    // 작업 처리
+    await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
+    const isMember = !!(postJob.loginId && postJob.loginPassword)
+    const result = await this.postingService.postArticle(postJob, context, page, jobId, isMember)
+
+    await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
+
+    // 포스팅 성공 시 resultUrl을 PostJob에 저장
+    if (result.url) {
+      await this.prismaService.postJob.update({
+        where: { id: postJob.id },
+        data: { resultUrl: result.url },
+      })
+    }
+
+    return result
   }
 
   // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)
