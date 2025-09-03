@@ -162,6 +162,7 @@ export class JobQueueProcessor implements OnModuleInit {
         const page = await context.newPage()
 
         try {
+          let isMember = false
           // 로그인 필요 시 처리
           if (post.loginId && post.loginPassword) {
             await this.jobLogsService.createJobLog(jobId, `삭제용 로그인 시도: ${post.loginId}`)
@@ -173,9 +174,10 @@ export class JobQueueProcessor implements OnModuleInit {
               throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: loginRes.message })
             }
             await this.jobLogsService.createJobLog(jobId, '삭제용 로그인 완료')
+            isMember = true
           }
 
-          await this.postingService.deleteArticleByResultUrl(post as any, page, jobId)
+          await this.postingService.deleteArticleByResultUrl(post as any, page, jobId, isMember)
 
           await this.prisma.postJob.update({
             where: { id: post.id },

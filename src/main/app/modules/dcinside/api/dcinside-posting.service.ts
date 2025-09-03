@@ -377,7 +377,7 @@ export class DcinsidePostingService {
   }
 
   // 게시글 자동삭제 (삭제 페이지 진입 → 비번 입력 → .btn_ok → confirm 수락 → alert 확인)
-  async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string): Promise<void> {
+  async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string, isMember?: boolean): Promise<void> {
     if (!post.resultUrl) {
       throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 대상 URL이 없습니다.' })
     }
@@ -416,13 +416,6 @@ export class DcinsidePostingService {
       throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
     }
 
-    if (!post.password) {
-      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 비밀번호가 설정되지 않았습니다.' })
-    }
-
-    const pwInput = page.locator('#password')
-    await pwInput.fill(post.password)
-
     // 브라우저 다이얼로그(confirm/alert) 자동 수락 핸들러 (잠시 활성화)
     let lastDialogMessage = ''
     const dialogHandler = async (dialog: any) => {
@@ -433,6 +426,17 @@ export class DcinsidePostingService {
     }
     page.on('dialog', dialogHandler)
     try {
+      // 상위에서 로그인 시도 여부 반영: true면 회원, 아니면 비회원 처리
+      if (!isMember) {
+        if (!post.password) {
+          throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+            message: '삭제 비밀번호가 설정되지 않았습니다.',
+          })
+        }
+        const pwInput = page.locator('#password')
+        await pwInput.fill(post.password)
+      }
+
       // 삭제 버튼 한 번만 클릭
       await page
         .locator('.btn_ok')
