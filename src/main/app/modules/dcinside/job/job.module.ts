@@ -6,9 +6,10 @@ import { CommonModule } from '@main/app/modules/common/common.module'
 import { PostJobModule } from '@main/app/modules/dcinside/post-job/post-job.module'
 import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.module'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
+import { DcinsideApiModule } from '@main/app/modules/dcinside/api/api.module'
 
 @Module({
-  imports: [ScheduleModule.forRoot(), CommonModule, PostJobModule, JobLogsModule, SettingsModule],
+  imports: [ScheduleModule.forRoot(), CommonModule, PostJobModule, JobLogsModule, SettingsModule, DcinsideApiModule],
   providers: [JobQueueProcessor],
   controllers: [JobController],
   exports: [JobQueueProcessor],

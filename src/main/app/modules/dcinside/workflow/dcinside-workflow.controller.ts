@@ -1,16 +1,16 @@
-import { Controller, Post, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common'
+import { Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { DcinsideWorkflowService } from './dcinside-workflow.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
+import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 
 @Controller('posting')
 export class DcinsideWorkflowController {
   constructor(private readonly dcinsideWorkflowService: DcinsideWorkflowService) {}
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Post('upload-excel')
   @UseInterceptors(FileInterceptor('file'))
   async uploadExcel(@UploadedFile() file: any) {

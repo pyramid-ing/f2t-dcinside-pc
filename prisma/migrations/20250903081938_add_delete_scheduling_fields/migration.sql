@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "PostJob" ADD COLUMN "deleteAt" DATETIME;
+ALTER TABLE "PostJob" ADD COLUMN "deletedAt" DATETIME;

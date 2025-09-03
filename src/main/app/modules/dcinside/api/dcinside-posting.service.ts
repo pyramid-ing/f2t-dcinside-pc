@@ -376,6 +376,86 @@ export class DcinsidePostingService {
     await page.fill('input[name=kcaptcha_code]', answer)
   }
 
+  // 게시글 자동삭제 (삭제 페이지 진입 → 비번 입력 → .btn_ok → confirm 수락 → alert 확인)
+  async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string): Promise<void> {
+    if (!post.resultUrl) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 대상 URL이 없습니다.' })
+    }
+    if (!post.galleryUrl) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '갤러리 URL이 없습니다.' })
+    }
+
+    const idMatch = post.galleryUrl.match(/[?&]id=([^&]+)/)
+    const galleryId = idMatch ? idMatch[1] : null
+    let galleryType: 'board' | 'mgallery' | 'mini' | 'person' = 'board'
+    if (post.galleryUrl.includes('/mgallery/')) galleryType = 'mgallery'
+    else if (post.galleryUrl.includes('/mini/')) galleryType = 'mini'
+    else if (post.galleryUrl.includes('/person/')) galleryType = 'person'
+
+    if (!galleryId) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '갤러리 ID를 추출할 수 없습니다.' })
+    }
+
+    const noMatch = post.resultUrl.match(/[?&]no=(\d+)/)
+    const postNo = noMatch ? noMatch[1] : null
+    if (!postNo) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '게시글 ID(no)를 추출할 수 없습니다.' })
+    }
+
+    const deletePath = galleryType === 'board' ? 'board/delete' : `${galleryType}/board/delete`
+    const deleteUrl = `https://gall.dcinside.com/${deletePath}/?id=${galleryId}&no=${postNo}`
+    await this.jobLogsService.createJobLog(jobId, `삭제 페이지 이동: ${deleteUrl}`)
+    await page.goto(deleteUrl, { waitUntil: 'domcontentloaded' })
+
+    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시: 해당 문구를 에러 메시지로 예외 처리
+    const abnormalText = await page.evaluate(() => {
+      const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
+      return el?.textContent?.trim() || null
+    })
+    if (abnormalText) {
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
+    }
+
+    if (!post.password) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 비밀번호가 설정되지 않았습니다.' })
+    }
+
+    const pwInput = page.locator('#password')
+    await pwInput.fill(post.password)
+
+    // 브라우저 다이얼로그(confirm/alert) 자동 수락 핸들러 (잠시 활성화)
+    let lastDialogMessage = ''
+    const dialogHandler = async (dialog: any) => {
+      try {
+        lastDialogMessage = dialog.message() || ''
+        await dialog.accept()
+      } catch (_) {}
+    }
+    page.on('dialog', dialogHandler)
+    try {
+      // 삭제 버튼 한 번만 클릭
+      await page
+        .locator('.btn_ok')
+        .click({ timeout: 5000 })
+        .catch(() => {})
+      // 다이얼로그 처리 시간 대기
+      await sleep(800)
+    } finally {
+      page.off('dialog', dialogHandler)
+    }
+
+    // 마지막 다이얼로그 메시지로 결과 판정 (없으면 빈 문자열)
+    if (lastDialogMessage.includes('게시물이 삭제 되었습니다')) {
+      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
+      return
+    }
+    if (lastDialogMessage.includes('비밀번호가 맞지 않습니다')) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 실패: 비밀번호가 맞지 않습니다.' })
+    }
+
+    await sleep(500)
+  }
+
   private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
     // UI 기반 팝업 대기 (커스텀 팝업 - 창 형태)
     try {

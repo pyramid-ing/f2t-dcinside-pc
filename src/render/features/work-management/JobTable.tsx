@@ -316,6 +316,7 @@ const JobTable: React.FC = () => {
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
 
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
+  const [editingDeleteAtJobId, setEditingDeleteAtJobId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchJobs()
@@ -508,6 +509,18 @@ const JobTable: React.FC = () => {
       fetchJobs()
     } catch {
       message.error('예약시간 변경 실패')
+    }
+  }
+
+  const handleDeleteAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
+    try {
+      const deleteAt = date ? date.toISOString() : null
+      await api.patch(`/api/jobs/${jobId}`, { deleteAt })
+      message.success('삭제 예정시간이 변경되었습니다')
+      setEditingDeleteAtJobId(null)
+      fetchJobs()
+    } catch {
+      message.error('삭제 예정시간 변경 실패')
     }
   }
 
@@ -894,6 +907,23 @@ const JobTable: React.FC = () => {
               />
             ),
             sorter: true,
+          },
+          {
+            title: '삭제예정',
+            dataIndex: ['postJob', 'deleteAt'],
+            key: 'deleteAt',
+            render: (_: any, record: PostJob) => (
+              <DatePicker
+                locale={locale}
+                showTime
+                value={record.postJob?.deleteAt ? dayjs(record.postJob.deleteAt as any) : null}
+                onChange={date => handleDeleteAtChange(record.id, date)}
+                allowClear
+                format="YYYY-MM-DD ddd HH:mm"
+                style={{ minWidth: 150 }}
+                getPopupContainer={trigger => trigger.parentNode as HTMLElement}
+              />
+            ),
           },
           {
             title: '시작시간',

@@ -1,10 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { UpdateJobDto } from './dto/update-job.dto'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobQueueProcessor } from './job-queue.processor'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus } from './job.types'
-import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
+import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 import { Prisma } from '@prisma/client'
 
 export const JOB_TYPE = {
@@ -74,7 +75,7 @@ export class JobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Post('bulk/retry')
   async retryJobs(@Body() body: { jobIds: string[] }) {
     try {
@@ -243,7 +244,7 @@ export class JobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Post(':id/retry')
   async retryJob(@Param('id') jobId: string) {
     try {
@@ -341,7 +342,7 @@ export class JobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Post(':id/pending-to-request')
   async pendingToRequest(@Param('id') jobId: string) {
     try {
@@ -390,11 +391,20 @@ export class JobController {
   }
 
   @Patch(':id')
-  async updateJob(@Param('id') jobId: string, @Body() body: { scheduledAt?: string }) {
+  async updateJob(@Param('id') jobId: string, @Body() body: UpdateJobDto) {
     try {
       const updateData: any = {}
-      if ('scheduledAt' in body) {
-        updateData.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null
+      if (typeof body.scheduledAt !== 'undefined') {
+        // Job.scheduledAt은 non-nullable이므로 null이 오면 즉시 실행(now)로 대체
+        updateData.scheduledAt = body.scheduledAt === null ? new Date() : new Date(body.scheduledAt)
+      }
+      if ('deleteAt' in body) {
+        updateData.postJob = {
+          update: {
+            deleteAt: body.deleteAt ? new Date(body.deleteAt) : null,
+            deletedAt: null,
+          },
+        }
       }
       // 필요시 다른 필드도 추가 가능
       await this.prisma.job.update({

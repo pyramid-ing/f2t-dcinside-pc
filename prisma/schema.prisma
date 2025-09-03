@@ -67,6 +67,8 @@ model PostJob {
   loginPassword String?
   imagePosition String? // '상단' 또는 '하단'
   resultUrl     String? // 결과 URL
+  deleteAt      DateTime?
+  deletedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

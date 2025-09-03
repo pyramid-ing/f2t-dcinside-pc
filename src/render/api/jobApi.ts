@@ -72,6 +72,14 @@ export async function deleteJobs(jobIds: string[]): Promise<ApiResponse> {
 }
 
 /**
+ * 작업의 삭제 예정시간을 설정/해제합니다.
+ */
+export async function updateJobDeleteAt(jobId: string, deleteAt: string | null): Promise<ApiResponse> {
+  const response = await api.patch(`/api/jobs/${jobId}`, { deleteAt })
+  return response.data
+}
+
+/**
  * 등록요청(request) 상태를 등록대기(pending)로 변경
  */
 export async function requestToPending(jobId: string): Promise<ApiResponse> {
