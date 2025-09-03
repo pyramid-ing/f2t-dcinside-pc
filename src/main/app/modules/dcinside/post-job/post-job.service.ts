@@ -250,6 +250,7 @@ export class PostJobService implements JobProcessor {
     scheduledAt?: Date
     imagePosition?: string
     resultUrl?: string
+    deleteAt?: Date
   }) {
     const job = await this.prismaService.job.create({
       data: {
@@ -270,6 +271,7 @@ export class PostJobService implements JobProcessor {
             loginPassword: postJobData.loginPassword ?? null,
             imagePosition: postJobData.imagePosition ?? null,
             ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
+            ...(postJobData.deleteAt !== undefined && { deleteAt: postJobData.deleteAt }),
           },
         },
       },

@@ -22,6 +22,7 @@ export const ExcelRowSchema = z
     로그인비번: z.coerce.string().optional(),
     말머리: z.string().optional(),
     예약날짜: z.string().optional(),
+    예약삭제날짜: z.string().optional(),
     이미지위치: z.string().optional(),
   })
   .transform(data => {
@@ -39,6 +40,7 @@ export const ExcelRowSchema = z
 
     // 예약날짜 파싱
     let scheduledAt: Date | undefined
+    let deleteAt: Date | undefined
     if (data.예약날짜) {
       const dayjs = require('dayjs')
       const customParseFormat = require('dayjs/plugin/customParseFormat')
@@ -56,6 +58,24 @@ export const ExcelRowSchema = z
       }
     }
 
+    // 예약삭제날짜 파싱
+    if (data.예약삭제날짜) {
+      const dayjs = require('dayjs')
+      const customParseFormat = require('dayjs/plugin/customParseFormat')
+      dayjs.extend(customParseFormat)
+
+      const trimmed = data.예약삭제날짜.toString().trim()
+      let parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
+
+      if (!parsed.isValid()) {
+        parsed = dayjs(trimmed)
+      }
+
+      if (parsed.isValid()) {
+        deleteAt = parsed.toDate()
+      }
+    }
+
     return {
       galleryUrl: data.갤러리주소,
       title: data.제목 || '',
@@ -67,6 +87,7 @@ export const ExcelRowSchema = z
       loginId: data.로그인ID || '',
       loginPassword: data.로그인비번 || '',
       scheduledAt,
+      deleteAt,
       imagePosition: data.이미지위치 && data.이미지위치.trim() ? data.이미지위치 : undefined,
     }
   })

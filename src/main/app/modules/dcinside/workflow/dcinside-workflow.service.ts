@@ -44,6 +44,8 @@ export class DcinsideWorkflowService {
           loginPassword: transformedRow.loginPassword ?? null,
           scheduledAt: transformedRow.scheduledAt || new Date(),
           imagePosition: transformedRow.imagePosition ?? null,
+          // 예약삭제날짜
+          deleteAt: transformedRow.deleteAt ?? undefined,
         })
 
         const isScheduled = transformedRow.scheduledAt && dayjs(transformedRow.scheduledAt).isAfter(dayjs())
