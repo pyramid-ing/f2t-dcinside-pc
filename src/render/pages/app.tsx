@@ -4,6 +4,7 @@ import AppLayout from '../layouts/AppLayout'
 import Dashboard from './Dashboard'
 import ScheduledPostsPage from './ScheduledPosts'
 import SettingsPage from './Settings'
+import LicensePage from '@render/pages/License'
 
 const App: React.FC = () => {
   return (
@@ -12,6 +13,7 @@ const App: React.FC = () => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/scheduled-posts" element={<ScheduledPostsPage />} />
+        <Route path="/license" element={<LicensePage />} />
       </Routes>
     </AppLayout>
   )

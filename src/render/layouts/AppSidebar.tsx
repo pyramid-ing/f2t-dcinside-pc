@@ -1,4 +1,4 @@
-import { HomeOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
+import { HomeOutlined, KeyOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -158,6 +158,11 @@ const AppSidebar: React.FC = () => {
             key: '3',
             icon: <SettingOutlined />,
             label: <NavLink to="/settings">설정</NavLink>,
+          },
+          {
+            key: 'license-settings',
+            icon: <KeyOutlined />,
+            label: <NavLink to="/license">라이센스</NavLink>,
           },
         ]}
       />

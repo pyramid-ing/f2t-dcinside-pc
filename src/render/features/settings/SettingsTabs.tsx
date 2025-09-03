@@ -1,7 +1,6 @@
 import { authApi } from '@render/api'
 import { Tabs } from 'antd'
 import React, { useCallback, useEffect, useState } from 'react'
-import LicenseRegistrationForm from './LicenseRegistrationForm'
 import OpenAISettingsForm from './OpenAISettingsForm'
 import SettingsForm from './SettingsForm'
 import IpSettingsForm from './ip/IpSettingsForm'
@@ -44,11 +43,6 @@ const SettingsTabs: React.FC = () => {
           key: 'openai',
           label: 'OpenAI',
           children: <OpenAISettingsForm />,
-        },
-        {
-          key: 'license',
-          label: '라이센스',
-          children: <LicenseRegistrationForm machineId={machineId} />,
         },
       ]}
     />

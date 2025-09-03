@@ -1,8 +1,10 @@
 import { authApi } from '@render/api'
 import { getSettings } from '@render/api/settingsApi'
+import { getLicenseInfo } from '@render/api/permissionsApi'
 import { Button, Form, Input, message, Space, Typography, Alert } from 'antd'
 import React, { useCallback, useState, useEffect } from 'react'
 import styled from 'styled-components'
+import { usePermissions } from '@render/hooks/usePermissions'
 
 const { Title, Text } = Typography
 
@@ -22,12 +24,15 @@ const StyledCard = styled.div`
 
 interface LicenseRegistrationFormProps {
   machineId: string
+  onLicenseUpdate?: (licenseKey: string) => void
 }
 
-const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machineId }) => {
+const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machineId, onLicenseUpdate }) => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [currentLicenseKey, setCurrentLicenseKey] = useState<string>('')
+  const [licenseExpiresAt, setLicenseExpiresAt] = useState<number | undefined>(undefined)
+  const { loadLicenseInfo } = usePermissions()
 
   // 현재 저장된 라이센스 키 가져오기
   useEffect(() => {
@@ -35,6 +40,8 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
       try {
         const settings = await getSettings()
         setCurrentLicenseKey(settings.licenseKey || '')
+        const info = await getLicenseInfo()
+        setLicenseExpiresAt(info.expiresAt)
       } catch (error) {
         console.error('Error fetching current license:', error)
       }
@@ -55,6 +62,19 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
         if (response.success) {
           message.success(response.message)
           setCurrentLicenseKey(values.license_key)
+          onLicenseUpdate?.(values.license_key)
+          // 등록 직후 전역 라이선스 상태를 즉시 갱신
+          try {
+            await loadLicenseInfo()
+          } catch (_) {
+            // noop
+          }
+          try {
+            const info = await getLicenseInfo()
+            setLicenseExpiresAt(info.expiresAt)
+          } catch (e) {
+            // ignore
+          }
           form.resetFields()
         } else {
           message.error('라이센스 등록에 실패했습니다.')
@@ -66,7 +86,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
         setLoading(false)
       }
     },
-    [form, machineId],
+    [form, machineId, onLicenseUpdate],
   )
 
   return (
@@ -79,7 +99,14 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
       {currentLicenseKey && (
         <Alert
           message="현재 등록된 라이센스"
-          description={`라이센스 키: ${currentLicenseKey}`}
+          description={
+            <div>
+              <div>라이센스 키: {currentLicenseKey}</div>
+              {licenseExpiresAt && new Date(licenseExpiresAt).getFullYear() <= 2040 && (
+                <div>만료일: {new Date(licenseExpiresAt).toLocaleString()}</div>
+              )}
+            </div>
+          }
           type="info"
           style={{ marginBottom: 16 }}
           showIcon
@@ -91,7 +118,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
           label="라이센스 키"
           name="license_key"
           rules={[
-            { required: true, message: '라이센스 키를 입력해주세요.' },
+            { required: true },
             {
               pattern: /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/,
               message: '올바른 라이센스 키 형식을 입력해주세요.',
