@@ -9,6 +9,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -20,6 +21,7 @@ export class JobQueueProcessor implements OnModuleInit {
     private readonly postJobService: PostJobService,
     private readonly jobLogsService: JobLogsService,
     private readonly postingService: DcinsidePostingService,
+    private readonly browserManager: BrowserManagerService,
   ) {}
 
   async onModuleInit() {
@@ -127,6 +129,15 @@ export class JobQueueProcessor implements OnModuleInit {
       await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
       this.logger.error(logMessage, error.stack)
       await this.markJobAsFailed(job.id, error.message)
+    } finally {
+      const remaining = await this.prisma.job.count({
+        where: {
+          OR: [{ status: JobStatus.PROCESSING }, { status: JobStatus.REQUEST, scheduledAt: { lte: new Date() } }],
+        },
+      })
+      if (remaining === 0) {
+        await this.browserManager.closeManagedBrowser('dcinside')
+      }
     }
   }
 
