@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Progress, Modal, Typography, Space, notification } from 'antd'
 import { DownloadOutlined, ReloadOutlined, CheckOutlined } from '@ant-design/icons'
-import type { UpdateInfo, DownloadProgress, UpdateResult } from 'src/render/types/electron'
+import type { UpdateInfo, DownloadProgress, UpdateResult } from '../types/electron'
 
 const { Text, Paragraph } = Typography
 
-interface UpdateManagerProps {
-  autoCheck?: boolean
-}
-
-export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }) => {
+export const UpdateManager: React.FC = () => {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -19,7 +15,6 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const [currentVersion, setCurrentVersion] = useState<string>('')
   const [isLatestVersion, setIsLatestVersion] = useState<boolean | null>(null) // null: 확인 중, true: 최신, false: 업데이트 필요
-  const [initialCheckDone, setInitialCheckDone] = useState(false)
 
   useEffect(() => {
     // 현재 앱 버전 가져오기
@@ -54,16 +49,11 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
       })
     })
 
-    // 자동 업데이트 확인 (조용히 실행)
-    if (autoCheck) {
-      checkForUpdatesQuietly()
-    }
-
     return () => {
       window.electronAPI?.removeAllListeners('download-progress')
       window.electronAPI?.removeAllListeners('update-downloaded')
     }
-  }, [autoCheck])
+  }, [])
 
   // 버전 비교 함수 (semantic versioning)
   const isNewerVersion = (remoteVersion: string, currentVersion: string): boolean => {
@@ -87,44 +77,6 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
     }
 
     return false // 같은 버전
-  }
-
-  // 조용한 업데이트 확인 (초기 로드 시 사용, 알림 없음)
-  const checkForUpdatesQuietly = async () => {
-    if (!window.electronAPI?.checkForUpdates) {
-      setIsLatestVersion(null)
-      setInitialCheckDone(true)
-      return
-    }
-
-    try {
-      const result: UpdateResult = await window.electronAPI.checkForUpdates()
-
-      if (result.error) {
-        setIsLatestVersion(null)
-      } else if (result.updateInfo) {
-        const remoteVersion = result.updateInfo.version
-
-        // 버전 비교하여 실제로 업데이트가 필요한지 확인
-        if (isNewerVersion(remoteVersion, currentVersion)) {
-          setUpdateAvailable(true)
-          setUpdateInfo({
-            version: result.updateInfo.version,
-            releaseNotes: result.updateInfo.releaseNotes,
-          })
-          setIsLatestVersion(false)
-        } else {
-          setIsLatestVersion(true)
-        }
-      } else {
-        setIsLatestVersion(true)
-      }
-    } catch (error) {
-      console.error('업데이트 확인 중 오류:', error)
-      setIsLatestVersion(null)
-    } finally {
-      setInitialCheckDone(true)
-    }
   }
 
   // 수동 업데이트 확인 (사용자가 버튼 클릭 시 사용, 알림 표시)
@@ -166,8 +118,7 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
       } else {
         setIsLatestVersion(true)
         notification.info({
-          message: '최신 버전',
-          description: '현재 최신 버전을 사용 중입니다.',
+          message: result.message,
         })
       }
     } catch (error) {
@@ -237,12 +188,8 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
   return (
     <>
       <Space direction="vertical" style={{ width: '100%' }}>
-        {/* 초기 확인 중일 때 */}
-        {!initialCheckDone ? (
-          <Button loading block disabled>
-            버전 확인 중...
-          </Button>
-        ) : /* 업데이트 다운로드 완료 상태 */ updateDownloaded ? (
+        {/* 업데이트 다운로드 완료 상태 */}
+        {updateDownloaded ? (
           <Button type="primary" icon={<ReloadOutlined />} onClick={installUpdate} block>
             재시작 및 설치
           </Button>
@@ -292,7 +239,7 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
             </Button>
           </div>
         ) : (
-          /* 확인 실패 또는 기본 상태 */ <Button
+          /* 기본 상태 - 업데이트 확인 버튼 */ <Button
             icon={<CheckOutlined />}
             onClick={checkForUpdates}
             loading={isChecking}

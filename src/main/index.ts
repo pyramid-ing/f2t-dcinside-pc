@@ -80,19 +80,6 @@ function setupAutoUpdater() {
       })
     })
   })
-
-  // 앱 시작 후 5초 뒤에 업데이트 확인
-  setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify()
-  }, 5000)
-
-  // 1시간마다 업데이트 확인
-  setInterval(
-    () => {
-      autoUpdater.checkForUpdatesAndNotify()
-    },
-    60 * 60 * 1000,
-  ) // 1시간
 }
 
 // IPC 핸들러 설정
