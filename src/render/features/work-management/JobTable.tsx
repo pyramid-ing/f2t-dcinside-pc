@@ -802,8 +802,10 @@ const JobTable: React.FC = () => {
                   {resultUrl && (
                     <a
                       href={resultUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      onClick={e => {
+                        e.preventDefault()
+                        window.electronAPI?.openExternal(resultUrl)
+                      }}
                       style={{
                         color: '#1890ff',
                         fontSize: '12px',
@@ -845,8 +847,10 @@ const JobTable: React.FC = () => {
                     <div className="result-url">
                       <a
                         href={resultUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={e => {
+                          e.preventDefault()
+                          window.electronAPI?.openExternal(resultUrl)
+                        }}
                         style={{
                           cursor: 'pointer',
                           display: 'inline-flex',
@@ -874,8 +878,10 @@ const JobTable: React.FC = () => {
                     {row.status === JOB_STATUS.COMPLETED && resultUrl && (
                       <a
                         href={resultUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        onClick={e => {
+                          e.preventDefault()
+                          window.electronAPI?.openExternal(resultUrl)
+                        }}
                         style={{ color: '#1890ff', fontSize: '12px' }}
                       >
                         등록된 글 보기 →
