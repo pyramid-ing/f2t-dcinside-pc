@@ -167,7 +167,8 @@ export class PostJobService implements JobProcessor {
 
     // 작업 처리
     await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
-    const isMember = !!(postJob.loginId && postJob.loginPassword)
+    // 실제 로그인 상태로 회원/비회원 여부 판정 (브라우저 재사용 시 쿠키로 로그인 상태가 유지될 수 있음)
+    const isMember = await this.postingService.isLogin(page)
     const result = await this.postingService.postArticle(postJob, context, page, jobId, isMember)
 
     await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)

@@ -10,6 +10,7 @@ import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
+import { retry } from '@main/app/utils/retry'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -188,7 +189,15 @@ export class JobQueueProcessor implements OnModuleInit {
             isMember = true
           }
 
-          await this.postingService.deleteArticleByResultUrl(postJob, page, jobId, isMember)
+          await retry(
+            async () => {
+              await this.postingService.deleteArticleByResultUrl(postJob, page, jobId, isMember)
+              return true
+            },
+            1000,
+            3,
+            'linear',
+          )
 
           await this.prisma.postJob.update({
             where: { id: postJob.id },
@@ -208,7 +217,6 @@ export class JobQueueProcessor implements OnModuleInit {
             logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
           }
         }
-        await this.jobLogsService.createJobLog(jobId, logMessage, 'error')
         this.logger.error(logMessage, error.stack)
         // 에러 발생 시에도 재시도되지 않도록 삭제 완료로 간주 처리
         try {
@@ -216,7 +224,7 @@ export class JobQueueProcessor implements OnModuleInit {
             where: { id: postJob.id },
             data: { deletedAt: new Date() } as any,
           })
-          await this.jobLogsService.createJobLog(jobId, '에러로 인해 삭제 완료 처리(더 이상 재시도하지 않음).')
+          await this.jobLogsService.createJobLog(jobId, logMessage, 'error')
         } catch (_) {}
       }
     }
