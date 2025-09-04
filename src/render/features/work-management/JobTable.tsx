@@ -310,6 +310,7 @@ const JobTable: React.FC = () => {
   const [isAllSelected, setIsAllSelected] = useState(false)
   const [bulkRetryLoading, setBulkRetryLoading] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+  const [bulkDeleteRequestLoading, setBulkDeleteRequestLoading] = useState(false)
 
   const [intervalStart, setIntervalStart] = useState<number>(60)
   const [intervalEnd, setIntervalEnd] = useState<number>(90)
@@ -561,6 +562,41 @@ const JobTable: React.FC = () => {
     setIntervalApplyLoading(false)
   }
 
+  // 선택된 항목 중 '완료 상태 + 삭제되지 않음 + 포스팅 + 결과 URL 존재'만 삭제요청 처리
+  const handleBulkDeleteRequestProcess = async () => {
+    if (selectedJobIds.length === 0) {
+      message.warning('삭제요청 처리할 작업을 선택해주세요.')
+      return
+    }
+
+    const eligibleJobs = data.filter(
+      job =>
+        selectedJobIds.includes(job.id) &&
+        job.type === JOB_TYPE.POST &&
+        job.status === JOB_STATUS.COMPLETED &&
+        !job.postJob?.deletedAt &&
+        (!!job.resultUrl || !!job.postJob?.resultUrl),
+    )
+
+    if (eligibleJobs.length === 0) {
+      message.info('등록완료이며 미삭제 상태의 포스팅이 없습니다.')
+      return
+    }
+
+    setBulkDeleteRequestLoading(true)
+    try {
+      const nowIso = new Date().toISOString()
+      // deleteAt을 지금으로 설정
+      await Promise.all(eligibleJobs.map(job => api.patch(`/api/jobs/${job.id}`, { deleteAt: nowIso })))
+
+      message.success(`삭제요청을 ${eligibleJobs.length}개 작업에 적용했습니다.`)
+      fetchJobs()
+    } catch (error: any) {
+      message.error(error?.message || '삭제요청 처리에 실패했습니다.')
+    }
+    setBulkDeleteRequestLoading(false)
+  }
+
   const handleBulkPendingToRequest = async () => {
     const pendingIds = data
       .filter(job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.PENDING)
@@ -664,6 +700,20 @@ const JobTable: React.FC = () => {
           </Button>
           <Button danger onClick={handleBulkDelete}>
             선택된 작업 삭제 ({selectedJobIds.length}개)
+          </Button>
+          <Button type="primary" loading={bulkDeleteRequestLoading} onClick={handleBulkDeleteRequestProcess}>
+            삭제요청 처리 (
+            {
+              data.filter(
+                job =>
+                  selectedJobIds.includes(job.id) &&
+                  job.type === JOB_TYPE.POST &&
+                  job.status === JOB_STATUS.COMPLETED &&
+                  !job.postJob?.deletedAt &&
+                  (!!job.resultUrl || !!job.postJob?.resultUrl),
+              ).length
+            }
+            개)
           </Button>
           <Divider />
           <span>등록 간격(분):</span>
