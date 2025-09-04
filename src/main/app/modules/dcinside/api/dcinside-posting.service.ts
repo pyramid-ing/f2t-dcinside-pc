@@ -762,13 +762,12 @@ export class DcinsidePostingService {
   }
 
   private async inputNickname(page: Page, nickname: string): Promise<void> {
-    // 닉네임 입력 영역 또는 입력창이 표시될 때까지 대기
-    await page.waitForSelector('#gall_nick_name, #name', { state: 'visible', timeout: 30_000 })
-
     // 기본닉네임 해제(X 버튼) - 존재할 때만 클릭 (없으면 무시)
     try {
-      const xBtnLocator = page.locator('#btn_gall_nick_name_x')
-      if ((await xBtnLocator.count()) > 0) {
+      const xBtnLocator = page.locator('#btn_gall_nick_name_x:visible')
+      const hasXButton = (await xBtnLocator.count()) > 0
+      this.logger.log(`갤닉 X 버튼 존재 여부: ${hasXButton}`)
+      if (hasXButton) {
         await xBtnLocator.click()
         await sleep(500)
       }
@@ -776,6 +775,7 @@ export class DcinsidePostingService {
       // X 버튼이 없거나 클릭 실패 시 무시하고 계속 진행
     }
 
+    // 실제 입력 대상만 가시화 대기
     await page.waitForSelector('#name', { state: 'visible', timeout: 60_000 })
     await page.evaluate(_nickname => {
       const nicknameInput = document.querySelector('#name') as HTMLInputElement | HTMLTextAreaElement | null
