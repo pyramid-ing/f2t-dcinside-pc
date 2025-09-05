@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { execSync } from 'child_process'
 import { EnvConfig } from '@main/config/env.config'
+import { sleep } from '@main/app/utils/sleep'
 
 @Injectable()
 export class TetheringService {
@@ -19,15 +20,18 @@ export class TetheringService {
    * ADB를 사용한 USB 테더링 리셋
    * - Android 기기의 모바일 데이터를 끄고 켜서 IP 변경
    */
-  resetUsbTethering(adbPath?: string) {
+  async resetUsbTethering(adbPath?: string) {
     try {
       const adb = adbPath?.trim() || EnvConfig.adbPath
+
       this.logger.log('[ADB] USB 테더링 OFF')
       execSync(`${adb} shell svc data disable`)
-      execSync('sleep 2')
+
+      await sleep(3_000)
+
       this.logger.log('[ADB] USB 테더링 ON')
       execSync(`${adb} shell svc data enable`)
-      execSync('sleep 5')
+      await sleep(5_000)
     } catch (e: any) {
       this.logger.warn(`[ADB] 테더링 리셋 실패: ${e?.message || e}`)
     }
@@ -44,7 +48,7 @@ export class TetheringService {
     const attempts = options?.attempts ?? 3
     const waitSeconds = options?.waitSeconds ?? 3
     for (let attempt = 1; attempt <= attempts; attempt++) {
-      this.resetUsbTethering(options?.adbPath)
+      await this.resetUsbTethering(options?.adbPath)
       const newIp = this.getCurrentIp()
       this.logger.log(`[IP체크] 이전: ${prevIp.ip} / 새로고침: ${newIp.ip}`)
       if (newIp.ip && newIp.ip !== prevIp.ip) {
