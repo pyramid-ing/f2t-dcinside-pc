@@ -7,6 +7,10 @@ import { sleep } from '@main/app/utils/sleep'
 export class TetheringService {
   private readonly logger = new Logger(TetheringService.name)
 
+  // IP 변경 이력 추적
+  private lastIpChangeTime: number | null = null
+  private postCountSinceLastChange: number = 0
+
   getCurrentIp(): { ip: string } {
     try {
       const ip = execSync('curl -4 -s https://api.ipify.org').toString().trim()
@@ -32,9 +36,52 @@ export class TetheringService {
       this.logger.log('[ADB] USB 테더링 ON')
       execSync(`${adb} shell svc data enable`)
       await sleep(5_000)
+
+      // IP 변경 시간 기록
+      this.lastIpChangeTime = Date.now()
+      this.postCountSinceLastChange = 0
     } catch (e: any) {
       this.logger.warn(`[ADB] 테더링 리셋 실패: ${e?.message || e}`)
     }
+  }
+
+  /**
+   * IP 변경이 필요한지 확인
+   */
+  shouldChangeIp(changeInterval?: { type: 'time' | 'count'; timeMinutes?: number; postCount?: number }): boolean {
+    if (!changeInterval) {
+      // 설정이 없으면 항상 변경
+      return true
+    }
+
+    switch (changeInterval.type) {
+      case 'time': {
+        if (!this.lastIpChangeTime) {
+          // 처음 실행이면 변경
+          return true
+        }
+
+        const timeMinutes = changeInterval.timeMinutes ?? 30
+        const timeSinceLastChange = (Date.now() - this.lastIpChangeTime) / (1000 * 60)
+        return timeSinceLastChange >= timeMinutes
+      }
+
+      case 'count': {
+        const postCount = changeInterval.postCount ?? 5
+        return this.postCountSinceLastChange >= postCount
+      }
+
+      default:
+        return true
+    }
+  }
+
+  /**
+   * 포스팅 완료 시 호출 (포스팅 수 카운트)
+   */
+  onPostCompleted() {
+    this.postCountSinceLastChange++
+    this.logger.log(`[테더링] 포스팅 완료 - 마지막 IP 변경 후 포스팅 수: ${this.postCountSinceLastChange}`)
   }
 
   async checkIpChanged(

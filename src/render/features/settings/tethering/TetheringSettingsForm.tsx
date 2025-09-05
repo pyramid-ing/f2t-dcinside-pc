@@ -1,7 +1,7 @@
 import type { Settings } from '@render/types/settings'
 import React, { useEffect, useState } from 'react'
 import type { FormInstance } from 'antd'
-import { Form, Input, Space, message, Button } from 'antd'
+import { Form, Input, Space, message, Button, Radio } from 'antd'
 import { CheckCircleTwoTone, CloseCircleTwoTone, ReloadOutlined } from '@ant-design/icons'
 import { checkTetheringConnection, changeIp } from '@render/api/settingsApi'
 import { getSettings } from '@render/api'
@@ -132,7 +132,53 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
           <Input type="number" min={1} disabled={!canUseTethering} />
         </Form.Item>
       </Space>
-      <div style={{ color: '#888', marginTop: 4 }}>포스팅마다 안드로이드 모바일 데이터 토글로 IP를 바꿉니다.</div>
+
+      <div style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
+        <h4 style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>IP 변경 주기</h4>
+
+        <Form.Item label="변경 주기 타입" name={['tethering', 'changeInterval', 'type']}>
+          <Radio.Group disabled={!canUseTethering}>
+            <Radio value="time">시간 기반</Radio>
+            <Radio value="count">포스팅 수 기반</Radio>
+          </Radio.Group>
+        </Form.Item>
+
+        <Form.Item
+          noStyle
+          shouldUpdate={(prevValues, currentValues) =>
+            prevValues.tethering?.changeInterval?.type !== currentValues.tethering?.changeInterval?.type
+          }
+        >
+          {({ getFieldValue }) => {
+            const changeType = getFieldValue(['tethering', 'changeInterval', 'type'])
+
+            if (changeType === 'time') {
+              return (
+                <Form.Item label="변경 간격 (분)" name={['tethering', 'changeInterval', 'timeMinutes']}>
+                  <Input type="number" min={1} disabled={!canUseTethering} placeholder="30" />
+                </Form.Item>
+              )
+            }
+
+            if (changeType === 'count') {
+              return (
+                <Form.Item label="포스팅 수" name={['tethering', 'changeInterval', 'postCount']}>
+                  <Input type="number" min={1} disabled={!canUseTethering} placeholder="5" />
+                </Form.Item>
+              )
+            }
+
+            return null
+          }}
+        </Form.Item>
+
+        <div style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+          • 시간 기반: 마지막 IP 변경 후 설정한 시간이 지나면 다음 포스팅 전에 IP 변경
+          <br />• 포스팅 수 기반: 설정한 개수만큼 포스팅 후 다음 포스팅 전에 IP 변경
+        </div>
+      </div>
+
+      <div style={{ color: '#888', marginTop: 8 }}>안드로이드 모바일 데이터 토글로 IP를 변경합니다.</div>
     </div>
   )
 }

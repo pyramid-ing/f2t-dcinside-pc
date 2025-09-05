@@ -49,17 +49,25 @@ export class PostJobService implements JobProcessor {
     // 테더링 모드면 권한 확인 후 포스팅 전 IP 변경
     if (settings?.ipMode === IpMode.TETHERING) {
       await this.checkPermission(Permission.TETHERING)
-      try {
-        const prev = this.tetheringService.getCurrentIp()
-        await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
-        const changed = await this.tetheringService.checkIpChanged(prev, {
-          attempts: settings?.tethering?.attempts ?? 3,
-          waitSeconds: settings?.tethering?.waitSeconds ?? 3,
-        })
-        await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
-      } catch (e: any) {
-        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
-        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+
+      // IP 변경이 필요한지 확인
+      const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
+
+      if (shouldChange) {
+        try {
+          const prev = this.tetheringService.getCurrentIp()
+          await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
+          const changed = await this.tetheringService.checkIpChanged(prev, {
+            attempts: settings?.tethering?.attempts ?? 3,
+            waitSeconds: settings?.tethering?.waitSeconds ?? 3,
+          })
+          await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
+        } catch (e: any) {
+          await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
+          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+        }
+      } else {
+        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)
       }
     }
 
@@ -178,6 +186,12 @@ export class PostJobService implements JobProcessor {
         where: { id: postJob.id },
         data: { resultUrl: result.url },
       })
+
+      // 테더링 모드에서 포스팅 수 카운트 증가
+      const settings = await this.settingsService.getSettings()
+      if (settings?.ipMode === IpMode.TETHERING) {
+        this.tetheringService.onPostCompleted()
+      }
     }
 
     return result
