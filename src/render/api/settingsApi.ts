@@ -32,25 +32,21 @@ export const downloadProxySampleExcel = async (): Promise<Blob> => {
   return res.data as Blob
 }
 
-export const checkTetheringConnection = async (
-  adbPath?: string,
-): Promise<{
+export const checkTetheringConnection = async (): Promise<{
   adbFound: boolean
   connected: boolean
   output: string
 }> => {
-  const res = await api.post('/settings/tethering/check-connection', { adbPath })
+  const res = await api.post('/settings/tethering/check-connection')
   return res.data
 }
 
-export const changeIp = async (
-  adbPath?: string,
-): Promise<{
+export const changeIp = async (): Promise<{
   success: boolean
   previousIp: string
   newIp: string
   changed: boolean
 }> => {
-  const res = await api.post('/settings/tethering/change-ip', { adbPath })
+  const res = await api.post('/settings/tethering/change-ip')
   return res.data
 }

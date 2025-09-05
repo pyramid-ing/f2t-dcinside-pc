@@ -55,7 +55,6 @@ export class PostJobService implements JobProcessor {
         const changed = await this.tetheringService.checkIpChanged(prev, {
           attempts: settings?.tethering?.attempts ?? 3,
           waitSeconds: settings?.tethering?.waitSeconds ?? 3,
-          adbPath: settings?.tethering?.adbPath,
         })
         await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
       } catch (e: any) {

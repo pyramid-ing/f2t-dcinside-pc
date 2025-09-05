@@ -44,7 +44,6 @@ export interface Settings {
    * 테더링 설정
    */
   tethering?: {
-    adbPath?: string // adb 경로 (선택)
     attempts?: number // 변경 재시도 횟수 (기본 3)
     waitSeconds?: number // 재시도 대기 (초) (기본 3)
   }

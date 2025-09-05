@@ -58,20 +58,20 @@ export class SettingsController {
   @UseGuards(AuthGuard)
   @Permissions(Permission.TETHERING)
   @Post('tethering/check-connection')
-  async checkTetheringConnection(@Body() body: { adbPath?: string }) {
-    const result = this.tetheringService.checkAdbConnectionStatus(body?.adbPath)
+  async checkTetheringConnection() {
+    const result = this.tetheringService.checkAdbConnectionStatus()
     return result
   }
 
   @UseGuards(AuthGuard)
   @Permissions(Permission.TETHERING)
   @Post('tethering/change-ip')
-  async changeIp(@Body() body: { adbPath?: string }) {
+  async changeIp() {
     try {
       const prevIp = this.tetheringService.getCurrentIp()
       this.logger.log(`IP 변경 시작 - 현재 IP: ${prevIp.ip}`)
 
-      this.tetheringService.resetUsbTethering(body?.adbPath)
+      await this.tetheringService.resetUsbTethering()
 
       // 잠시 대기 후 새 IP 확인
       await sleep(5_000)

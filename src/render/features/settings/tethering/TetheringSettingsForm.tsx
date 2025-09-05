@@ -49,10 +49,6 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
   return (
     <div>
       <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 600 }}>테더링 설정</h3>
-      {/* 부모 Form 컨텍스트에서 동작하는 Form.Item만 렌더 */}
-      <Form.Item label="ADB 경로" name={['tethering', 'adbPath']}>
-        <Input placeholder="기본: adb (PATH에 등록되어 있어야 합니다)" disabled={!canUseTethering} />
-      </Form.Item>
       {!canUseTethering && (
         <div style={{ color: '#ff4d4f', marginTop: -8, marginBottom: 12, fontSize: 12 }}>
           테더링 권한이 없습니다. 라이센스에 테더링 권한이 필요합니다.
@@ -65,8 +61,7 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
             onClick={async () => {
               try {
                 setChecking(true)
-                const adbPath = (form as any).getFieldValue(['tethering', 'adbPath']) as string | undefined
-                const res = await checkTetheringConnection(adbPath)
+                const res = await checkTetheringConnection()
                 setCheckResult(res)
                 if (!res.adbFound) {
                   setStatus('error')
@@ -103,8 +98,7 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
             onClick={async () => {
               try {
                 setChangingIp(true)
-                const adbPath = (form as any).getFieldValue(['tethering', 'adbPath']) as string | undefined
-                const result = await changeIp(adbPath)
+                const result = await changeIp()
 
                 if (result.changed) {
                   message.success(`IP 변경 성공: ${result.previousIp} → ${result.newIp}`)

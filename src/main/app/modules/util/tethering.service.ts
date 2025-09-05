@@ -20,9 +20,9 @@ export class TetheringService {
    * ADB를 사용한 USB 테더링 리셋
    * - Android 기기의 모바일 데이터를 끄고 켜서 IP 변경
    */
-  async resetUsbTethering(adbPath?: string) {
+  async resetUsbTethering() {
     try {
-      const adb = adbPath?.trim() || EnvConfig.adbPath
+      const adb = EnvConfig.adbPath
 
       this.logger.log('[ADB] USB 테더링 OFF')
       execSync(`${adb} shell svc data disable`)
@@ -42,13 +42,12 @@ export class TetheringService {
     options?: {
       attempts?: number
       waitSeconds?: number
-      adbPath?: string
     },
   ): Promise<{ ip: string }> {
     const attempts = options?.attempts ?? 3
     const waitSeconds = options?.waitSeconds ?? 3
     for (let attempt = 1; attempt <= attempts; attempt++) {
-      await this.resetUsbTethering(options?.adbPath)
+      await this.resetUsbTethering()
       const newIp = this.getCurrentIp()
       this.logger.log(`[IP체크] 이전: ${prevIp.ip} / 새로고침: ${newIp.ip}`)
       if (newIp.ip && newIp.ip !== prevIp.ip) {
@@ -69,9 +68,9 @@ export class TetheringService {
    * - connected: Android 기기 연결 및 데이터 사용 가능 여부
    * - output: 원본 명령 출력
    */
-  checkAdbConnectionStatus(adbPath?: string): { adbFound: boolean; connected: boolean; output: string } {
+  checkAdbConnectionStatus(): { adbFound: boolean; connected: boolean; output: string } {
     try {
-      const adb = adbPath?.trim() || EnvConfig.adbPath
+      const adb = EnvConfig.adbPath
 
       // ADB 명령어 실행 가능 여부 확인
       let adbFound = false
