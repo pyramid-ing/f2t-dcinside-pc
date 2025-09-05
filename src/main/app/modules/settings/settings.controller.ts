@@ -15,6 +15,7 @@ import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import type { Response } from 'express'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
+import { delay } from 'rxjs'
 
 @Controller('settings')
 export class SettingsController {
@@ -60,5 +61,33 @@ export class SettingsController {
   async checkTetheringConnection(@Body() body: { adbPath?: string }) {
     const result = this.tetheringService.checkAdbConnectionStatus(body?.adbPath)
     return result
+  }
+
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.TETHERING)
+  @Post('tethering/change-ip')
+  async changeIp(@Body() body: { adbPath?: string }) {
+    try {
+      const prevIp = this.tetheringService.getCurrentIp()
+      this.logger.log(`IP 변경 시작 - 현재 IP: ${prevIp.ip}`)
+
+      this.tetheringService.resetUsbTethering(body?.adbPath)
+
+      // 잠시 대기 후 새 IP 확인
+      delay(5_000)
+      const newIp = this.tetheringService.getCurrentIp()
+
+      this.logger.log(`IP 변경 완료 - 이전 IP: ${prevIp.ip}, 새 IP: ${newIp.ip}`)
+
+      return {
+        success: true,
+        previousIp: prevIp.ip,
+        newIp: newIp.ip,
+        changed: prevIp.ip !== newIp.ip,
+      }
+    } catch (error: any) {
+      this.logger.error(`IP 변경 실패: ${error?.message || error}`)
+      throw error
+    }
   }
 }

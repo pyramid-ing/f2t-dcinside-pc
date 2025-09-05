@@ -42,3 +42,15 @@ export const checkTetheringConnection = async (
   const res = await api.post('/settings/tethering/check-connection', { adbPath })
   return res.data
 }
+
+export const changeIp = async (
+  adbPath?: string,
+): Promise<{
+  success: boolean
+  previousIp: string
+  newIp: string
+  changed: boolean
+}> => {
+  const res = await api.post('/settings/tethering/change-ip', { adbPath })
+  return res.data
+}

@@ -2,8 +2,8 @@ import type { Settings } from '@render/types/settings'
 import React, { useEffect, useState } from 'react'
 import type { FormInstance } from 'antd'
 import { Form, Input, Space, message, Button } from 'antd'
-import { CheckCircleTwoTone, CloseCircleTwoTone } from '@ant-design/icons'
-import { checkTetheringConnection } from '@render/api/settingsApi'
+import { CheckCircleTwoTone, CloseCircleTwoTone, ReloadOutlined } from '@ant-design/icons'
+import { checkTetheringConnection, changeIp } from '@render/api/settingsApi'
 import { getSettings } from '@render/api'
 import { usePermissions } from '@render/hooks/usePermissions'
 import { Permission } from '@render/types/permissions'
@@ -20,6 +20,7 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
   const [form] = parentForm ? [parentForm] : Form.useForm<TetheringFormValues>()
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [changingIp, setChangingIp] = useState(false)
   const [status, setStatus] = useState<null | 'success' | 'error'>(null)
   const [checkResult, setCheckResult] = useState<null | {
     adbFound: boolean
@@ -58,42 +59,71 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
         </div>
       )}
       <div style={{ marginBottom: 12 }}>
-        <Button
-          disabled={!canUseTethering}
-          onClick={async () => {
-            try {
-              setChecking(true)
-              const adbPath = (form as any).getFieldValue(['tethering', 'adbPath']) as string | undefined
-              const res = await checkTetheringConnection(adbPath)
-              setCheckResult(res)
-              if (!res.adbFound) {
+        <Space>
+          <Button
+            disabled={!canUseTethering}
+            onClick={async () => {
+              try {
+                setChecking(true)
+                const adbPath = (form as any).getFieldValue(['tethering', 'adbPath']) as string | undefined
+                const res = await checkTetheringConnection(adbPath)
+                setCheckResult(res)
+                if (!res.adbFound) {
+                  setStatus('error')
+                  message.error('adb를 찾을 수 없습니다. PATH 또는 경로를 확인하세요.')
+                } else if (res.connected) {
+                  setStatus('success')
+                  message.success('안드로이드 장치가 연결되어 있습니다.')
+                } else {
+                  setStatus('error')
+                  message.warning('adb는 동작하지만 연결된 장치를 찾지 못했습니다.')
+                }
+              } catch (e: any) {
                 setStatus('error')
-                message.error('adb를 찾을 수 없습니다. PATH 또는 경로를 확인하세요.')
-              } else if (res.connected) {
-                setStatus('success')
-                message.success('안드로이드 장치가 연결되어 있습니다.')
-              } else {
-                setStatus('error')
-                message.warning('adb는 동작하지만 연결된 장치를 찾지 못했습니다.')
+                message.error(e?.response?.data?.message || e?.message || '연결 확인 실패')
+              } finally {
+                setChecking(false)
               }
-            } catch (e: any) {
-              setStatus('error')
-              message.error(e?.response?.data?.message || e?.message || '연결 확인 실패')
-            } finally {
-              setChecking(false)
+            }}
+            loading={checking}
+            icon={
+              status === 'success' ? (
+                <CheckCircleTwoTone twoToneColor="#52c41a" />
+              ) : status === 'error' ? (
+                <CloseCircleTwoTone twoToneColor="#ff4d4f" />
+              ) : undefined
             }
-          }}
-          loading={checking}
-          icon={
-            status === 'success' ? (
-              <CheckCircleTwoTone twoToneColor="#52c41a" />
-            ) : status === 'error' ? (
-              <CloseCircleTwoTone twoToneColor="#ff4d4f" />
-            ) : undefined
-          }
-        >
-          ADB 연결 확인
-        </Button>
+          >
+            ADB 연결 확인
+          </Button>
+
+          <Button
+            type="primary"
+            disabled={!canUseTethering || status !== 'success'}
+            onClick={async () => {
+              try {
+                setChangingIp(true)
+                const adbPath = (form as any).getFieldValue(['tethering', 'adbPath']) as string | undefined
+                const result = await changeIp(adbPath)
+
+                if (result.changed) {
+                  message.success(`IP 변경 성공: ${result.previousIp} → ${result.newIp}`)
+                } else {
+                  message.warning(`IP 변경 시도했지만 변경되지 않았습니다. 현재 IP: ${result.newIp}`)
+                }
+              } catch (e: any) {
+                message.error(e?.response?.data?.message || e?.message || 'IP 변경 실패')
+              } finally {
+                setChangingIp(false)
+              }
+            }}
+            loading={changingIp}
+            icon={<ReloadOutlined />}
+          >
+            IP 변경
+          </Button>
+        </Space>
+
         {checkResult && (
           <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: '#666', fontSize: 12 }}>
             {checkResult.adbFound && checkResult.connected ? checkResult.output : '실패'}
