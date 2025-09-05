@@ -126,9 +126,12 @@ export class EnvConfig {
           LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
         }
 
-        // ADB 실행 파일을 userData로 복사 (윈도우에서만)
+        // ADB 실행 파일과 DLL을 userData로 복사 (윈도우에서만)
         if (this.platform === 'win32') {
           const adbSourcePath = path.join(this.resourcePath, 'resources', 'adb.exe')
+          const adbDllSourcePath = path.join(this.resourcePath, 'resources', 'AdbWinApi.dll')
+          const adbDllTargetPath = path.join(this.userDataCustomPath, 'AdbWinApi.dll')
+
           if (!fs.existsSync(this.adbPath) && fs.existsSync(adbSourcePath)) {
             const adbDir = path.dirname(this.adbPath)
             if (!fs.existsSync(adbDir)) {
@@ -138,6 +141,18 @@ export class EnvConfig {
             // ADB 실행 파일을 userData로 복사
             fs.copyFileSync(adbSourcePath, this.adbPath)
             LoggerConfig.info(`ADB 실행 파일 복사 완료: ${this.adbPath}`)
+          }
+
+          // AdbWinApi.dll 복사
+          if (!fs.existsSync(adbDllTargetPath) && fs.existsSync(adbDllSourcePath)) {
+            const adbDir = path.dirname(adbDllTargetPath)
+            if (!fs.existsSync(adbDir)) {
+              fs.mkdirSync(adbDir, { recursive: true })
+            }
+
+            // AdbWinApi.dll을 userData로 복사
+            fs.copyFileSync(adbDllSourcePath, adbDllTargetPath)
+            LoggerConfig.info(`AdbWinApi.dll 복사 완료: ${adbDllTargetPath}`)
           }
         }
       }
