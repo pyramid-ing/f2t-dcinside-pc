@@ -15,7 +15,7 @@ import { SettingsService } from 'src/main/app/modules/settings/settings.service'
 import type { Response } from 'express'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
-import { delay } from 'rxjs'
+import { sleep } from '@main/app/utils/sleep'
 
 @Controller('settings')
 export class SettingsController {
@@ -74,7 +74,7 @@ export class SettingsController {
       this.tetheringService.resetUsbTethering(body?.adbPath)
 
       // 잠시 대기 후 새 IP 확인
-      delay(5_000)
+      await sleep(5_000)
       const newIp = this.tetheringService.getCurrentIp()
 
       this.logger.log(`IP 변경 완료 - 이전 IP: ${prevIp.ip}, 새 IP: ${newIp.ip}`)
