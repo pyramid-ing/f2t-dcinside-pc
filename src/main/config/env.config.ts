@@ -25,6 +25,11 @@ export class EnvConfig {
     ? path.join(EnvConfig.resourcePath, 'resources', 'initial.sqlite')
     : './db.sqlite'
 
+  // ADB 실행 파일 경로
+  public static adbPath = EnvConfig.isPackaged
+    ? path.join(EnvConfig.resourcePath, 'resources', 'adb.exe')
+    : path.join(process.cwd(), 'resources', 'adb.exe')
+
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
   private static engineName = ''
@@ -130,6 +135,7 @@ export class EnvConfig {
       isElectron: this.isElectron,
       isPackaged: this.isPackaged,
       resourcePath: this.resourcePath,
+      adbPath: this.adbPath,
     }
   }
 }

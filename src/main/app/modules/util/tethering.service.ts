@@ -1,9 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { execSync } from 'child_process'
+import { EnvConfig } from '@main/config/env.config'
 
 @Injectable()
 export class TetheringService {
   private readonly logger = new Logger(TetheringService.name)
+
+  private getAdbPath(): string {
+    switch (process.platform) {
+      case 'win32':
+        // 윈도우에서는 EnvConfig의 adbPath 사용
+        return EnvConfig.adbPath
+      default:
+        return 'adb'
+    }
+  }
 
   getCurrentIp(): { ip: string } {
     try {
@@ -14,9 +25,13 @@ export class TetheringService {
     }
   }
 
+  /**
+   * ADB를 사용한 USB 테더링 리셋
+   * - Android 기기의 모바일 데이터를 끄고 켜서 IP 변경
+   */
   resetUsbTethering(adbPath?: string) {
     try {
-      const adb = adbPath?.trim() || 'adb'
+      const adb = adbPath?.trim() || this.getAdbPath()
       this.logger.log('[ADB] USB 테더링 OFF')
       execSync(`${adb} shell svc data disable`)
       execSync('sleep 2')
@@ -30,7 +45,11 @@ export class TetheringService {
 
   async checkIpChanged(
     prevIp: { ip: string },
-    options?: { attempts?: number; waitSeconds?: number; adbPath?: string },
+    options?: {
+      attempts?: number
+      waitSeconds?: number
+      adbPath?: string
+    },
   ): Promise<{ ip: string }> {
     const attempts = options?.attempts ?? 3
     const waitSeconds = options?.waitSeconds ?? 3
@@ -50,27 +69,34 @@ export class TetheringService {
     throw new Error(`${attempts}회 시도에도 IP가 변경되지 않았습니다.`)
   }
 
+  /**
+   * ADB 연결 상태 확인
+   * - adbFound: ADB 명령어 실행 가능 여부
+   * - connected: Android 기기 연결 및 데이터 사용 가능 여부
+   * - output: 원본 명령 출력
+   */
   checkAdbConnectionStatus(adbPath?: string): { adbFound: boolean; connected: boolean; output: string } {
     try {
-      const adb = adbPath?.trim() || 'adb'
-      // adb 버전 확인 (설치 여부)
-      let output = ''
-      try {
-        output += execSync(`${adb} version`).toString()
-      } catch (_) {
-        return { adbFound: false, connected: false, output: 'adb not found' }
-      }
+      const adb = adbPath?.trim() || this.getAdbPath()
 
-      // 장치 연결 확인
-      const devicesOut = execSync(`${adb} devices`).toString()
-      output += '\n' + devicesOut
-      // "device" 상태가 붙은 라인이 하나라도 있으면 연결됨
-      const lines = devicesOut
-        .split('\n')
-        .map(l => l.trim())
-        .filter(l => l && !l.toLowerCase().includes('list of devices attached'))
-      const connected = lines.some(l => /\bdevice\b$/i.test(l))
-      return { adbFound: true, connected, output }
+      // ADB 명령어 실행 가능 여부 확인
+      let adbFound = false
+      let output = ''
+
+      try {
+        const devicesOutput = execSync(`${adb} devices`).toString()
+        output = devicesOutput
+        adbFound = true
+
+        // 연결된 기기가 있는지 확인
+        const lines = devicesOutput.split('\n').filter(line => line.trim())
+        const deviceLines = lines.filter(line => line.includes('\tdevice'))
+        const connected = deviceLines.length > 0
+
+        return { adbFound, connected, output }
+      } catch (e: any) {
+        return { adbFound: false, connected: false, output: e?.message || String(e) }
+      }
     } catch (e: any) {
       return { adbFound: false, connected: false, output: e?.message || String(e) }
     }
