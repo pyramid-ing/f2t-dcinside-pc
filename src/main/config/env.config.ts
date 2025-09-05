@@ -26,9 +26,16 @@ export class EnvConfig {
     : './db.sqlite'
 
   // ADB 실행 파일 경로
-  public static adbPath = EnvConfig.isPackaged
-    ? path.join(EnvConfig.resourcePath, 'resources', 'adb.exe')
-    : path.join(process.cwd(), 'resources', 'adb.exe')
+  public static adbPath = (() => {
+    switch (process.platform) {
+      case 'win32':
+        return EnvConfig.isPackaged
+          ? path.join(EnvConfig.userDataCustomPath, 'adb.exe')
+          : path.join(process.cwd(), 'resources', 'adb.exe')
+      default:
+        return 'adb'
+    }
+  })()
 
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
@@ -117,6 +124,21 @@ export class EnvConfig {
           // 초기 DB를 userData로 복사
           fs.copyFileSync(this.initialDbPath, this.dbPath)
           LoggerConfig.info(`초기 데이터베이스 복사 완료: ${this.dbPath}`)
+        }
+
+        // ADB 실행 파일을 userData로 복사 (윈도우에서만)
+        if (this.platform === 'win32') {
+          const adbSourcePath = path.join(this.resourcePath, 'resources', 'adb.exe')
+          if (!fs.existsSync(this.adbPath) && fs.existsSync(adbSourcePath)) {
+            const adbDir = path.dirname(this.adbPath)
+            if (!fs.existsSync(adbDir)) {
+              fs.mkdirSync(adbDir, { recursive: true })
+            }
+
+            // ADB 실행 파일을 userData로 복사
+            fs.copyFileSync(adbSourcePath, this.adbPath)
+            LoggerConfig.info(`ADB 실행 파일 복사 완료: ${this.adbPath}`)
+          }
         }
       }
     } catch (error) {

@@ -6,16 +6,6 @@ import { EnvConfig } from '@main/config/env.config'
 export class TetheringService {
   private readonly logger = new Logger(TetheringService.name)
 
-  private getAdbPath(): string {
-    switch (process.platform) {
-      case 'win32':
-        // 윈도우에서는 EnvConfig의 adbPath 사용
-        return EnvConfig.adbPath
-      default:
-        return 'adb'
-    }
-  }
-
   getCurrentIp(): { ip: string } {
     try {
       const ip = execSync('curl -4 -s https://api.ipify.org').toString().trim()
@@ -31,7 +21,7 @@ export class TetheringService {
    */
   resetUsbTethering(adbPath?: string) {
     try {
-      const adb = adbPath?.trim() || this.getAdbPath()
+      const adb = adbPath?.trim() || EnvConfig.adbPath
       this.logger.log('[ADB] USB 테더링 OFF')
       execSync(`${adb} shell svc data disable`)
       execSync('sleep 2')
@@ -77,7 +67,7 @@ export class TetheringService {
    */
   checkAdbConnectionStatus(adbPath?: string): { adbFound: boolean; connected: boolean; output: string } {
     try {
-      const adb = adbPath?.trim() || this.getAdbPath()
+      const adb = adbPath?.trim() || EnvConfig.adbPath
 
       // ADB 명령어 실행 가능 여부 확인
       let adbFound = false
