@@ -1,4 +1,5 @@
 import type { Settings } from '@render/types/settings'
+import { TetheringChangeType } from '@main/app/modules/settings/settings.types'
 import React, { useEffect, useState } from 'react'
 import type { FormInstance } from 'antd'
 import { Form, Input, Space, message, Button, Radio } from 'antd'
@@ -124,22 +125,14 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
           </div>
         )}
       </div>
-      <Space size={12} style={{ display: 'flex' }}>
-        <Form.Item label="재시도 횟수" name={['tethering', 'attempts']} style={{ flex: 1 }}>
-          <Input type="number" min={1} disabled={!canUseTethering} />
-        </Form.Item>
-        <Form.Item label="대기(초)" name={['tethering', 'waitSeconds']} style={{ flex: 1 }}>
-          <Input type="number" min={1} disabled={!canUseTethering} />
-        </Form.Item>
-      </Space>
 
       <div style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
         <h4 style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>IP 변경 주기</h4>
 
         <Form.Item label="변경 주기 타입" name={['tethering', 'changeInterval', 'type']}>
           <Radio.Group disabled={!canUseTethering}>
-            <Radio value="time">시간 기반</Radio>
-            <Radio value="count">포스팅 수 기반</Radio>
+            <Radio value={TetheringChangeType.TIME}>시간 기반</Radio>
+            <Radio value={TetheringChangeType.COUNT}>포스팅 수 기반</Radio>
           </Radio.Group>
         </Form.Item>
 
@@ -152,7 +145,7 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
           {({ getFieldValue }) => {
             const changeType = getFieldValue(['tethering', 'changeInterval', 'type'])
 
-            if (changeType === 'time') {
+            if (changeType === TetheringChangeType.TIME) {
               return (
                 <Form.Item label="변경 간격 (분)" name={['tethering', 'changeInterval', 'timeMinutes']}>
                   <Input type="number" min={1} disabled={!canUseTethering} placeholder="30" />
@@ -160,7 +153,7 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
               )
             }
 
-            if (changeType === 'count') {
+            if (changeType === TetheringChangeType.COUNT) {
               return (
                 <Form.Item label="포스팅 수" name={['tethering', 'changeInterval', 'postCount']}>
                   <Input type="number" min={1} disabled={!canUseTethering} placeholder="5" />

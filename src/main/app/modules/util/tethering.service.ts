@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { execSync } from 'child_process'
 import { EnvConfig } from '@main/config/env.config'
 import { sleep } from '@main/app/utils/sleep'
+import { TetheringChangeType } from '@main/app/modules/settings/settings.types'
 
 @Injectable()
 export class TetheringService {
@@ -48,14 +49,14 @@ export class TetheringService {
   /**
    * IP 변경이 필요한지 확인
    */
-  shouldChangeIp(changeInterval?: { type: 'time' | 'count'; timeMinutes?: number; postCount?: number }): boolean {
+  shouldChangeIp(changeInterval?: { type: TetheringChangeType; timeMinutes?: number; postCount?: number }): boolean {
     if (!changeInterval) {
       // 설정이 없으면 항상 변경
       return true
     }
 
     switch (changeInterval.type) {
-      case 'time': {
+      case TetheringChangeType.TIME: {
         if (!this.lastIpChangeTime) {
           // 처음 실행이면 변경
           return true
@@ -66,7 +67,7 @@ export class TetheringService {
         return timeSinceLastChange >= timeMinutes
       }
 
-      case 'count': {
+      case TetheringChangeType.COUNT: {
         const postCount = changeInterval.postCount ?? 5
         return this.postCountSinceLastChange >= postCount
       }
@@ -84,15 +85,9 @@ export class TetheringService {
     this.logger.log(`[테더링] 포스팅 완료 - 마지막 IP 변경 후 포스팅 수: ${this.postCountSinceLastChange}`)
   }
 
-  async checkIpChanged(
-    prevIp: { ip: string },
-    options?: {
-      attempts?: number
-      waitSeconds?: number
-    },
-  ): Promise<{ ip: string }> {
-    const attempts = options?.attempts ?? 3
-    const waitSeconds = options?.waitSeconds ?? 3
+  async checkIpChanged(prevIp: { ip: string }): Promise<{ ip: string }> {
+    const attempts = 3
+    const waitSeconds = 3
     for (let attempt = 1; attempt <= attempts; attempt++) {
       await this.resetUsbTethering()
       const newIp = this.getCurrentIp()

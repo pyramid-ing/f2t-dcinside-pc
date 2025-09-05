@@ -44,10 +44,8 @@ export interface Settings {
    * 테더링 설정
    */
   tethering?: {
-    attempts?: number // 변경 재시도 횟수 (기본 3)
-    waitSeconds?: number // 재시도 대기 (초) (기본 3)
     changeInterval?: {
-      type: 'time' | 'count' // 변경 주기 타입
+      type: TetheringChangeType // 변경 주기 타입
       timeMinutes?: number // 시간 기반: 마지막 변경 후 N분이 지나면 변경 (기본 30분)
       postCount?: number // 포스팅 수 기반: N개 포스팅 후 변경 (기본 5개)
     }
@@ -58,4 +56,9 @@ export enum IpMode {
   NONE = 'none',
   PROXY = 'proxy',
   TETHERING = 'tethering',
+}
+
+export enum TetheringChangeType {
+  TIME = 'time',
+  COUNT = 'count',
 }
