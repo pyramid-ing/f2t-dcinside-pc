@@ -286,23 +286,6 @@ export class DcinsidePostingService {
     }
   }
 
-  private buildWriteUrl(galleryInfo: GalleryInfo): string {
-    const { id, type } = galleryInfo
-
-    switch (type) {
-      case 'board':
-        return `https://gall.dcinside.com/board/write/?id=${id}`
-      case 'mgallery':
-        return `https://gall.dcinside.com/mgallery/board/write/?id=${id}`
-      case 'mini':
-        return `https://gall.dcinside.com/mini/board/write/?id=${id}`
-      case 'person':
-        return `https://gall.dcinside.com/person/board/write/?id=${id}`
-      default:
-        throw new CustomHttpException(ErrorCode.GALLERY_TYPE_UNSUPPORTED, { type })
-    }
-  }
-
   private async solveCapcha(page: Page): Promise<void> {
     const captchaImg = page.locator('#kcaptcha')
     const captchaCount = await captchaImg.count()
@@ -984,28 +967,39 @@ export class DcinsidePostingService {
   private async navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
     const success = await retry(
       async () => {
-        const writeUrl = this.buildWriteUrl(galleryInfo)
-        this.logger.log(`글쓰기 페이지 직접 이동 시도: ${writeUrl} (${galleryInfo.type} 갤러리)`)
+        const listUrl = this.buildGalleryUrl(galleryInfo)
+        this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
         try {
-          await page.goto(writeUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+          await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
         } catch (error: any) {
           if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
-            const msg = '글쓰기 페이지를 60초 내에 불러오지 못했습니다. (타임아웃)'
+            const msg = '갤러리 목록 페이지를 60초 내에 불러오지 못했습니다. (타임아웃)'
             this.logger.warn(msg)
             throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
           }
           throw error
         }
-        // 글쓰기 페이지로 정상 이동했는지 확인 (URL 혹은 필수 입력 요소 존재)
+        // 글쓰기 버튼 클릭 (goWrite)
+        try {
+          await page.waitForSelector('a.btn_write.txt', { timeout: 60_000 })
+        } catch (error: any) {
+          if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
+            const msg = '글쓰기 버튼을 60초 내에 찾지 못했습니다. (타임아웃)'
+            this.logger.warn(msg)
+            throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+          }
+          throw error
+        }
+        await page.click('a.btn_write.txt')
+        await sleep(4000)
+        // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
-        const isWriteUrl = currentUrl.includes('/write')
-        const hasSubject = await page.locator('#subject').count()
-        if (!isWriteUrl || hasSubject === 0) {
+        if (currentUrl.includes('/write')) {
+          this.logger.log('글쓰기 페이지 이동 성공')
+        } else {
           this.logger.warn('글쓰기 페이지로 이동하지 못했습니다.')
           return false
         }
-        this.logger.log('글쓰기 페이지 이동 성공')
-        return true
       },
       1000,
       3,
