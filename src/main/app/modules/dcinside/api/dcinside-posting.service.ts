@@ -996,6 +996,7 @@ export class DcinsidePostingService {
         const currentUrl = page.url()
         if (currentUrl.includes('/write')) {
           this.logger.log('글쓰기 페이지 이동 성공')
+          return true
         } else {
           this.logger.warn('글쓰기 페이지로 이동하지 못했습니다.')
           return false
