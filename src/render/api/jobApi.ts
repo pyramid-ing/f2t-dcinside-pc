@@ -112,3 +112,11 @@ export async function updateJobAutoDeleteMinutes(
   const response = await api.patch(`/api/jobs/${jobId}`, data)
   return response.data
 }
+
+/**
+ * 작업의 예약시간을 설정합니다.
+ */
+export async function updateJobScheduledAt(jobId: string, scheduledAt: string | null): Promise<ApiResponse> {
+  const response = await api.patch(`/api/jobs/${jobId}`, { scheduledAt })
+  return response.data
+}

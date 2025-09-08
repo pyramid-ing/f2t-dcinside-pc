@@ -18,7 +18,6 @@ import { LinkOutlined } from '@ant-design/icons'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import {
-  api,
   deleteJob,
   deleteJobs,
   getJobLogs,
@@ -29,6 +28,7 @@ import {
   retryJob,
   retryJobs,
   updateJobAutoDeleteMinutes,
+  updateJobScheduledAt,
 } from '@render/api'
 import PageContainer from '../../components/shared/PageContainer'
 import dayjs from 'dayjs'
@@ -606,12 +606,12 @@ const JobTable: React.FC = () => {
         const job = selectedJobs[i]
         if (i === 0) {
           // 첫 Job은 기준 시간 그대로
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await updateJobScheduledAt(job.id, base.toISOString())
         } else {
           // 랜덤 간격(분) 추가
           const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
           base = new Date(base.getTime() + interval * 60000)
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await updateJobScheduledAt(job.id, base.toISOString())
         }
       }
       message.success('간격이 적용되었습니다.')
@@ -666,13 +666,9 @@ const JobTable: React.FC = () => {
 
   const handleScheduledAtChange = async (job: PostJob, date: dayjs.Dayjs | null) => {
     try {
-      if (date) {
-        await api.patch(`/api/jobs/${job.id}`, { scheduledAt: date.toISOString() })
-        message.success('예약시간이 변경되었습니다')
-      } else {
-        await api.patch(`/api/jobs/${job.id}`, { scheduledAt: null })
-        message.success('예약시간이 해제되었습니다')
-      }
+      const scheduledAt = date ? date.toISOString() : null
+      await updateJobScheduledAt(job.id, scheduledAt)
+      message.success(scheduledAt ? '예약시간이 변경되었습니다' : '예약시간이 해제되었습니다')
       fetchJobs()
     } catch (error: any) {
       message.error(error?.message || '예약시간 변경 실패')
