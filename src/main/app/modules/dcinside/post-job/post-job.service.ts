@@ -334,4 +334,85 @@ export class PostJobService implements JobProcessor {
     })
     return job
   }
+
+  /**
+   * 여러 Job + PostJob을 배치로 생성하는 메서드 (성능 최적화)
+   */
+  async bulkCreateJobsWithPostJobs(
+    inputDataList: Array<{
+      galleryUrl: string
+      title: string
+      contentHtml: string
+      password?: string
+      nickname?: string
+      headtext?: string
+      imagePaths?: string
+      loginId?: string
+      loginPassword?: string
+      scheduledAt?: Date
+      imagePosition?: string
+      resultUrl?: string
+      deleteAt?: Date
+    }>,
+  ) {
+    // 트랜잭션으로 배치 처리
+    return this.prismaService.$transaction(async tx => {
+      // Job 데이터 준비
+      const jobDataList = inputDataList.map(postJobData => ({
+        type: JobType.POST,
+        subject: `[${postJobData.galleryUrl}] ${postJobData.title}`,
+        status: JobStatus.PENDING,
+        scheduledAt: postJobData.scheduledAt || new Date(),
+      }))
+
+      // Job 테이블에 벌크 INSERT
+      await tx.job.createMany({
+        data: jobDataList,
+      })
+
+      // 생성된 Job들의 ID를 가져오기 위해 다시 조회
+      const jobRecords = await tx.job.findMany({
+        where: {
+          type: JobType.POST,
+          status: JobStatus.PENDING,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: inputDataList.length,
+        select: {
+          id: true,
+        },
+      })
+
+      // PostJob 데이터 준비
+      const postJobDataList = inputDataList.map((postJobData, index) => ({
+        jobId: jobRecords[index].id,
+        galleryUrl: postJobData.galleryUrl,
+        title: postJobData.title,
+        contentHtml: postJobData.contentHtml,
+        password: postJobData.password ?? null,
+        nickname: postJobData.nickname ?? null,
+        headtext: postJobData.headtext ?? null,
+        imagePaths: postJobData.imagePaths ?? null,
+        loginId: postJobData.loginId ?? null,
+        loginPassword: postJobData.loginPassword ?? null,
+        imagePosition: postJobData.imagePosition ?? null,
+        ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
+        ...(postJobData.deleteAt !== undefined && { deleteAt: postJobData.deleteAt }),
+      }))
+
+      // PostJob 테이블에 벌크 INSERT
+      await tx.postJob.createMany({
+        data: postJobDataList,
+      })
+
+      // 결과 반환을 위해 Job과 PostJob 정보를 조합
+      return jobRecords.map((job, index) => ({
+        id: job.id,
+        postJob: { id: job.id }, // PostJob ID는 Job ID와 동일
+        originalData: inputDataList[index],
+      }))
+    })
+  }
 }
