@@ -14,7 +14,7 @@ import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { assertPermission } from '@main/app/utils/permission.assert'
-import { IpMode } from '@main/app/modules/settings/settings.types'
+import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import UserAgent from 'user-agents'
 
@@ -46,110 +46,154 @@ export class PostJobService implements JobProcessor {
 
     const settings = await this.settingsService.getSettings()
 
-    // 테더링 모드면 권한 확인 후 포스팅 전 IP 변경
-    if (settings?.ipMode === IpMode.TETHERING) {
-      await this.checkPermission(Permission.TETHERING)
+    // IP 모드에 따른 처리
+    switch (settings?.ipMode) {
+      case IpMode.TETHERING:
+        await this.handleTetheringMode(jobId, settings)
+        await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        break
 
-      // IP 변경이 필요한지 확인
-      const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
+      case IpMode.PROXY:
+        await this.handleProxyMode(jobId, settings, job.postJob)
+        break
 
-      if (shouldChange) {
-        try {
-          const prev = this.tetheringService.getCurrentIp()
-          await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
-          const changed = await this.tetheringService.checkIpChanged(prev)
-          await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
-        } catch (e: any) {
-          await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
-          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
-        }
-      } else {
-        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)
-      }
-    }
-
-    if (settings?.ipMode === IpMode.PROXY) {
-      const { browser, context, proxyInfo } = await this.postingService.launch()
-      // 프록시 정보 로깅
-      if (proxyInfo) {
-        const proxyStr = proxyInfo.id
-          ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
-          : `${proxyInfo.ip}:${proxyInfo.port}`
-        await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
-      } else {
-        await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
-      }
-
-      // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
-      try {
-        const ipCheckPage = await context.newPage()
-        const externalIp = await getExternalIp(ipCheckPage)
-        await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
-        await ipCheckPage.close()
-      } catch (e) {
-        await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
-      }
-
-      try {
-        if (settings?.taskDelay > 0) {
-          await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
-          await sleep(settings.taskDelay * 1000)
-        }
-        // 프록시 모드는 매 작업마다 새 페이지 생성/종료 (기존 동작 유지)
-        const page = await context.newPage()
-        try {
-          await this.handlePostJob(jobId, context, page, job.postJob)
-        } finally {
-          await page.close()
-        }
-      } catch (error) {
-        throw error
-      } finally {
-        await browser.close()
-      }
-    } else {
-      // 테더링/NONE 모드: 브라우저/페이지 재사용
-      const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
-        headless: !settings.showBrowserWindow,
-      })
-      let context = browser.contexts()[0]
-      if (!context) {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
-        await context.addInitScript(() => {
-          window.sessionStorage.clear()
-        })
-      }
-
-      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
-      let page = context.pages()[0]
-      if (!page) {
-        page = await context.newPage()
-      }
-
-      // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
-      try {
-        const externalIp = await getExternalIp(page)
-        await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
-      } catch (e) {
-        await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
-      }
-
-      if (settings?.taskDelay > 0) {
-        await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
-        await sleep(settings.taskDelay * 1000)
-      }
-
-      // 동일 페이지에서 포스팅 처리 (페이지 종료/브라우저 종료 없음)
-      await this.handlePostJob(jobId, context, page, job.postJob)
+      case IpMode.NONE:
+      default:
+        await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        break
     }
   }
   private async checkPermission(permission: Permission): Promise<void> {
     const settings = await this.settingsService.getSettings()
     const licenseCache = settings.licenseCache
     assertPermission(licenseCache, permission)
+  }
+
+  /**
+   * 테더링 모드 처리
+   */
+  private async handleTetheringMode(jobId: string, settings: Settings): Promise<void> {
+    await this.checkPermission(Permission.TETHERING)
+
+    // IP 변경이 필요한지 확인
+    const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
+
+    if (shouldChange) {
+      try {
+        const prev = this.tetheringService.getCurrentIp()
+        await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
+        const changed = await this.tetheringService.checkIpChanged(prev)
+        await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
+      } catch (e: any) {
+        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
+        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+      }
+    } else {
+      await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)
+    }
+  }
+
+  /**
+   * 프록시 모드 처리
+   */
+  private async handleProxyMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
+    const { browser, context, proxyInfo } = await this.postingService.launch()
+
+    // 프록시 정보 로깅
+    if (proxyInfo) {
+      const proxyStr = proxyInfo.id
+        ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+        : `${proxyInfo.ip}:${proxyInfo.port}`
+      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+    }
+
+    // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
+    await this.logExternalIp(jobId, context, true)
+
+    try {
+      await this.applyTaskDelay(jobId, settings)
+
+      // 프록시 모드는 매 작업마다 새 페이지 생성/종료 (기존 동작 유지)
+      const page = await context.newPage()
+      try {
+        await this.handlePostJob(jobId, context, page, postJob)
+      } finally {
+        await page.close()
+      }
+    } catch (error) {
+      throw error
+    } finally {
+      await browser.close()
+    }
+  }
+
+  /**
+   * 브라우저 재사용 모드 처리 (테더링/NONE 모드)
+   */
+  private async handleBrowserReuseMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
+    const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+      headless: !settings.showBrowserWindow,
+    })
+
+    let context = browser.contexts()[0]
+    if (!context) {
+      context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      })
+      await context.addInitScript(() => {
+        window.sessionStorage.clear()
+      })
+    }
+
+    // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
+    let page = context.pages()[0]
+    if (!page) {
+      page = await context.newPage()
+    }
+
+    // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
+    await this.logExternalIp(jobId, page, false)
+
+    await this.applyTaskDelay(jobId, settings)
+
+    // 동일 페이지에서 포스팅 처리 (페이지 종료/브라우저 종료 없음)
+    await this.handlePostJob(jobId, context, page, postJob)
+  }
+
+  /**
+   * 외부 IP 로깅
+   */
+  private async logExternalIp(jobId: string, target: any, useNewPage: boolean): Promise<void> {
+    try {
+      let externalIp: string
+
+      if (useNewPage) {
+        // 프록시 모드: 별도 페이지 사용 후 닫기
+        const ipCheckPage = await target.newPage()
+        externalIp = await getExternalIp(ipCheckPage)
+        await ipCheckPage.close()
+      } else {
+        // 테더링/NONE 모드: 동일 페이지에서 이동하여 조회
+        externalIp = await getExternalIp(target)
+      }
+
+      await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+    } catch (e) {
+      await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  /**
+   * 작업 간 딜레이 적용
+   */
+  private async applyTaskDelay(jobId: string, settings: Settings): Promise<void> {
+    if (settings?.taskDelay > 0) {
+      await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
+      await sleep(settings.taskDelay * 1000)
+    }
   }
 
   /**
@@ -182,7 +226,7 @@ export class PostJobService implements JobProcessor {
       const updateData: any = { resultUrl: result.url }
 
       // autoDeleteMinutes가 설정되어 있으면 deleteAt 계산 (현재시간 기준)
-      const autoDeleteMinutes = postJob.autoDeleteMinutes
+      const autoDeleteMinutes = (postJob as any).autoDeleteMinutes
       if (autoDeleteMinutes && autoDeleteMinutes > 0) {
         const now = new Date()
         const deleteAt = new Date(now.getTime() + autoDeleteMinutes * 60 * 1000)
