@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { UpdateJobDto } from './dto/update-job.dto'
+import { BulkActionDto, JobFiltersDto } from './dto/bulk-action.dto'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobQueueProcessor } from './job-queue.processor'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -7,10 +8,10 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus } from './job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 import { Prisma } from '@prisma/client'
+import { SelectionMode } from '@main/app/modules/dcinside/job/enums/selection-mode.enum'
 
 export const JOB_TYPE = {
   POST: 'post',
-  GENERATE_TOPIC: 'generate_topic',
 } as const
 
 export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
@@ -22,6 +23,28 @@ export class JobController {
     private readonly jobProcessor: JobQueueProcessor,
   ) {}
 
+  private buildWhere(filters: JobFiltersDto): Prisma.JobWhereInput {
+    const where: Prisma.JobWhereInput = {}
+
+    if (filters.status) {
+      where.status = filters.status as JobStatus
+    }
+
+    if (filters.type) {
+      where.type = filters.type as JobType
+    }
+
+    if (filters.search) {
+      where.OR = [
+        { subject: { contains: filters.search } },
+        { desc: { contains: filters.search } },
+        { resultMsg: { contains: filters.search } },
+      ]
+    }
+
+    return where
+  }
+
   @Get()
   async getJobs(
     @Query('status') status?: JobStatus,
@@ -29,7 +52,7 @@ export class JobController {
     @Query('search') search?: string,
     @Query('orderBy') orderBy: string = 'updatedAt',
     @Query('order') order: 'asc' | 'desc' = 'desc',
-    @Query('page') page: string = '1',
+    @Query(SelectionMode.PAGE) page: string = '1',
     @Query('limit') limit: string = '20',
   ) {
     try {
@@ -102,22 +125,79 @@ export class JobController {
     }
   }
 
+  @Get('ids')
+  async getJobIds(
+    @Query('status') status?: JobStatus,
+    @Query('type') type?: JobType,
+    @Query('search') search?: string,
+    @Query('orderBy') orderBy: string = 'updatedAt',
+    @Query('order') order: 'asc' | 'desc' = 'desc',
+  ) {
+    try {
+      const where: Prisma.JobWhereInput = {}
+
+      // 상태 필터
+      if (status) {
+        where.status = status
+      }
+
+      // 타입 필터
+      if (type) {
+        where.type = type
+      }
+
+      // 검색 필터
+      if (search) {
+        where.OR = [
+          { subject: { contains: search } },
+          { desc: { contains: search } },
+          { resultMsg: { contains: search } },
+        ]
+      }
+
+      // 필터 조건에 맞는 모든 작업의 ID만 조회 (페이지네이션 없음)
+      const jobs = await this.prisma.job.findMany({
+        where,
+        orderBy: {
+          [orderBy]: order,
+        },
+        select: {
+          id: true,
+        },
+      })
+
+      return {
+        jobIds: jobs.map(job => job.id),
+        totalCount: jobs.length,
+      }
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
   @UseGuards(AuthGuard)
   @Permissions(Permission.POSTING)
   @Post('bulk/retry')
-  async retryJobs(@Body() body: { jobIds: string[] }) {
+  async retryJobs(@Body() body: BulkActionDto) {
     try {
-      const { jobIds } = body
+      const { mode, filters, includeIds, excludeIds } = body
 
-      if (!jobIds || jobIds.length === 0) {
-        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
       }
 
-      const jobs = await this.prisma.job.findMany({
-        where: {
-          id: { in: jobIds },
-        },
-      })
+      const jobs = await this.prisma.job.findMany({ where })
 
       if (jobs.length === 0) {
         throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
@@ -182,22 +262,29 @@ export class JobController {
   }
 
   @Post('bulk/delete')
-  async deleteJobs(@Body() body: { jobIds: string[] }) {
+  async deleteJobs(@Body() body: BulkActionDto) {
     try {
-      const { jobIds } = body
+      const { mode, filters, includeIds, excludeIds } = body
 
-      if (!jobIds || jobIds.length === 0) {
-        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
       }
 
-      const jobs = await this.prisma.job.findMany({
-        where: {
-          id: { in: jobIds },
-        },
-      })
+      const jobs = await this.prisma.job.findMany({ where })
 
       if (jobs.length === 0) {
-        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND, { jobIds })
+        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
       }
 
       // 처리 중인 작업 제외 및 삭제 가능한 작업 필터링
@@ -240,6 +327,69 @@ export class JobController {
         throw error
       }
       throw new CustomHttpException(ErrorCode.JOB_BULK_DELETE_FAILED)
+    }
+  }
+
+  @Post('bulk/pending-to-request')
+  async bulkPendingToRequest(@Body() body: BulkActionDto) {
+    try {
+      const { mode, filters, includeIds, excludeIds } = body
+
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
+      }
+
+      // 등록대기(PENDING) 상태인 작업만 필터링
+      where.status = JobStatus.PENDING
+
+      const jobs = await this.prisma.job.findMany({ where })
+
+      if (jobs.length === 0) {
+        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
+      }
+
+      let successCount = 0
+      let failedCount = 0
+      const errors: string[] = []
+
+      for (const job of jobs) {
+        try {
+          await this.prisma.job.update({
+            where: { id: job.id },
+            data: { status: JobStatus.REQUEST },
+          })
+          successCount++
+        } catch (error) {
+          failedCount++
+          errors.push(`작업 ${job.id}: ${error.message}`)
+        }
+      }
+
+      return {
+        success: true,
+        message: `${successCount}개 작업이 등록요청으로 변경되었습니다.`,
+        details: {
+          successCount,
+          failedCount,
+          errors,
+        },
+      }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
     }
   }
 
@@ -414,6 +564,198 @@ export class JobController {
       })
       return jobs
     } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  @Post('bulk/preview')
+  async previewBulk(@Body() body: BulkActionDto) {
+    try {
+      const { mode, filters, includeIds, excludeIds } = body
+
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds 개수 반환
+        return { count: includeIds?.length ?? 0 }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외한 개수
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
+        const count = await this.prisma.job.count({ where })
+        return { count }
+      }
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  @Post('bulk/apply-interval')
+  async bulkApplyInterval(@Body() body: BulkActionDto) {
+    try {
+      const { mode, filters, includeIds, excludeIds, intervalStart, intervalEnd } = body
+
+      if (!intervalStart || !intervalEnd) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+
+      if (intervalStart > intervalEnd) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
+      }
+
+      // 등록대기(PENDING) 상태인 작업만 필터링
+      where.status = JobStatus.PENDING
+
+      const jobs = await this.prisma.job.findMany({
+        where,
+        orderBy: { id: 'asc' }, // id 기준 오름차순 정렬(순서 고정)
+      })
+
+      if (jobs.length < 2) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+
+      let successCount = 0
+      let failedCount = 0
+      const errors: string[] = []
+
+      // 기준 시간: 항상 현재 시간
+      let base = new Date()
+      for (let i = 0; i < jobs.length; i++) {
+        const job = jobs[i]
+        try {
+          if (i === 0) {
+            // 첫 Job은 기준 시간 그대로
+            await this.prisma.job.update({
+              where: { id: job.id },
+              data: { scheduledAt: base },
+            })
+          } else {
+            // 랜덤 간격(분) 추가
+            const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
+            base = new Date(base.getTime() + interval * 60000)
+            await this.prisma.job.update({
+              where: { id: job.id },
+              data: { scheduledAt: base },
+            })
+          }
+          successCount++
+        } catch (error) {
+          failedCount++
+          errors.push(`작업 ${job.id}: ${error.message}`)
+        }
+      }
+
+      return {
+        success: true,
+        message: `${successCount}개 작업에 간격이 적용되었습니다.`,
+        details: {
+          successCount,
+          failedCount,
+          errors,
+        },
+      }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  @Post('bulk/auto-delete')
+  async bulkUpdateAutoDelete(@Body() body: BulkActionDto) {
+    try {
+      const { mode, filters, includeIds, excludeIds, autoDeleteMinutes } = body
+
+      if (!autoDeleteMinutes && autoDeleteMinutes !== 0) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+
+      const where = this.buildWhere(filters)
+
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
+      }
+
+      const jobs = await this.prisma.job.findMany({
+        where,
+        include: { postJob: true },
+      })
+
+      if (jobs.length === 0) {
+        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
+      }
+
+      // 이미 삭제되지 않은 작업만 필터링
+      const eligibleJobs = jobs.filter(job => !job.postJob?.deletedAt)
+
+      let successCount = 0
+      let failedCount = 0
+      const errors: string[] = []
+
+      for (const job of eligibleJobs) {
+        try {
+          const updateData: any = {
+            postJob: {
+              update: {
+                autoDeleteMinutes,
+                ...(job.status === JobStatus.COMPLETED && {
+                  deleteAt: autoDeleteMinutes === 0 ? new Date() : new Date(Date.now() + autoDeleteMinutes * 60000),
+                }),
+              },
+            },
+          }
+
+          await this.prisma.job.update({
+            where: { id: job.id },
+            data: updateData,
+          })
+          successCount++
+        } catch (error) {
+          failedCount++
+          errors.push(`작업 ${job.id}: ${error.message}`)
+        }
+      }
+
+      return {
+        success: true,
+        message: `${successCount}개 작업의 등록후자동삭제(분)이 설정되었습니다.`,
+        details: {
+          successCount,
+          failedCount,
+          errors,
+        },
+      }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
     }
   }

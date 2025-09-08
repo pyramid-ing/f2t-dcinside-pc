@@ -18,6 +18,9 @@ import { LinkOutlined } from '@ant-design/icons'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import {
+  bulkApplyInterval,
+  bulkPendingToRequest,
+  bulkUpdateAutoDelete,
   deleteJob,
   deleteJobs,
   getJobLogs,
@@ -34,6 +37,9 @@ import PageContainer from '../../components/shared/PageContainer'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import { JobLog, PostJob } from '@render/api/type'
+import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
+import { BulkActionType } from '@render/types/bulk-action.enum'
+import { SelectionMode } from '@render/types/selection-mode.enum'
 
 // JOB_STATUS, JOB_TYPE, JOB_STATUS_LABEL 직접 정의
 const JOB_STATUS = {
@@ -48,7 +54,6 @@ type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 
 const JOB_TYPE = {
   POST: 'post',
-  GENERATE_TOPIC: 'generate_topic',
 } as const
 
 type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
@@ -63,7 +68,6 @@ const JOB_STATUS_LABEL: Record<JobStatus, string> = {
 
 const JOB_TYPE_LABEL: Record<JobType, string> = {
   post: '포스팅',
-  generate_topic: '주제 생성',
 }
 
 const ResultCell = styled.div`
@@ -211,13 +215,11 @@ const statusOptions = [
 
 const jobTypeLabels: Record<JobType, string> = {
   [JOB_TYPE.POST]: '포스팅',
-  [JOB_TYPE.GENERATE_TOPIC]: '주제 생성',
 }
 
 const jobTypeOptions = [
   { value: '', label: '전체' },
   { value: JOB_TYPE.POST, label: '포스팅' },
-  { value: JOB_TYPE.GENERATE_TOPIC, label: '주제 생성' },
 ]
 
 // 상태별 기본 메시지
@@ -311,10 +313,14 @@ const JobTable: React.FC = () => {
   const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null)
 
   // 벌크 작업 관련 상태
-  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
-  const [isAllSelected, setIsAllSelected] = useState(false)
+  const [selection, setSelection] = useState<SelectionState>({
+    mode: SelectionMode.PAGE,
+    selectedIds: new Set(),
+    excludedIds: new Set(),
+  })
   const [bulkRetryLoading, setBulkRetryLoading] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+  const [previewCount, setPreviewCount] = useState<number | null>(null)
 
   const [intervalStart, setIntervalStart] = useState<number>(60)
   const [intervalEnd, setIntervalEnd] = useState<number>(90)
@@ -367,14 +373,35 @@ const JobTable: React.FC = () => {
     return () => clearInterval(timer)
   }, [statusFilter, typeFilter, searchText, sortField, sortOrder, currentPage, pageSize])
 
-  // 데이터가 변경될 때 선택 상태 업데이트
-  useEffect(() => {
-    const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
-    if (validSelectedIds.length !== selectedJobIds.length) {
-      setSelectedJobIds(validSelectedIds)
+  // 현재 필터 조건 생성
+  const getCurrentFilters = (): JobFilters => ({
+    status: statusFilter || undefined,
+    type: typeFilter || undefined,
+    search: searchText || undefined,
+    orderBy: sortField,
+    order: sortOrder,
+  })
+
+  // 체크 상태 확인 함수
+  const isChecked = (id: string): boolean => {
+    if (selection.mode === SelectionMode.ALL) {
+      return !selection.excludedIds.has(id)
+    } else {
+      return selection.selectedIds.has(id)
     }
-    setIsAllSelected(validSelectedIds.length > 0 && validSelectedIds.length === data.length)
-  }, [data])
+  }
+
+  // 현재 페이지의 모든 ID
+  const currentPageIds = data.map(job => job.id)
+
+  // 선택된 개수 계산
+  const getSelectedCount = (): number => {
+    if (selection.mode === SelectionMode.ALL) {
+      return totalCount - selection.excludedIds.size
+    } else {
+      return selection.selectedIds.size
+    }
+  }
 
   const fetchJobs = async () => {
     setLoading(true)
@@ -457,53 +484,100 @@ const JobTable: React.FC = () => {
     }
   }
 
-  // 전체 선택 핸들러
+  // 전체 선택 핸들러 (현재 페이지만)
   const handleSelectAll = (checked: boolean) => {
-    setIsAllSelected(checked)
     if (checked) {
-      setSelectedJobIds(data.map(job => job.id))
+      const newSelectedIds = new Set([...selection.selectedIds, ...currentPageIds])
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: newSelectedIds,
+        excludedIds: new Set(),
+      })
     } else {
-      setSelectedJobIds([])
+      const newSelectedIds = new Set([...selection.selectedIds].filter(id => !currentPageIds.includes(id)))
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: newSelectedIds,
+        excludedIds: new Set(),
+      })
+    }
+  }
+
+  // 전체 페이지 선택 핸들러 (필터 조건에 맞는 모든 데이터)
+  const handleSelectAllPages = (checked: boolean) => {
+    if (checked) {
+      setSelection({
+        mode: SelectionMode.ALL,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+    } else {
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
     }
   }
 
   // 개별 선택 핸들러
   const handleSelectJob = (jobId: string, checked: boolean) => {
-    if (checked) {
-      const newSelectedIds = [...selectedJobIds, jobId]
-      setSelectedJobIds(newSelectedIds)
-      setIsAllSelected(newSelectedIds.length === data.length)
+    if (selection.mode === SelectionMode.PAGE) {
+      const newSelectedIds = new Set(selection.selectedIds)
+      if (checked) {
+        newSelectedIds.add(jobId)
+      } else {
+        newSelectedIds.delete(jobId)
+      }
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: newSelectedIds,
+        excludedIds: new Set(),
+      })
     } else {
-      const newSelectedIds = selectedJobIds.filter(id => id !== jobId)
-      setSelectedJobIds(newSelectedIds)
-      setIsAllSelected(false)
+      // all 모드: 해제/재선택은 excludedIds로만 관리
+      const newExcludedIds = new Set(selection.excludedIds)
+      if (checked) {
+        newExcludedIds.delete(jobId)
+      } else {
+        newExcludedIds.add(jobId)
+      }
+      setSelection({
+        mode: SelectionMode.ALL,
+        selectedIds: new Set(),
+        excludedIds: newExcludedIds,
+      })
     }
   }
 
   // 벌크 재시도 핸들러
   const handleBulkRetry = async () => {
-    if (selectedJobIds.length === 0) {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
       message.warning('재시도할 작업을 선택해주세요.')
-      return
-    }
-
-    // 선택된 작업 중 실패한 작업만 필터링
-    const failedJobIds = selectedJobIds.filter(jobId => {
-      const job = data.find(j => j.id === jobId)
-      return job && job.status === JOB_STATUS.FAILED
-    })
-
-    if (failedJobIds.length === 0) {
-      message.warning('재시도할 수 있는 실패한 작업이 없습니다.')
       return
     }
 
     setBulkRetryLoading(true)
     try {
-      const response = await retryJobs(failedJobIds)
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.RETRY,
+      }
+
+      const response = await retryJobs(request)
       message.success(response.message)
-      setSelectedJobIds([])
-      setIsAllSelected(false)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '벌크 재시도에 실패했습니다.')
@@ -513,28 +587,32 @@ const JobTable: React.FC = () => {
 
   // 벌크 삭제 핸들러
   const handleBulkDelete = async () => {
-    if (selectedJobIds.length === 0) {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
       message.warning('삭제할 작업을 선택해주세요.')
-      return
-    }
-
-    // 선택된 작업 중 처리 중인 작업 제외
-    const deletableJobIds = selectedJobIds.filter(jobId => {
-      const job = data.find(j => j.id === jobId)
-      return job && job.status !== JOB_STATUS.PROCESSING
-    })
-
-    if (deletableJobIds.length === 0) {
-      message.warning('삭제할 수 있는 작업이 없습니다. (처리 중인 작업은 삭제할 수 없습니다)')
       return
     }
 
     setBulkDeleteLoading(true)
     try {
-      const response = await deleteJobs(deletableJobIds)
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.DELETE,
+      }
+
+      const response = await deleteJobs(request)
       message.success(response.message)
-      setSelectedJobIds([])
-      setIsAllSelected(false)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '벌크 삭제에 실패했습니다.')
@@ -544,7 +622,8 @@ const JobTable: React.FC = () => {
 
   // 툴바: 선택된 작업에 등록후자동삭제(분) 일괄 적용
   const handleBulkSetAutoDeleteMinutes = async () => {
-    if (selectedJobIds.length === 0) {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
       message.warning('적용할 작업을 선택해주세요.')
       return
     }
@@ -554,42 +633,38 @@ const JobTable: React.FC = () => {
       return
     }
 
-    // 적용 대상 필터링: 이미 삭제되지 않은 작업들만
-    const eligibleJobs = data.filter(job => selectedJobIds.includes(job.id) && !job.postJob?.deletedAt)
-
-    if (eligibleJobs.length === 0) {
-      message.warning('적용할 수 있는 작업이 없습니다.')
-      return
-    }
-
     setAutoDeleteApplyLoading(true)
     try {
-      await Promise.all(
-        eligibleJobs.map(async job => {
-          // autoDeleteMinutes 설정
-          await updateJobAutoDeleteMinutes(job.id, m)
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.AUTO_DELETE,
+        autoDeleteMinutes: m,
+      }
 
-          // 완료된 작업이면 즉시 deleteAt 계산하여 적용 (현재시간 기준)
-          if (job.status === JOB_STATUS.COMPLETED) {
-            const now = dayjs()
-            const deleteAt = m === 0 ? now.toISOString() : now.add(m, 'minute').toISOString()
-            await updateJobAutoDeleteMinutes(job.id, m, deleteAt)
-          }
-        }),
-      )
-      message.success(`등록후자동삭제(분)이 ${eligibleJobs.length}개 작업에 적용되었습니다`)
+      const response = await bulkUpdateAutoDelete(request)
+      message.success(response.message)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
       fetchJobs()
-    } catch (e) {
-      message.error('등록후자동삭제(분) 적용 실패')
+    } catch (error: any) {
+      message.error(error.message || '등록후자동삭제(분) 적용 실패')
     }
     setAutoDeleteApplyLoading(false)
   }
 
   const handleApplyInterval = async () => {
-    // 등록대기(PENDING) 상태인 작업만 필터링
-    const pendingJobs = data.filter(job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.PENDING)
-    if (pendingJobs.length < 2) {
-      message.warning('등록대기 상태의 작업을 2개 이상 선택해야 합니다.')
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('간격을 적용할 작업을 선택해주세요.')
       return
     }
     if (intervalStart > intervalEnd) {
@@ -598,44 +673,61 @@ const JobTable: React.FC = () => {
     }
     setIntervalApplyLoading(true)
     try {
-      // id 기준 오름차순 정렬(순서 고정)
-      const selectedJobs = pendingJobs.sort((a, b) => a.id.localeCompare(b.id))
-      // 기준 시간: 항상 현재 시간
-      let base = new Date()
-      for (let i = 0; i < selectedJobs.length; i++) {
-        const job = selectedJobs[i]
-        if (i === 0) {
-          // 첫 Job은 기준 시간 그대로
-          await updateJobScheduledAt(job.id, base.toISOString())
-        } else {
-          // 랜덤 간격(분) 추가
-          const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
-          base = new Date(base.getTime() + interval * 60000)
-          await updateJobScheduledAt(job.id, base.toISOString())
-        }
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.APPLY_INTERVAL,
+        intervalStart,
+        intervalEnd,
       }
-      message.success('간격이 적용되었습니다.')
+
+      const response = await bulkApplyInterval(request)
+      message.success(response.message)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
       fetchJobs()
-    } catch {
-      message.error('간격 적용 실패')
+    } catch (error: any) {
+      message.error(error.message || '간격 적용 실패')
     }
     setIntervalApplyLoading(false)
   }
 
   const handleBulkPendingToRequest = async () => {
-    const pendingIds = data
-      .filter(job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.PENDING)
-      .map(job => job.id)
-    if (pendingIds.length === 0) {
-      message.info('등록대기 상태인 작업만 일괄 전환됩니다.')
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('등록요청으로 변경할 작업을 선택해주세요.')
       return
     }
     try {
-      await Promise.all(pendingIds.map(id => pendingToRequest(id)))
-      message.success('등록대기 상태가 등록요청으로 일괄 전환되었습니다.')
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.PENDING_TO_REQUEST,
+      }
+
+      const response = await bulkPendingToRequest(request)
+      message.success(response.message)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        selectedIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
       fetchJobs()
-    } catch {
-      message.error('상태 일괄변경 실패')
+    } catch (error: any) {
+      message.error(error.message || '상태 일괄변경 실패')
     }
   }
 
@@ -675,9 +767,13 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const pendingSelectedCount = data.filter(
-    job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.PENDING,
-  ).length
+  const pendingSelectedCount = data.filter(job => {
+    if (selection.mode === SelectionMode.ALL) {
+      return !selection.excludedIds.has(job.id) && job.status === JOB_STATUS.PENDING
+    } else {
+      return selection.selectedIds.has(job.id) && job.status === JOB_STATUS.PENDING
+    }
+  }).length
 
   return (
     <PageContainer title="작업 관리" maxWidth="none">
@@ -716,7 +812,7 @@ const JobTable: React.FC = () => {
         </Space>
       </div>
       {/* 선택 툴바: 선택된 작업이 있을 때만, 필터 아래에 배경색/라운드/패딩 적용 */}
-      {selectedJobIds.length > 0 && (
+      {getSelectedCount() > 0 && (
         <div
           style={{
             background: '#f9f9f9',
@@ -729,13 +825,47 @@ const JobTable: React.FC = () => {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontWeight: 500 }}>{selectedJobIds.length}개 작업이 선택되었습니다.</span>
+          <span style={{ fontWeight: 500 }}>
+            {selection.mode === SelectionMode.ALL ? (
+              <>
+                전체 {totalCount - selection.excludedIds.size}개 작업이 선택되었습니다.
+                {selection.excludedIds.size > 0 && (
+                  <span style={{ fontSize: '12px', color: '#ff4d4f', marginLeft: '8px' }}>
+                    ({selection.excludedIds.size}개 제외됨)
+                  </span>
+                )}
+                <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>(필터 조건에 맞는 모든 작업)</span>
+              </>
+            ) : (
+              <>
+                {selection.selectedIds.size}개 작업이 선택되었습니다.
+                {totalCount > 0 && (
+                  <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>(전체 {totalCount}개 중)</span>
+                )}
+              </>
+            )}
+          </span>
           <Button type="primary" onClick={handleBulkRetry}>
-            실패한 작업 재시도 (
-            {data.filter(job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.FAILED).length}개)
+            실패한 작업 재시도
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                ({data.filter(job => selection.selectedIds.has(job.id) && job.status === JOB_STATUS.FAILED).length}개)
+              </span>
+            )}
           </Button>
           <Button danger onClick={handleBulkDelete}>
-            선택된 작업 삭제 ({selectedJobIds.length}개)
+            선택된 작업 삭제
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({selection.selectedIds.size}개)</span>
+            )}
           </Button>
           <Divider />
           <span>등록 간격(분):</span>
@@ -746,12 +876,26 @@ const JobTable: React.FC = () => {
             type="primary"
             loading={intervalApplyLoading}
             onClick={handleApplyInterval}
-            disabled={pendingSelectedCount === 0}
+            disabled={getSelectedCount() === 0}
           >
-            간격 적용 ({pendingSelectedCount}개)
+            간격 적용
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({pendingSelectedCount}개)</span>
+            )}
           </Button>
-          <Button onClick={handleBulkPendingToRequest} disabled={pendingSelectedCount === 0}>
-            등록요청 일괄변경 ({pendingSelectedCount}개)
+          <Button onClick={handleBulkPendingToRequest} disabled={getSelectedCount() === 0}>
+            등록요청 일괄변경
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({pendingSelectedCount}개)</span>
+            )}
           </Button>
           <Divider type="vertical" />
           <span>등록후자동삭제(분):</span>
@@ -763,7 +907,16 @@ const JobTable: React.FC = () => {
             style={{ width: 110 }}
           />
           <Button danger loading={autoDeleteApplyLoading} onClick={handleBulkSetAutoDeleteMinutes}>
-            자동삭제 적용 ({data.filter(job => selectedJobIds.includes(job.id) && !job.postJob?.deletedAt).length}개)
+            자동삭제 적용
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                ({data.filter(job => selection.selectedIds.has(job.id) && !job.postJob?.deletedAt).length}개)
+              </span>
+            )}
           </Button>
         </div>
       )}
@@ -793,20 +946,34 @@ const JobTable: React.FC = () => {
         columns={[
           {
             title: (
-              <Checkbox
-                checked={isAllSelected}
-                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < data.length}
-                onChange={e => handleSelectAll(e.target.checked)}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <Checkbox
+                  checked={selection.mode === SelectionMode.ALL}
+                  indeterminate={selection.mode === SelectionMode.PAGE && selection.selectedIds.size > 0}
+                  onChange={e => handleSelectAllPages(e.target.checked)}
+                  title="필터 조건에 맞는 모든 작업 선택"
+                >
+                  <span style={{ fontSize: '11px', color: '#666' }}>전체</span>
+                </Checkbox>
+                <Checkbox
+                  checked={selection.mode === SelectionMode.PAGE && selection.selectedIds.size === data.length}
+                  indeterminate={
+                    selection.mode === SelectionMode.PAGE &&
+                    selection.selectedIds.size > 0 &&
+                    selection.selectedIds.size < data.length
+                  }
+                  onChange={e => handleSelectAll(e.target.checked)}
+                  title="현재 페이지의 모든 작업 선택"
+                >
+                  <span style={{ fontSize: '11px', color: '#666' }}>현재페이지</span>
+                </Checkbox>
+              </div>
             ),
             dataIndex: 'checkbox',
-            width: 50,
+            width: 100,
             align: 'center',
             render: (_: any, record: PostJob) => (
-              <Checkbox
-                checked={selectedJobIds.includes(record.id)}
-                onChange={e => handleSelectJob(record.id, e.target.checked)}
-              />
+              <Checkbox checked={isChecked(record.id)} onChange={e => handleSelectJob(record.id, e.target.checked)} />
             ),
           },
           {

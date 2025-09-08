@@ -1,5 +1,6 @@
 export const JOB_TYPE = {
   POST: 'post',
+  GENERATE_TOPIC: 'generate_topic',
 } as const
 
 export const JOB_STATUS = {

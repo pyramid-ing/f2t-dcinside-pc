@@ -1,5 +1,6 @@
 import { api } from './apiClient'
 import { ApiResponse, Job, JobLog, JobStatus, JobType, PaginatedResponse } from '@render/api/type'
+import { BulkActionRequest } from '@render/types/selection'
 
 /**
  * 작업 목록을 조회합니다.
@@ -58,18 +59,50 @@ export async function downloadJobFile(jobId: string): Promise<Blob> {
 }
 
 /**
+ * 벌크 작업 미리보기 (실제 적용될 개수 확인)
+ */
+export async function previewBulkAction(request: BulkActionRequest): Promise<{ count: number }> {
+  const response = await api.post('/api/jobs/bulk/preview', request)
+  return response.data
+}
+
+/**
  * 여러 작업을 재시도합니다.
  */
-export async function retryJobs(jobIds: string[]): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/retry', { jobIds })
+export async function retryJobs(request: BulkActionRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/retry', request)
   return response.data
 }
 
 /**
  * 여러 작업을 삭제합니다.
  */
-export async function deleteJobs(jobIds: string[]): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/delete', { jobIds })
+export async function deleteJobs(request: BulkActionRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/delete', request)
+  return response.data
+}
+
+/**
+ * 여러 작업의 등록후자동삭제(분)을 설정합니다.
+ */
+export async function bulkUpdateAutoDelete(request: BulkActionRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/auto-delete', request)
+  return response.data
+}
+
+/**
+ * 여러 작업에 등록 간격을 적용합니다.
+ */
+export async function bulkApplyInterval(request: BulkActionRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/apply-interval', request)
+  return response.data
+}
+
+/**
+ * 여러 작업을 등록대기에서 등록요청으로 일괄 변경합니다.
+ */
+export async function bulkPendingToRequest(request: BulkActionRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/pending-to-request', request)
   return response.data
 }
 
