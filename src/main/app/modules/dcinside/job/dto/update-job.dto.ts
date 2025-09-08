@@ -1,4 +1,4 @@
-import { IsISO8601, IsOptional, ValidateIf } from 'class-validator'
+import { IsISO8601, IsOptional, ValidateIf, IsNumber } from 'class-validator'
 
 export class UpdateJobDto {
   @IsOptional()
@@ -10,4 +10,8 @@ export class UpdateJobDto {
   @ValidateIf((_, v) => v !== null)
   @IsISO8601()
   deleteAt?: string | null
+
+  @IsOptional()
+  @IsNumber()
+  autoDeleteMinutes?: number | null
 }

@@ -426,11 +426,12 @@ export class JobController {
         // Job.scheduledAt은 non-nullable이므로 null이 오면 즉시 실행(now)로 대체
         updateData.scheduledAt = body.scheduledAt === null ? new Date() : new Date(body.scheduledAt)
       }
-      if ('deleteAt' in body) {
+      if ('deleteAt' in body || 'autoDeleteMinutes' in body) {
         updateData.postJob = {
           update: {
-            deleteAt: body.deleteAt ? new Date(body.deleteAt) : null,
-            deletedAt: null,
+            ...(body.deleteAt !== undefined && { deleteAt: body.deleteAt ? new Date(body.deleteAt) : null }),
+            ...(body.autoDeleteMinutes !== undefined && { autoDeleteMinutes: body.autoDeleteMinutes }),
+            ...(body.deleteAt !== undefined && { deletedAt: null }),
           },
         }
       }

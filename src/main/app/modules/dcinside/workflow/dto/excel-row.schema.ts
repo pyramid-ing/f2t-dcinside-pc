@@ -22,14 +22,14 @@ export const ExcelRowSchema = z
     로그인비번: z.coerce.string().optional(),
     말머리: z.string().optional(),
     예약날짜: z.string().optional(),
-    예약삭제날짜: z.string().optional(),
+    '등록후자동삭제(분)': z.coerce.number().int().optional(),
     이미지위치: z.string().optional(),
   })
   .transform(data => {
     // 이미지 경로들을 배열로 변환
     const imagePaths = []
     for (let i = 1; i <= 10; i++) {
-      const imagePath = data[`이미지경로${i}` as keyof typeof data]
+      const imagePath = data[`이미지경로${i}` as keyof typeof data] as string
       if (imagePath && imagePath.trim()) {
         const absolutePath = require('path').isAbsolute(imagePath)
           ? imagePath
@@ -58,23 +58,14 @@ export const ExcelRowSchema = z
       }
     }
 
-    // 예약삭제날짜 파싱
-    if (data.예약삭제날짜) {
-      const dayjs = require('dayjs')
-      const customParseFormat = require('dayjs/plugin/customParseFormat')
-      dayjs.extend(customParseFormat)
-
-      const trimmed = data.예약삭제날짜.toString().trim()
-      let parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
-
-      if (!parsed.isValid()) {
-        parsed = dayjs(trimmed)
-      }
-
-      if (parsed.isValid()) {
-        deleteAt = parsed.toDate()
-      }
-    }
+    // '등록후자동삭제(분)' 처리: autoDeleteMinutes로 저장 (deleteAt은 등록 완료 시 계산)
+    const autoDeleteMinutesRaw = data['등록후자동삭제(분)']
+    const autoDeleteMinutes =
+      autoDeleteMinutesRaw !== undefined &&
+      autoDeleteMinutesRaw !== null &&
+      `${autoDeleteMinutesRaw}`.toString().trim() !== ''
+        ? Number(autoDeleteMinutesRaw)
+        : undefined
 
     return {
       galleryUrl: data.갤러리주소,
@@ -88,6 +79,7 @@ export const ExcelRowSchema = z
       loginPassword: data.로그인비번 || '',
       scheduledAt,
       deleteAt,
+      autoDeleteMinutes,
       imagePosition: data.이미지위치 && data.이미지위치.trim() ? data.이미지위치 : undefined,
     }
   })

@@ -96,3 +96,19 @@ export async function pendingToRequest(jobId: string): Promise<ApiResponse> {
   const response = await api.post(`/api/jobs/${jobId}/pending-to-request`)
   return response.data
 }
+
+/**
+ * 작업의 등록후자동삭제(분)을 설정합니다.
+ */
+export async function updateJobAutoDeleteMinutes(
+  jobId: string,
+  autoDeleteMinutes: number | null,
+  deleteAt?: string | null,
+): Promise<ApiResponse> {
+  const data: any = { autoDeleteMinutes }
+  if (deleteAt !== undefined) {
+    data.deleteAt = deleteAt
+  }
+  const response = await api.patch(`/api/jobs/${jobId}`, data)
+  return response.data
+}

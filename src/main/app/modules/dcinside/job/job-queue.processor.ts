@@ -8,9 +8,7 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
-import { retry } from '@main/app/utils/retry'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -76,6 +74,18 @@ export class JobQueueProcessor implements OnModuleInit {
       for (const job of requestJobs) {
         await this.processJob(job)
       }
+    }
+  }
+
+  /**
+   * 예약된 삭제 처리: 매분마다 실행
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async processScheduledDeletions() {
+    try {
+      await this.postJobService.processScheduledDeletions()
+    } catch (error) {
+      this.logger.error('예약된 삭제 처리 실패', error)
     }
   }
 
@@ -151,82 +161,5 @@ export class JobQueueProcessor implements OnModuleInit {
         completedAt: new Date(),
       },
     })
-  }
-
-  @Cron(CronExpression.EVERY_MINUTE)
-  async processScheduledDeletions() {
-    const now = new Date()
-    const postJobs = await this.prisma.postJob.findMany({
-      where: {
-        deleteAt: { lte: now },
-        deletedAt: null,
-        resultUrl: { not: null },
-      },
-      include: { job: true },
-    })
-
-    for (const postJob of postJobs) {
-      const jobId = postJob.jobId
-      try {
-        await this.jobLogsService.createJobLog(jobId, '삭제 예정시간 도달. 삭제를 시작합니다.')
-
-        const { browser, context } = await this.postingService.launch()
-        const page = await context.newPage()
-
-        try {
-          let isMember = false
-          // 로그인 필요 시 처리
-          if (postJob.loginId && postJob.loginPassword) {
-            await this.jobLogsService.createJobLog(jobId, `삭제용 로그인 시도: ${postJob.loginId}`)
-            const loginRes = await this.postingService.login(page, {
-              id: postJob.loginId,
-              password: postJob.loginPassword,
-            })
-            if (!loginRes.success) {
-              throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: loginRes.message })
-            }
-            await this.jobLogsService.createJobLog(jobId, '삭제용 로그인 완료')
-            isMember = true
-          }
-
-          await retry(
-            async () => {
-              await this.postingService.deleteArticleByResultUrl(postJob, page, jobId, isMember)
-              return true
-            },
-            1000,
-            3,
-            'linear',
-          )
-
-          await this.prisma.postJob.update({
-            where: { id: postJob.id },
-            data: { deletedAt: new Date() } as any,
-          })
-          await this.jobLogsService.createJobLog(jobId, '게시글 삭제 완료')
-        } finally {
-          await page.close()
-          await browser.close()
-        }
-      } catch (error) {
-        // ErrorCodeMap에서 매핑
-        let logMessage = `작업 처리 중 오류 발생: ${error.message}`
-        if (error instanceof CustomHttpException) {
-          const mapped = ErrorCodeMap[error.errorCode]
-          if (mapped) {
-            logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
-          }
-        }
-        this.logger.error(logMessage, error.stack)
-        // 에러 발생 시에도 재시도되지 않도록 삭제 완료로 간주 처리
-        try {
-          await this.prisma.postJob.update({
-            where: { id: postJob.id },
-            data: { deletedAt: new Date() } as any,
-          })
-          await this.jobLogsService.createJobLog(jobId, logMessage, 'error')
-        } catch (_) {}
-      }
-    }
   }
 }

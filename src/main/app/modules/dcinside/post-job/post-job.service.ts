@@ -179,9 +179,23 @@ export class PostJobService implements JobProcessor {
 
     // 포스팅 성공 시 resultUrl을 PostJob에 저장
     if (result.url) {
+      const updateData: any = { resultUrl: result.url }
+
+      // autoDeleteMinutes가 설정되어 있으면 deleteAt 계산 (현재시간 기준)
+      const autoDeleteMinutes = postJob.autoDeleteMinutes
+      if (autoDeleteMinutes && autoDeleteMinutes > 0) {
+        const now = new Date()
+        const deleteAt = new Date(now.getTime() + autoDeleteMinutes * 60 * 1000)
+        updateData.deleteAt = deleteAt
+        await this.jobLogsService.createJobLog(
+          jobId,
+          `등록후자동삭제 설정: ${autoDeleteMinutes}분 후 (${deleteAt.toLocaleString()})`,
+        )
+      }
+
       await this.prismaService.postJob.update({
         where: { id: postJob.id },
-        data: { resultUrl: result.url },
+        data: updateData,
       })
 
       // 테더링 모드에서 포스팅 수 카운트 증가
@@ -234,6 +248,90 @@ export class PostJobService implements JobProcessor {
 
   async deletePostJob(id: string) {
     return this.prismaService.postJob.delete({ where: { id } })
+  }
+
+  /**
+   * 예약된 삭제 처리: 완료된 게시글 중 deleteAt 시간이 된 것들을 삭제
+   */
+  async processScheduledDeletions() {
+    const now = new Date()
+
+    // 완료된 게시글 중 삭제 예정시간이 지난 것들을 찾기
+    const jobsToDelete = await this.prismaService.job.findMany({
+      where: {
+        type: JobType.POST,
+        status: JobStatus.COMPLETED,
+        postJob: {
+          deleteAt: {
+            lte: now, // 현재 시간보다 이전
+          },
+          deletedAt: null, // 아직 삭제되지 않음
+          resultUrl: {
+            not: null, // 결과 URL이 있어야 삭제 가능
+          },
+        },
+      },
+      include: {
+        postJob: true,
+      },
+    })
+
+    this.logger.log(`예약된 삭제 대상 작업 ${jobsToDelete.length}개 발견`)
+
+    // 각 작업에 대해 삭제 처리
+    for (const job of jobsToDelete) {
+      try {
+        await this.jobLogsService.createJobLog(job.id, `예약된 삭제 시간 도달: ${job.postJob!.deleteAt}`)
+        await this.processDeleteJob(job)
+        this.logger.log(`게시글 삭제 완료: ${job.id}`)
+      } catch (error) {
+        this.logger.error(`게시글 삭제 실패: ${job.id}`, error)
+      }
+    }
+  }
+
+  /**
+   * 게시글 삭제 작업 처리
+   */
+  private async processDeleteJob(job: any): Promise<void> {
+    if (!job.postJob?.resultUrl) {
+      throw new Error('삭제할 게시글의 URL이 없습니다.')
+    }
+
+    this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
+    await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
+
+    try {
+      // 브라우저 실행
+      const { browser, context } = await this.postingService.launch()
+      const page = await context.newPage()
+
+      try {
+        // 로그인 처리
+        if (job.postJob.loginId && job.postJob.loginPassword) {
+          await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
+        }
+
+        // 게시글 삭제 실행
+        await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
+
+        // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+        await this.prismaService.postJob.update({
+          where: { id: job.postJob.id },
+          data: { deletedAt: new Date() },
+        })
+
+        await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
+        this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+      } finally {
+        await browser.close()
+      }
+    } catch (error) {
+      const errorMessage = `게시글 삭제 실패: ${error.message}`
+      await this.jobLogsService.createJobLog(job.id, errorMessage, 'error')
+      this.logger.error(errorMessage, error.stack)
+      throw error
+    }
   }
 
   /**
@@ -303,6 +401,7 @@ export class PostJobService implements JobProcessor {
     imagePosition?: string
     resultUrl?: string
     deleteAt?: Date
+    autoDeleteMinutes?: number
   }) {
     const job = await this.prismaService.job.create({
       data: {
@@ -324,6 +423,7 @@ export class PostJobService implements JobProcessor {
             imagePosition: postJobData.imagePosition ?? null,
             ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
             ...(postJobData.deleteAt !== undefined && { deleteAt: postJobData.deleteAt }),
+            ...(postJobData.autoDeleteMinutes !== undefined && { autoDeleteMinutes: postJobData.autoDeleteMinutes }),
           },
         },
       },
@@ -353,6 +453,7 @@ export class PostJobService implements JobProcessor {
       imagePosition?: string
       resultUrl?: string
       deleteAt?: Date
+      autoDeleteMinutes?: number
     }>,
   ) {
     // 트랜잭션으로 배치 처리
@@ -400,6 +501,7 @@ export class PostJobService implements JobProcessor {
         imagePosition: postJobData.imagePosition ?? null,
         ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
         ...(postJobData.deleteAt !== undefined && { deleteAt: postJobData.deleteAt }),
+        ...(postJobData.autoDeleteMinutes !== undefined && { autoDeleteMinutes: postJobData.autoDeleteMinutes }),
       }))
 
       // PostJob 테이블에 벌크 INSERT

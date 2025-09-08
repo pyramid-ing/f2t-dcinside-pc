@@ -44,6 +44,7 @@ export class DcinsideWorkflowService {
         scheduledAt: transformedRow.scheduledAt || new Date(),
         imagePosition: transformedRow.imagePosition ?? null,
         deleteAt: transformedRow.deleteAt ?? undefined,
+        autoDeleteMinutes: transformedRow.autoDeleteMinutes ?? undefined,
         // 원본 데이터 보존 (결과 반환용)
         originalData: transformedRow,
       })
@@ -91,6 +92,7 @@ export class DcinsideWorkflowService {
                   scheduledAt: row.scheduledAt,
                   imagePosition: row.imagePosition,
                   deleteAt: row.deleteAt,
+                  autoDeleteMinutes: row.autoDeleteMinutes,
                 })
 
                 const isScheduled = row.originalData.scheduledAt && dayjs(row.originalData.scheduledAt).isAfter(dayjs())

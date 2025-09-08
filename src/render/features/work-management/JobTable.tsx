@@ -10,7 +10,6 @@ import {
   Table,
   Tag,
   Checkbox,
-  DatePicker,
   InputNumber,
   Divider,
 } from 'antd'
@@ -28,11 +27,11 @@ import {
   requestToPending,
   retryJob,
   retryJobs,
+  updateJobAutoDeleteMinutes,
 } from '@render/api'
 import PageContainer from '../../components/shared/PageContainer'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
-import locale from 'antd/es/date-picker/locale/ko_KR'
 import { JobLog, PostJob } from '@render/api/type'
 
 // JOB_STATUS, JOB_TYPE, JOB_STATUS_LABEL 직접 정의
@@ -315,14 +314,40 @@ const JobTable: React.FC = () => {
   const [isAllSelected, setIsAllSelected] = useState(false)
   const [bulkRetryLoading, setBulkRetryLoading] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
-  const [bulkDeleteRequestLoading, setBulkDeleteRequestLoading] = useState(false)
 
   const [intervalStart, setIntervalStart] = useState<number>(60)
   const [intervalEnd, setIntervalEnd] = useState<number>(90)
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
 
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
-  const [editingDeleteAtJobId, setEditingDeleteAtJobId] = useState<string | null>(null)
+
+  // 툴바: 등록후자동삭제(분)
+  const [autoDeleteMinutes, setAutoDeleteMinutes] = useState<number | null>(null)
+  const [autoDeleteApplyLoading, setAutoDeleteApplyLoading] = useState(false)
+
+  // 개별 작업의 등록후자동삭제(분) 변경
+  const handleAutoDeleteMinutesChange = async (job: PostJob, minutes: number | null) => {
+    try {
+      const m = Number(minutes)
+      if (Number.isNaN(m) || m < 0) {
+        await updateJobAutoDeleteMinutes(job.id, null, null)
+      } else {
+        // autoDeleteMinutes 설정
+        await updateJobAutoDeleteMinutes(job.id, m)
+
+        // 완료된 작업이면 즉시 deleteAt 계산하여 적용 (현재시간 기준)
+        if (job.status === JOB_STATUS.COMPLETED) {
+          const now = dayjs()
+          const deleteAt = m === 0 ? now.toISOString() : now.add(m, 'minute').toISOString()
+          await updateJobAutoDeleteMinutes(job.id, m, deleteAt)
+        }
+      }
+      message.success('등록후자동삭제(분) 설정이 적용되었습니다')
+      fetchJobs()
+    } catch {
+      message.error('등록후자동삭제(분) 설정 실패')
+    }
+  }
 
   useEffect(() => {
     setCurrentPage(1) // 필터 변경 시 첫 페이지로 이동
@@ -516,28 +541,47 @@ const JobTable: React.FC = () => {
     setBulkDeleteLoading(false)
   }
 
-  const handleScheduledAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
-    try {
-      // 예약시간을 null로 설정하면 즉시발행
-      const scheduledAt = date ? date.toISOString() : null
-      await api.patch(`/api/jobs/${jobId}`, { scheduledAt })
-      message.success('예약시간이 변경되었습니다')
-      fetchJobs()
-    } catch {
-      message.error('예약시간 변경 실패')
+  // 툴바: 선택된 작업에 등록후자동삭제(분) 일괄 적용
+  const handleBulkSetAutoDeleteMinutes = async () => {
+    if (selectedJobIds.length === 0) {
+      message.warning('적용할 작업을 선택해주세요.')
+      return
     }
-  }
+    const m = Number(autoDeleteMinutes)
+    if (Number.isNaN(m) || m < 0) {
+      message.warning('분은 0 이상의 정수로 입력해주세요.')
+      return
+    }
 
-  const handleDeleteAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
-    try {
-      const deleteAt = date ? date.toISOString() : null
-      await api.patch(`/api/jobs/${jobId}`, { deleteAt })
-      message.success('삭제 예정시간이 변경되었습니다')
-      setEditingDeleteAtJobId(null)
-      fetchJobs()
-    } catch {
-      message.error('삭제 예정시간 변경 실패')
+    // 적용 대상 필터링: 이미 삭제되지 않은 작업들만
+    const eligibleJobs = data.filter(job => selectedJobIds.includes(job.id) && !job.postJob?.deletedAt)
+
+    if (eligibleJobs.length === 0) {
+      message.warning('적용할 수 있는 작업이 없습니다.')
+      return
     }
+
+    setAutoDeleteApplyLoading(true)
+    try {
+      await Promise.all(
+        eligibleJobs.map(async job => {
+          // autoDeleteMinutes 설정
+          await updateJobAutoDeleteMinutes(job.id, m)
+
+          // 완료된 작업이면 즉시 deleteAt 계산하여 적용 (현재시간 기준)
+          if (job.status === JOB_STATUS.COMPLETED) {
+            const now = dayjs()
+            const deleteAt = m === 0 ? now.toISOString() : now.add(m, 'minute').toISOString()
+            await updateJobAutoDeleteMinutes(job.id, m, deleteAt)
+          }
+        }),
+      )
+      message.success(`등록후자동삭제(분)이 ${eligibleJobs.length}개 작업에 적용되었습니다`)
+      fetchJobs()
+    } catch (e) {
+      message.error('등록후자동삭제(분) 적용 실패')
+    }
+    setAutoDeleteApplyLoading(false)
   }
 
   const handleApplyInterval = async () => {
@@ -575,41 +619,6 @@ const JobTable: React.FC = () => {
       message.error('간격 적용 실패')
     }
     setIntervalApplyLoading(false)
-  }
-
-  // 선택된 항목 중 '완료 상태 + 삭제되지 않음 + 포스팅 + 결과 URL 존재'만 삭제요청 처리
-  const handleBulkDeleteRequestProcess = async () => {
-    if (selectedJobIds.length === 0) {
-      message.warning('삭제요청 처리할 작업을 선택해주세요.')
-      return
-    }
-
-    const eligibleJobs = data.filter(
-      job =>
-        selectedJobIds.includes(job.id) &&
-        job.type === JOB_TYPE.POST &&
-        job.status === JOB_STATUS.COMPLETED &&
-        !job.postJob?.deletedAt &&
-        (!!job.resultUrl || !!job.postJob?.resultUrl),
-    )
-
-    if (eligibleJobs.length === 0) {
-      message.info('등록완료이며 미삭제 상태의 포스팅이 없습니다.')
-      return
-    }
-
-    setBulkDeleteRequestLoading(true)
-    try {
-      const nowIso = new Date().toISOString()
-      // deleteAt을 지금으로 설정
-      await Promise.all(eligibleJobs.map(job => api.patch(`/api/jobs/${job.id}`, { deleteAt: nowIso })))
-
-      message.success(`삭제요청을 ${eligibleJobs.length}개 작업에 적용했습니다.`)
-      fetchJobs()
-    } catch (error: any) {
-      message.error(error?.message || '삭제요청 처리에 실패했습니다.')
-    }
-    setBulkDeleteRequestLoading(false)
   }
 
   const handleBulkPendingToRequest = async () => {
@@ -716,20 +725,6 @@ const JobTable: React.FC = () => {
           <Button danger onClick={handleBulkDelete}>
             선택된 작업 삭제 ({selectedJobIds.length}개)
           </Button>
-          <Button type="primary" loading={bulkDeleteRequestLoading} onClick={handleBulkDeleteRequestProcess}>
-            삭제요청 처리 (
-            {
-              data.filter(
-                job =>
-                  selectedJobIds.includes(job.id) &&
-                  job.type === JOB_TYPE.POST &&
-                  job.status === JOB_STATUS.COMPLETED &&
-                  !job.postJob?.deletedAt &&
-                  (!!job.resultUrl || !!job.postJob?.resultUrl),
-              ).length
-            }
-            개)
-          </Button>
           <Divider />
           <span>등록 간격(분):</span>
           <InputNumber min={1} max={1440} value={intervalStart} onChange={v => setIntervalStart(Number(v))} />
@@ -745,6 +740,18 @@ const JobTable: React.FC = () => {
           </Button>
           <Button onClick={handleBulkPendingToRequest} disabled={pendingSelectedCount === 0}>
             등록요청 일괄변경 ({pendingSelectedCount}개)
+          </Button>
+          <Divider type="vertical" />
+          <span>등록후자동삭제(분):</span>
+          <InputNumber
+            min={0}
+            placeholder="분"
+            value={autoDeleteMinutes as any}
+            onChange={v => setAutoDeleteMinutes((v as number) || null)}
+            style={{ width: 110 }}
+          />
+          <Button danger loading={autoDeleteApplyLoading} onClick={handleBulkSetAutoDeleteMinutes}>
+            자동삭제 적용 ({data.filter(job => selectedJobIds.includes(job.id) && !job.postJob?.deletedAt).length}개)
           </Button>
         </div>
       )}
@@ -972,36 +979,50 @@ const JobTable: React.FC = () => {
             title: '예약시간',
             dataIndex: 'scheduledAt',
             key: 'scheduledAt',
-            render: (value: string, record: PostJob) => (
-              <DatePicker
-                locale={locale}
-                showTime
-                value={value ? dayjs(value) : null}
-                onChange={date => handleScheduledAtChange(record.id, date)}
-                allowClear
-                format="YYYY-MM-DD ddd HH:mm"
-                style={{ minWidth: 150 }}
-                getPopupContainer={trigger => trigger.parentNode as HTMLElement}
-              />
-            ),
+            width: 170,
+            align: 'center',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
             sorter: true,
+          },
+          {
+            title: '등록후자동삭제(분)',
+            dataIndex: 'autoDeleteMinutes',
+            key: 'autoDeleteMinutes',
+            width: 150,
+            align: 'center',
+            render: (_: any, record: PostJob) => {
+              // 이미 삭제된 작업만 수정 불가
+              if (record.postJob?.deletedAt) {
+                return '-'
+              }
+              return (
+                <InputNumber
+                  min={0}
+                  placeholder="분"
+                  value={record.postJob?.autoDeleteMinutes || undefined}
+                  onChange={v => handleAutoDeleteMinutesChange(record, v as number)}
+                  style={{ width: 110 }}
+                />
+              )
+            },
           },
           {
             title: '삭제예정',
             dataIndex: ['postJob', 'deleteAt'],
             key: 'deleteAt',
-            render: (_: any, record: PostJob) => (
-              <DatePicker
-                locale={locale}
-                showTime
-                value={record.postJob?.deleteAt ? dayjs(record.postJob.deleteAt as any) : null}
-                onChange={date => handleDeleteAtChange(record.id, date)}
-                allowClear
-                format="YYYY-MM-DD ddd HH:mm"
-                style={{ minWidth: 150 }}
-                getPopupContainer={trigger => trigger.parentNode as HTMLElement}
-              />
-            ),
+            width: 170,
+            align: 'center',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
+            sorter: true,
+          },
+          {
+            title: '삭제시간',
+            dataIndex: ['postJob', 'deletedAt'],
+            key: 'deletedAt',
+            width: 170,
+            align: 'center',
+            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
+            sorter: true,
           },
           {
             title: '시작시간',
