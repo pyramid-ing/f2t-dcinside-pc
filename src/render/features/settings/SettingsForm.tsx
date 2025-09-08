@@ -108,14 +108,9 @@ const SettingsForm: React.FC = () => {
         </Form.Item>
 
         <Form.Item>
-          <Space>
-            <Button type="primary" htmlType="submit" loading={saving}>
-              저장
-            </Button>
-            <Button onClick={loadSettings} disabled={saving || loading}>
-              초기화
-            </Button>
-          </Space>
+          <Button type="primary" htmlType="submit" loading={saving}>
+            저장
+          </Button>
         </Form.Item>
       </Form>
     </div>

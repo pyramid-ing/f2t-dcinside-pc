@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
+import { IpMode, Settings, TetheringChangeType } from '@main/app/modules/settings/settings.types'
 import { OpenAI } from 'openai'
 import * as XLSX from 'xlsx'
+import * as fs from 'fs'
+import * as path from 'path'
+import { app } from 'electron'
 
 @Injectable()
 export class SettingsService {
@@ -27,8 +30,10 @@ export class SettingsService {
       proxyEnabled: false,
       ipMode: IpMode.NONE,
       tethering: {
-        attempts: 3,
-        waitSeconds: 3,
+        changeInterval: {
+          type: TetheringChangeType.TIME,
+          timeMinutes: 30,
+        },
       },
     }
     const merged = {
@@ -165,5 +170,37 @@ export class SettingsService {
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
     const filename = `proxy-sample-${Date.now()}.xlsx`
     return { buffer, filename }
+  }
+
+  async resetAllData(): Promise<{ success: boolean; message: string }> {
+    try {
+      this.logger.log('데이터 리셋 시작')
+
+      // 1. 데이터베이스 초기화
+      await this.prisma.settings.deleteMany({})
+      await this.prisma.postJob.deleteMany({})
+      await this.prisma.jobLog.deleteMany({})
+
+      // 2. userdata 폴더 삭제
+      const userDataPath = app.getPath('userData')
+      const userDataDir = path.join(userDataPath, 'userdata')
+
+      if (fs.existsSync(userDataDir)) {
+        fs.rmSync(userDataDir, { recursive: true, force: true })
+        this.logger.log(`userdata 폴더 삭제 완료: ${userDataDir}`)
+      }
+
+      // 3. 프로그램 재시작 (약간의 지연 후)
+      setTimeout(() => {
+        app.relaunch()
+        app.exit(0)
+      }, 2000)
+
+      this.logger.log('데이터 리셋 완료, 프로그램 재시작 예정')
+      return { success: true, message: '모든 데이터가 초기화되었습니다. 프로그램이 곧 재시작됩니다.' }
+    } catch (error) {
+      this.logger.error('데이터 리셋 실패:', error)
+      return { success: false, message: '데이터 리셋 중 오류가 발생했습니다.' }
+    }
   }
 }

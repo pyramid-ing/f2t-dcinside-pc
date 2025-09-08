@@ -90,4 +90,9 @@ export class SettingsController {
       throw error
     }
   }
+
+  @Post('reset-all-data')
+  async resetAllData() {
+    return this.settingsService.resetAllData()
+  }
 }
