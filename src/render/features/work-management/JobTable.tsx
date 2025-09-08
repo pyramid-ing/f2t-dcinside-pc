@@ -12,6 +12,7 @@ import {
   Checkbox,
   InputNumber,
   Divider,
+  DatePicker,
 } from 'antd'
 import { LinkOutlined } from '@ant-design/icons'
 import React, { useEffect, useState } from 'react'
@@ -663,6 +664,21 @@ const JobTable: React.FC = () => {
     fetchJobs()
   }
 
+  const handleScheduledAtChange = async (job: PostJob, date: dayjs.Dayjs | null) => {
+    try {
+      if (date) {
+        await api.patch(`/api/jobs/${job.id}`, { scheduledAt: date.toISOString() })
+        message.success('예약시간이 변경되었습니다')
+      } else {
+        await api.patch(`/api/jobs/${job.id}`, { scheduledAt: null })
+        message.success('예약시간이 해제되었습니다')
+      }
+      fetchJobs()
+    } catch (error: any) {
+      message.error(error?.message || '예약시간 변경 실패')
+    }
+  }
+
   const pendingSelectedCount = data.filter(
     job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.PENDING,
   ).length
@@ -979,9 +995,19 @@ const JobTable: React.FC = () => {
             title: '예약시간',
             dataIndex: 'scheduledAt',
             key: 'scheduledAt',
-            width: 170,
+            width: 200,
             align: 'center',
-            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
+            render: (value: string, record: PostJob) => (
+              <DatePicker
+                showTime
+                format="YYYY-MM-DD HH:mm"
+                value={value ? dayjs(value) : null}
+                onChange={date => handleScheduledAtChange(record, date)}
+                style={{ width: 180 }}
+                placeholder="예약시간 선택"
+                allowClear
+              />
+            ),
             sorter: true,
           },
           {
