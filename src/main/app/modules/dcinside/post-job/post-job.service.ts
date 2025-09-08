@@ -159,11 +159,13 @@ export class PostJobService implements JobProcessor {
     this.logger.log(`작업 시작: ID ${jobId})`)
     await this.jobLogsService.createJobLog(jobId, '작업 시작')
 
-    // 해당 브라우저에서 로그인이 아직 처리되지 않았다면 로그인 처리
+    // 로그인 처리 및 회원/비회원 여부 판정
+    let isMember = false
     if (postJob.loginId && postJob.loginPassword) {
       await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
       await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
       await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      isMember = true
     } else {
       this.logger.log(`비로그인 모드로 진행`)
       await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
@@ -171,8 +173,6 @@ export class PostJobService implements JobProcessor {
 
     // 작업 처리
     await this.jobLogsService.createJobLog(jobId, '포스팅 시작')
-    // 실제 로그인 상태로 회원/비회원 여부 판정 (브라우저 재사용 시 쿠키로 로그인 상태가 유지될 수 있음)
-    const isMember = await this.postingService.isLogin(page)
     const result = await this.postingService.postArticle(postJob, context, page, jobId, isMember)
 
     await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)

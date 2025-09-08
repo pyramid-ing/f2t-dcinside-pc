@@ -194,8 +194,16 @@ export class DcinsidePostingService {
 
   async isLogin(page: Page): Promise<boolean> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
-      await page.waitForSelector('#login_box', { timeout: 10000 })
+      // 현재 페이지에서 #login_box가 이미 존재하는지 확인
+      const loginBoxExists = await page.$('#login_box')
+
+      if (!loginBoxExists) {
+        // #login_box가 없으면 메인 페이지로 이동
+        await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        await page.waitForSelector('#login_box', { timeout: 10000 })
+      }
+
+      // 로그인 여부 확인 (user_name이 있으면 로그인된 상태)
       const userName = await page.waitForSelector('#login_box .user_name', { timeout: 5000 })
       return !!userName
     } catch {
