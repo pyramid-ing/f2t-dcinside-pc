@@ -29,6 +29,8 @@ export class JobController {
     @Query('search') search?: string,
     @Query('orderBy') orderBy: string = 'updatedAt',
     @Query('order') order: 'asc' | 'desc' = 'desc',
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
   ) {
     try {
       const where: Prisma.JobWhereInput = {}
@@ -52,6 +54,15 @@ export class JobController {
         ]
       }
 
+      // 페이지네이션 파라미터
+      const pageNum = Math.max(1, parseInt(page, 10))
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10))) // 최대 100개로 제한
+      const skip = (pageNum - 1) * limitNum
+
+      // 총 개수 조회
+      const totalCount = await this.prisma.job.count({ where })
+
+      // 페이지네이션된 데이터 조회
       const jobs = await this.prisma.job.findMany({
         where,
         orderBy: {
@@ -66,9 +77,26 @@ export class JobController {
           },
           postJob: true,
         },
+        skip,
+        take: limitNum,
       })
 
-      return jobs
+      // 페이지네이션 정보 계산
+      const totalPages = Math.ceil(totalCount / limitNum)
+      const hasNextPage = pageNum < totalPages
+      const hasPrevPage = pageNum > 1
+
+      return {
+        data: jobs,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          totalCount,
+          totalPages,
+          hasNextPage,
+          hasPrevPage,
+        },
+      }
     } catch (error) {
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
     }

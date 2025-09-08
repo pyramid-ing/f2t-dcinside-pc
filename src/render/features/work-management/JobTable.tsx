@@ -296,6 +296,11 @@ const JobTable: React.FC = () => {
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalCount, setTotalCount] = useState(0)
+
   // JobLog 모달 관련 state
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
@@ -320,8 +325,13 @@ const JobTable: React.FC = () => {
   const [editingDeleteAtJobId, setEditingDeleteAtJobId] = useState<string | null>(null)
 
   useEffect(() => {
+    setCurrentPage(1) // 필터 변경 시 첫 페이지로 이동
     fetchJobs()
   }, [statusFilter, typeFilter, searchText, sortField, sortOrder])
+
+  useEffect(() => {
+    fetchJobs()
+  }, [currentPage, pageSize])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -329,7 +339,7 @@ const JobTable: React.FC = () => {
       fetchJobs()
     }, 5000)
     return () => clearInterval(timer)
-  }, [statusFilter, typeFilter, searchText, sortField, sortOrder])
+  }, [statusFilter, typeFilter, searchText, sortField, sortOrder, currentPage, pageSize])
 
   // 데이터가 변경될 때 선택 상태 업데이트
   useEffect(() => {
@@ -348,12 +358,16 @@ const JobTable: React.FC = () => {
         search: searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
+        page: currentPage,
+        limit: pageSize,
       })
 
-      setData(res)
+      setData(res.data)
+      setTotalCount(res.pagination.totalCount)
+
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, JobLog> = {}
-      for (const job of res) {
+      for (const job of res.data) {
         try {
           const logRes = await getLatestJobLog(job.id)
           latestLogsData[job.id] = logRes
@@ -413,6 +427,7 @@ const JobTable: React.FC = () => {
     if (sorter.field && sorter.order) {
       setSortField(sorter.field)
       setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
+      setCurrentPage(1) // 정렬 변경 시 첫 페이지로 이동
     }
   }
 
@@ -738,10 +753,17 @@ const JobTable: React.FC = () => {
         dataSource={data}
         loading={loading}
         pagination={{
-          pageSize: 15,
+          current: currentPage,
+          pageSize,
+          total: totalCount,
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          onChange: (page, size) => {
+            setCurrentPage(page)
+            setPageSize(size || 20)
+          },
         }}
         onChange={handleTableChange}
         size="middle"

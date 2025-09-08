@@ -1,5 +1,5 @@
 import { api } from './apiClient'
-import { ApiResponse, Job, JobLog, JobStatus, JobType } from '@render/api/type'
+import { ApiResponse, Job, JobLog, JobStatus, JobType, PaginatedResponse } from '@render/api/type'
 
 /**
  * 작업 목록을 조회합니다.
@@ -10,7 +10,9 @@ export async function getJobs(params?: {
   search?: string
   orderBy?: string
   order?: 'asc' | 'desc'
-}): Promise<Job[]> {
+  page?: number
+  limit?: number
+}): Promise<PaginatedResponse<Job>> {
   const response = await api.get('/api/jobs', { params })
   return response.data
 }

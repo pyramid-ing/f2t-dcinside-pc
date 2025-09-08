@@ -81,3 +81,17 @@ export interface ApiResponse<T = any> {
   message?: string
   data?: T
 }
+
+export interface PaginationInfo {
+  page: number
+  limit: number
+  totalCount: number
+  totalPages: number
+  hasNextPage: boolean
+  hasPrevPage: boolean
+}
+
+export interface PaginatedResponse<T> {
+  data: T[]
+  pagination: PaginationInfo
+}
