@@ -133,6 +133,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
             <Button type="primary" htmlType="submit" loading={loading}>
               라이센스 등록
             </Button>
+            <Button onClick={() => form.resetFields()}>초기화</Button>
           </Space>
         </Form.Item>
       </StyledForm>

@@ -50,11 +50,3 @@ export const changeIp = async (): Promise<{
   const res = await api.post('/settings/tethering/change-ip')
   return res.data
 }
-
-export const resetAllData = async (): Promise<{
-  success: boolean
-  message: string
-}> => {
-  const res = await api.post('/settings/reset-all-data')
-  return res.data
-}
