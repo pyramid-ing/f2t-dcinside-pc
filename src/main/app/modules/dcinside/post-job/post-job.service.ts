@@ -226,7 +226,7 @@ export class PostJobService implements JobProcessor {
       const updateData: any = { resultUrl: result.url }
 
       // autoDeleteMinutes가 설정되어 있으면 deleteAt 계산 (현재시간 기준)
-      const autoDeleteMinutes = (postJob as any).autoDeleteMinutes
+      const autoDeleteMinutes = postJob.autoDeleteMinutes
       if (autoDeleteMinutes && autoDeleteMinutes > 0) {
         const now = new Date()
         const deleteAt = new Date(now.getTime() + autoDeleteMinutes * 60 * 1000)
