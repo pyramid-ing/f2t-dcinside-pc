@@ -406,6 +406,7 @@ export class DcinsidePostingService {
     const deleteUrl = `https://gall.dcinside.com/${deletePath}/?id=${galleryId}&no=${postNo}`
     await this.jobLogsService.createJobLog(jobId, `삭제 페이지 이동: ${deleteUrl}`)
     await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+    await sleep(2000) // 2초 고정 딜레이
 
     // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시: 해당 문구를 에러 메시지로 예외 처리
     const abnormalText = await page.evaluate(() => {
@@ -428,10 +429,13 @@ export class DcinsidePostingService {
       }
       const pwInput = page.locator('#password')
       await pwInput.fill(post.password)
+      await sleep(2000) // 2초 고정 딜레이
     }
 
     const dialogHandler = async (dialog: any) => {
       try {
+        await sleep(1000)
+
         const type = dialog.type?.() || 'unknown'
         const msg = dialog.message?.() || ''
         switch (type) {
@@ -443,6 +447,8 @@ export class DcinsidePostingService {
             break
         }
         await dialog.accept()
+
+        await sleep(1000)
       } catch (_) {}
     }
     page.on('dialog', dialogHandler)
@@ -452,6 +458,7 @@ export class DcinsidePostingService {
       .locator('.btn_ok')
       .click({ timeout: 5000 })
       .catch(() => {})
+    await sleep(2000)
 
     // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
     {
