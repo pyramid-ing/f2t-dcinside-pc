@@ -429,13 +429,11 @@ export class DcinsidePostingService {
       }
       const pwInput = page.locator('#password')
       await pwInput.fill(post.password)
-      await sleep(2000) // 2초 고정 딜레이
+      await sleep(1000)
     }
 
     const dialogHandler = async (dialog: any) => {
       try {
-        await sleep(1000)
-
         const type = dialog.type?.() || 'unknown'
         const msg = dialog.message?.() || ''
         switch (type) {
@@ -446,9 +444,8 @@ export class DcinsidePostingService {
             alertMessage = msg
             break
         }
-        await dialog.accept()
-
         await sleep(1000)
+        await dialog.accept()
       } catch (_) {}
     }
     page.on('dialog', dialogHandler)
@@ -458,7 +455,6 @@ export class DcinsidePostingService {
       .locator('.btn_ok')
       .click({ timeout: 5000 })
       .catch(() => {})
-    await sleep(2000)
 
     // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
     {
