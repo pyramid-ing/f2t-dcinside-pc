@@ -336,30 +336,43 @@ export class PostJobService implements JobProcessor {
     await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
     try {
-      // 브라우저 실행
-      const { browser, context } = await this.postingService.launch()
-      const page = await context.newPage()
+      // 등록용 창과 동일한 브라우저 관리 방식 사용
+      const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+        headless: false, // 삭제 과정도 사용자가 확인할 수 있도록 창 표시
+      })
 
-      try {
-        // 로그인 처리
-        if (job.postJob.loginId && job.postJob.loginPassword) {
-          await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
-        }
-
-        // 게시글 삭제 실행
-        await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
-
-        // 삭제 성공 시 원본 작업의 deletedAt 업데이트
-        await this.prismaService.postJob.update({
-          where: { id: job.postJob.id },
-          data: { deletedAt: new Date() },
+      let context = browser.contexts()[0]
+      if (!context) {
+        context = await browser.newContext({
+          viewport: { width: 1200, height: 1142 },
+          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
         })
-
-        await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
-        this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
-      } finally {
-        await browser.close()
       }
+
+      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
+      let page = context.pages()[0]
+      if (!page) {
+        page = await context.newPage()
+      }
+
+      // 로그인 처리
+      if (job.postJob.loginId && job.postJob.loginPassword) {
+        await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
+      }
+
+      // 게시글 삭제 실행
+      await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
+
+      // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+      await this.prismaService.postJob.update({
+        where: { id: job.postJob.id },
+        data: { deletedAt: new Date() },
+      })
+
+      await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
+      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+
+      // 삭제 성공 시에는 브라우저를 종료하지 않음 - 사용자가 결과를 확인할 수 있도록 유지
     } catch (error) {
       const errorMessage = `게시글 삭제 실패: ${error.message}`
       await this.jobLogsService.createJobLog(job.id, errorMessage, 'error')

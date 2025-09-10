@@ -61,6 +61,9 @@ export class JobQueueProcessor implements OnModuleInit {
     })
 
     if (processingCount === 0) {
+      // 새로운 포스팅 등록 전에 예약된 삭제 작업 먼저 처리
+      await this.postJobService.processScheduledDeletions()
+
       // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
       const requestJobs = await this.prisma.job.findMany({
         where: {
@@ -74,18 +77,6 @@ export class JobQueueProcessor implements OnModuleInit {
       for (const job of requestJobs) {
         await this.processJob(job)
       }
-    }
-  }
-
-  /**
-   * 예약된 삭제 처리: 매분마다 실행
-   */
-  @Cron(CronExpression.EVERY_MINUTE)
-  async processScheduledDeletions() {
-    try {
-      await this.postJobService.processScheduledDeletions()
-    } catch (error) {
-      this.logger.error('예약된 삭제 처리 실패', error)
     }
   }
 
@@ -140,12 +131,6 @@ export class JobQueueProcessor implements OnModuleInit {
       await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
       this.logger.error(logMessage, error.stack)
       await this.markJobAsFailed(job.id, error.message)
-    } finally {
-      const remaining = await this.prisma.job.count({
-        where: {
-          OR: [{ status: JobStatus.PROCESSING }, { status: JobStatus.REQUEST, scheduledAt: { lte: new Date() } }],
-        },
-      })
     }
   }
 
