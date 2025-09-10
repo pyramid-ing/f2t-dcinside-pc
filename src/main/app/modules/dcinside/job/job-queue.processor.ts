@@ -146,9 +146,6 @@ export class JobQueueProcessor implements OnModuleInit {
           OR: [{ status: JobStatus.PROCESSING }, { status: JobStatus.REQUEST, scheduledAt: { lte: new Date() } }],
         },
       })
-      if (remaining === 0) {
-        await this.browserManager.closeManagedBrowser('dcinside')
-      }
     }
   }
 

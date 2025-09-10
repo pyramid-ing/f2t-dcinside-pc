@@ -112,21 +112,11 @@ export class PostJobService implements JobProcessor {
     // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
     await this.logExternalIp(jobId, context, true)
 
-    try {
-      await this.applyTaskDelay(jobId, settings)
+    await this.applyTaskDelay(jobId, settings)
 
-      // 프록시 모드는 매 작업마다 새 페이지 생성/종료 (기존 동작 유지)
-      const page = await context.newPage()
-      try {
-        await this.handlePostJob(jobId, context, page, postJob)
-      } finally {
-        await page.close()
-      }
-    } catch (error) {
-      throw error
-    } finally {
-      await browser.close()
-    }
+    // 프록시 모드에서도 페이지만 생성하고 브라우저는 유지
+    const page = await context.newPage()
+    await this.handlePostJob(jobId, context, page, postJob)
   }
 
   /**
