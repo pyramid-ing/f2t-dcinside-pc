@@ -55,15 +55,15 @@ export class JobQueueProcessor implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async processNextJobs() {
+    // 새로운 포스팅 등록 전에 예약된 삭제 작업 먼저 처리
+    await this.postJobService.processScheduledDeletions()
+
     // 현재 processing 중인 job이 있는지 확인
     const processingCount = await this.prisma.job.count({
       where: { status: JobStatus.PROCESSING },
     })
 
     if (processingCount === 0) {
-      // 새로운 포스팅 등록 전에 예약된 삭제 작업 먼저 처리
-      await this.postJobService.processScheduledDeletions()
-
       // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
       const requestJobs = await this.prisma.job.findMany({
         where: {
