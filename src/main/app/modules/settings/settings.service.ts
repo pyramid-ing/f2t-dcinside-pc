@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Settings, IpMode, TetheringChangeType } from '@main/app/modules/settings/settings.types'
+import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { OpenAI } from 'openai'
 import * as XLSX from 'xlsx'
 
@@ -8,7 +9,10 @@ import * as XLSX from 'xlsx'
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly twoCaptchaService: TwoCaptchaService,
+  ) {}
 
   async getSettings(): Promise<Settings> {
     const settings = await this.prisma.settings.findFirst({
@@ -22,6 +26,7 @@ export class SettingsService {
       actionDelay: 0,
       imageUploadFailureAction: 'skip',
       openAIApiKey: '',
+      twoCaptchaApiKey: '',
       licenseKey: '',
       proxies: [],
       proxyChangeMethod: 'random',
@@ -169,5 +174,9 @@ export class SettingsService {
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
     const filename = `proxy-sample-${Date.now()}.xlsx`
     return { buffer, filename }
+  }
+
+  async validateTwoCaptchaKey(apiKey: string): Promise<{ valid: boolean; balance?: number; error?: string }> {
+    return this.twoCaptchaService.validateApiKey(apiKey)
   }
 }

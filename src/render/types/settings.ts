@@ -5,6 +5,8 @@ export interface Settings {
   actionDelay: number // 포스팅 과정 중 각 동작 사이의 딜레이 (초)
   imageUploadFailureAction: 'fail' | 'skip' // 이미지 업로드 실패 시 처리 방식 ('fail' = 작업 실패, 'skip' = 이미지 무시하고 진행)
   openAIApiKey: string
+  /** 2captcha API 키 */
+  twoCaptchaApiKey?: string
   licenseKey?: string // 라이센스 키
   /**
    * 라이센스 캐시 정보

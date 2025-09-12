@@ -6,6 +6,11 @@ export async function validateOpenAIApiKey(apiKey: string) {
   return { success: true, data: res.data }
 }
 
+export async function validateTwoCaptchaApiKey(apiKey: string) {
+  const res = await api.post('/settings/validate-2captcha-key', { apiKey })
+  return { success: true, data: res.data }
+}
+
 export const getSettings = async (): Promise<Settings> => {
   const response = await api.get('/settings')
   return response.data

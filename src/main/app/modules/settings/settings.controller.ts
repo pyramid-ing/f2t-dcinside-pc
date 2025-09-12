@@ -41,6 +41,11 @@ export class SettingsController {
     return this.settingsService.validateOpenAIKey(body.apiKey)
   }
 
+  @Post('validate-2captcha-key')
+  async validateTwoCaptchaKey(@Body() body: { apiKey: string }) {
+    return this.settingsService.validateTwoCaptchaKey(body.apiKey)
+  }
+
   @Post('proxies/upload-excel')
   @UseInterceptors(FileInterceptor('file'))
   async uploadProxyExcel(@UploadedFile() file: any) {

@@ -2,6 +2,7 @@ import { authApi } from '@render/api'
 import { Tabs } from 'antd'
 import React, { useCallback, useEffect, useState } from 'react'
 import OpenAISettingsForm from './OpenAISettingsForm'
+import TwoCaptchaSettingsForm from './TwoCaptchaSettingsForm'
 import SettingsForm from './SettingsForm'
 import IpSettingsForm from './ip/IpSettingsForm'
 
@@ -43,6 +44,11 @@ const SettingsTabs: React.FC = () => {
           key: 'openai',
           label: 'OpenAI',
           children: <OpenAISettingsForm />,
+        },
+        {
+          key: '2captcha',
+          label: '2captcha',
+          children: <TwoCaptchaSettingsForm />,
         },
       ]}
     />
