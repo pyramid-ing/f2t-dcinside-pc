@@ -20,6 +20,7 @@ import styled from 'styled-components'
 import {
   bulkApplyInterval,
   bulkPendingToRequest,
+  bulkRetryDeleteJobs,
   bulkUpdateAutoDelete,
   deleteJob,
   deleteJobs,
@@ -27,8 +28,8 @@ import {
   getJobs,
   getLatestJobLog,
   pendingToRequest,
-  requestToPending,
   retryJob,
+  retryDeleteJob,
   retryJobs,
   updateJobAutoDeleteMinutes,
   updateJobScheduledAt,
@@ -312,7 +313,7 @@ const JobTable: React.FC = () => {
   // 벌크 작업 관련 상태
   const [selection, setSelection] = useState<SelectionState>({
     mode: SelectionMode.PAGE,
-    selectedIds: new Set(),
+    includeIds: new Set(),
     excludedIds: new Set(),
   })
   const [bulkRetryLoading, setBulkRetryLoading] = useState(false)
@@ -384,7 +385,7 @@ const JobTable: React.FC = () => {
     if (selection.mode === SelectionMode.ALL) {
       return !selection.excludedIds.has(id)
     } else {
-      return selection.selectedIds.has(id)
+      return selection.includeIds.has(id)
     }
   }
 
@@ -396,7 +397,7 @@ const JobTable: React.FC = () => {
     if (selection.mode === SelectionMode.ALL) {
       return totalCount - selection.excludedIds.size
     } else {
-      return selection.selectedIds.size
+      return selection.includeIds.size
     }
   }
 
@@ -459,6 +460,20 @@ const JobTable: React.FC = () => {
     }
   }
 
+  const handleRetryDelete = async (id: string) => {
+    try {
+      const res = await retryDeleteJob(id)
+      if (res.success) {
+        message.success('삭제 재시도 요청 완료')
+        fetchJobs()
+      } else {
+        message.error('message' in res ? res.message : '삭제 재시도 실패')
+      }
+    } catch (error: any) {
+      message.error(error?.message || '삭제 재시도 실패')
+    }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       const res = await deleteJob(id)
@@ -484,17 +499,17 @@ const JobTable: React.FC = () => {
   // 전체 선택 핸들러 (현재 페이지만)
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const newSelectedIds = new Set([...selection.selectedIds, ...currentPageIds])
+      const newSelectedIds = new Set([...selection.includeIds, ...currentPageIds])
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: newSelectedIds,
+        includeIds: newSelectedIds,
         excludedIds: new Set(),
       })
     } else {
-      const newSelectedIds = new Set([...selection.selectedIds].filter(id => !currentPageIds.includes(id)))
+      const newSelectedIds = new Set([...selection.includeIds].filter(id => !currentPageIds.includes(id)))
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: newSelectedIds,
+        includeIds: newSelectedIds,
         excludedIds: new Set(),
       })
     }
@@ -505,13 +520,13 @@ const JobTable: React.FC = () => {
     if (checked) {
       setSelection({
         mode: SelectionMode.ALL,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
     } else {
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
     }
@@ -520,7 +535,7 @@ const JobTable: React.FC = () => {
   // 개별 선택 핸들러
   const handleSelectJob = (jobId: string, checked: boolean) => {
     if (selection.mode === SelectionMode.PAGE) {
-      const newSelectedIds = new Set(selection.selectedIds)
+      const newSelectedIds = new Set(selection.includeIds)
       if (checked) {
         newSelectedIds.add(jobId)
       } else {
@@ -528,7 +543,7 @@ const JobTable: React.FC = () => {
       }
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: newSelectedIds,
+        includeIds: newSelectedIds,
         excludedIds: new Set(),
       })
     } else {
@@ -541,7 +556,7 @@ const JobTable: React.FC = () => {
       }
       setSelection({
         mode: SelectionMode.ALL,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: newExcludedIds,
       })
     }
@@ -560,7 +575,7 @@ const JobTable: React.FC = () => {
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.RETRY,
       }
@@ -571,7 +586,7 @@ const JobTable: React.FC = () => {
       // 선택 상태 초기화
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
       setPreviewCount(null)
@@ -580,6 +595,37 @@ const JobTable: React.FC = () => {
       message.error(error.message || '벌크 재시도에 실패했습니다.')
     }
     setBulkRetryLoading(false)
+  }
+
+  const handleBulkRetryDelete = async () => {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('삭제 재시도할 작업을 선택해주세요.')
+      return
+    }
+
+    try {
+      const request = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+      }
+
+      const response = await bulkRetryDeleteJobs(request)
+      message.success(response.message)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        includeIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
+      fetchJobs()
+    } catch (error: any) {
+      message.error(error.message || '벌크 삭제 재시도에 실패했습니다.')
+    }
   }
 
   // 벌크 삭제 핸들러
@@ -595,7 +641,7 @@ const JobTable: React.FC = () => {
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.DELETE,
       }
@@ -606,7 +652,7 @@ const JobTable: React.FC = () => {
       // 선택 상태 초기화
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
       setPreviewCount(null)
@@ -635,7 +681,7 @@ const JobTable: React.FC = () => {
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.AUTO_DELETE,
         autoDeleteMinutes: m,
@@ -647,7 +693,7 @@ const JobTable: React.FC = () => {
       // 선택 상태 초기화
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
       setPreviewCount(null)
@@ -673,7 +719,7 @@ const JobTable: React.FC = () => {
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.APPLY_INTERVAL,
         intervalStart,
@@ -686,7 +732,7 @@ const JobTable: React.FC = () => {
       // 선택 상태 초기화
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
       setPreviewCount(null)
@@ -707,7 +753,7 @@ const JobTable: React.FC = () => {
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.selectedIds) : undefined,
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.PENDING_TO_REQUEST,
       }
@@ -718,7 +764,7 @@ const JobTable: React.FC = () => {
       // 선택 상태 초기화
       setSelection({
         mode: SelectionMode.PAGE,
-        selectedIds: new Set(),
+        includeIds: new Set(),
         excludedIds: new Set(),
       })
       setPreviewCount(null)
@@ -728,26 +774,10 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const handleRequestToPending = async (id: string) => {
-    try {
-      const json = await requestToPending(id)
-      if (json.success) {
-        message.success('등록대기로 전환되었습니다')
-        fetchJobs()
-      } else {
-        message.error(json.message || '상태 변경 실패')
-      }
-    } catch {
-      message.error('상태 변경 실패')
-    }
-  }
-
   const handleStatusChange = async (job: PostJob, value: JobStatus) => {
     if (value === job.status) return
     if (job.status === JOB_STATUS.PENDING && value === JOB_STATUS.REQUEST) {
       await pendingToRequest(job.id)
-    } else if (job.status === JOB_STATUS.REQUEST && value === JOB_STATUS.PENDING) {
-      await requestToPending(job.id)
     }
     setEditingStatusJobId(null)
     fetchJobs()
@@ -768,7 +798,7 @@ const JobTable: React.FC = () => {
     if (selection.mode === SelectionMode.ALL) {
       return !selection.excludedIds.has(job.id) && job.status === JOB_STATUS.PENDING
     } else {
-      return selection.selectedIds.has(job.id) && job.status === JOB_STATUS.PENDING
+      return selection.includeIds.has(job.id) && job.status === JOB_STATUS.PENDING
     }
   }).length
 
@@ -835,7 +865,7 @@ const JobTable: React.FC = () => {
               </>
             ) : (
               <>
-                {selection.selectedIds.size}개 작업이 선택되었습니다.
+                {selection.includeIds.size}개 작업이 선택되었습니다.
                 {totalCount > 0 && (
                   <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>(전체 {totalCount}개 중)</span>
                 )}
@@ -850,7 +880,25 @@ const JobTable: React.FC = () => {
               </span>
             ) : (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                ({data.filter(job => selection.selectedIds.has(job.id) && job.status === JOB_STATUS.FAILED).length}개)
+                ({data.filter(job => selection.includeIds.has(job.id) && job.status === JOB_STATUS.FAILED).length}개)
+              </span>
+            )}
+          </Button>
+          <Button
+            type="primary"
+            onClick={handleBulkRetryDelete}
+            style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
+          >
+            삭제실패 재시도
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                (
+                {data.filter(job => selection.includeIds.has(job.id) && job.status === JOB_STATUS.DELETE_FAILED).length}
+                개)
               </span>
             )}
           </Button>
@@ -861,7 +909,7 @@ const JobTable: React.FC = () => {
                 {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
               </span>
             ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({selection.selectedIds.size}개)</span>
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({selection.includeIds.size}개)</span>
             )}
           </Button>
           <Divider />
@@ -911,7 +959,7 @@ const JobTable: React.FC = () => {
               </span>
             ) : (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                ({data.filter(job => selection.selectedIds.has(job.id) && !job.postJob?.deletedAt).length}개)
+                ({data.filter(job => selection.includeIds.has(job.id) && !job.postJob?.deletedAt).length}개)
               </span>
             )}
           </Button>
@@ -946,18 +994,18 @@ const JobTable: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <Checkbox
                   checked={selection.mode === SelectionMode.ALL}
-                  indeterminate={selection.mode === SelectionMode.PAGE && selection.selectedIds.size > 0}
+                  indeterminate={selection.mode === SelectionMode.PAGE && selection.includeIds.size > 0}
                   onChange={e => handleSelectAllPages(e.target.checked)}
                   title="필터 조건에 맞는 모든 작업 선택"
                 >
                   <span style={{ fontSize: '11px', color: '#666' }}>전체</span>
                 </Checkbox>
                 <Checkbox
-                  checked={selection.mode === SelectionMode.PAGE && selection.selectedIds.size === data.length}
+                  checked={selection.mode === SelectionMode.PAGE && selection.includeIds.size === data.length}
                   indeterminate={
                     selection.mode === SelectionMode.PAGE &&
-                    selection.selectedIds.size > 0 &&
-                    selection.selectedIds.size < data.length
+                    selection.includeIds.size > 0 &&
+                    selection.includeIds.size < data.length
                   }
                   onChange={e => handleSelectAll(e.target.checked)}
                   title="현재 페이지의 모든 작업 선택"
@@ -1257,6 +1305,16 @@ const JobTable: React.FC = () => {
                       style={{ fontSize: '11px' }}
                     >
                       재시도
+                    </Button>
+                  )}
+                  {row.status === JOB_STATUS.DELETE_FAILED && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleRetryDelete(row.id)}
+                      style={{ fontSize: '11px' }}
+                    >
+                      삭제재시도
                     </Button>
                   )}
                   {/* BLOG_POST(포스팅) 타입은 다운로드 버튼을 렌더링하지 않음 */}

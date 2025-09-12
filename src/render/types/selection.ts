@@ -5,7 +5,7 @@ export type Mode = SelectionMode
 
 export interface SelectionState {
   mode: Mode
-  selectedIds: Set<string> // page 모드에만 사용
+  includeIds: Set<string> // page 모드에만 사용
   excludedIds: Set<string> // all 모드에만 사용
 }
 

@@ -98,7 +98,9 @@ export class JobQueueProcessor implements OnModuleInit {
       const jobsToDelete = await this.prisma.job.findMany({
         where: {
           type: JobType.POST,
-          status: JobStatus.COMPLETED,
+          status: {
+            in: [JobStatus.COMPLETED, JobStatus.DELETE_REQUEST],
+          },
           postJob: {
             deleteAt: {
               lte: new Date(), // 현재 시간보다 이전
@@ -113,8 +115,6 @@ export class JobQueueProcessor implements OnModuleInit {
           postJob: true,
         },
       })
-
-      this.logger.log(`예약된 삭제 대상 작업 ${jobsToDelete.length}개 발견`)
 
       // 4. 삭제 대상 작업들을 원자적으로 처리하고 바로 삭제 진행
       for (const job of jobsToDelete) {

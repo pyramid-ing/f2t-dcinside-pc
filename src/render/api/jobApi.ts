@@ -2,6 +2,19 @@ import { api } from './apiClient'
 import { ApiResponse, Job, JobLog, JobStatus, JobType, PaginatedResponse } from '@render/api/type'
 import { BulkActionRequest } from '@render/types/selection'
 
+interface BulkRetryDeleteRequest {
+  mode: string
+  includeIds?: string[]
+  excludeIds?: string[]
+  filters?: {
+    status?: string
+    type?: string
+    search?: string
+    orderBy?: string
+    order?: string
+  }
+}
+
 /**
  * 작업 목록을 조회합니다.
  */
@@ -43,6 +56,14 @@ export async function retryJob(jobId: string): Promise<ApiResponse> {
 }
 
 /**
+ * 삭제 실패한 작업을 재시도합니다.
+ */
+export async function retryDeleteJob(jobId: string): Promise<ApiResponse> {
+  const response = await api.post(`/api/jobs/${jobId}/retry-delete`)
+  return response.data
+}
+
+/**
  * 작업을 삭제합니다.
  */
 export async function deleteJob(jobId: string): Promise<ApiResponse> {
@@ -51,26 +72,18 @@ export async function deleteJob(jobId: string): Promise<ApiResponse> {
 }
 
 /**
- * 작업 결과 파일을 다운로드합니다.
- */
-export async function downloadJobFile(jobId: string): Promise<Blob> {
-  const response = await api.get(`/api/jobs/${jobId}/download`, { responseType: 'blob' })
-  return response.data
-}
-
-/**
- * 벌크 작업 미리보기 (실제 적용될 개수 확인)
- */
-export async function previewBulkAction(request: BulkActionRequest): Promise<{ count: number }> {
-  const response = await api.post('/api/jobs/bulk/preview', request)
-  return response.data
-}
-
-/**
  * 여러 작업을 재시도합니다.
  */
 export async function retryJobs(request: BulkActionRequest): Promise<ApiResponse> {
   const response = await api.post('/api/jobs/bulk/retry', request)
+  return response.data
+}
+
+/**
+ * 여러 삭제 실패한 작업을 재시도합니다.
+ */
+export async function bulkRetryDeleteJobs(request: BulkRetryDeleteRequest): Promise<ApiResponse> {
+  const response = await api.post('/api/jobs/bulk/retry-delete', request)
   return response.data
 }
 
@@ -103,22 +116,6 @@ export async function bulkApplyInterval(request: BulkActionRequest): Promise<Api
  */
 export async function bulkPendingToRequest(request: BulkActionRequest): Promise<ApiResponse> {
   const response = await api.post('/api/jobs/bulk/pending-to-request', request)
-  return response.data
-}
-
-/**
- * 작업의 삭제 예정시간을 설정/해제합니다.
- */
-export async function updateJobDeleteAt(jobId: string, deleteAt: string | null): Promise<ApiResponse> {
-  const response = await api.patch(`/api/jobs/${jobId}`, { deleteAt })
-  return response.data
-}
-
-/**
- * 등록요청(request) 상태를 등록대기(pending)로 변경
- */
-export async function requestToPending(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/request-to-pending`)
   return response.data
 }
 
