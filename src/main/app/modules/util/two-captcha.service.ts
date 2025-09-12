@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { sleep } from '@main/app/utils/sleep'
+import { retry } from '@main/app/utils/retry'
 import axios from 'axios'
 
 interface TwoCaptchaSubmitResponse {
@@ -92,13 +92,9 @@ export class TwoCaptchaService {
    */
   private async getRecaptchaResult(apiKey: string, captchaId: string): Promise<string> {
     const resultUrl = `${this.baseUrl}/res.php`
-    const maxAttempts = 30 // 최대 30번 시도 (5분)
-    const delayMs = 10000 // 10초 간격
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      this.logger.log(`캡챠 결과 확인 중... (${attempt}/${maxAttempts})`)
-
-      try {
+    return await retry(
+      async () => {
         const response = await axios.get(resultUrl, {
           params: {
             key: apiKey,
@@ -115,38 +111,20 @@ export class TwoCaptchaService {
           // 성공 - 토큰 반환
           return data.request
         } else if (data.request === 'CAPCHA_NOT_READY') {
-          // 아직 준비되지 않음 - 대기 후 재시도
+          // 아직 준비되지 않음 - 재시도를 위해 에러 던지기
           this.logger.log('캡챠가 아직 준비되지 않았습니다. 10초 후 재시도...')
-          await sleep(delayMs)
-          continue
+          throw new Error('CAPTCHA_NOT_READY')
         } else {
-          // 오류
+          // 오류 - 재시도하지 않고 즉시 실패
           throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
             message: `2captcha 결과 오류: ${data.request}`,
           })
         }
-      } catch (error: any) {
-        if (error.response) {
-          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-            message: `2captcha API 오류: ${error.response.data}`,
-          })
-        }
-
-        // 네트워크 오류는 재시도
-        if (attempt === maxAttempts) {
-          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-            message: `2captcha 네트워크 오류 (최대 시도 횟수 초과): ${error.message}`,
-          })
-        }
-
-        this.logger.warn(`네트워크 오류 발생, 재시도 중... (${attempt}/${maxAttempts}): ${error.message}`)
-        await sleep(delayMs)
-      }
-    }
-
-    throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-      message: '2captcha 타임아웃: 캡챠 해결에 너무 오래 걸립니다.',
-    })
+      },
+      10000, // 10초 간격
+      30, // 최대 30번 시도 (5분)
+      'linear',
+    )
   }
 
   /**
