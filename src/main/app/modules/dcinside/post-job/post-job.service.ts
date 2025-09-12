@@ -107,26 +107,7 @@ export class PostJobService implements JobProcessor {
    * 프록시 모드 처리
    */
   private async handleProxyMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
-    // 설정에 따라 브라우저/컨텍스트 재사용 여부 결정
-    let browser, context, proxyInfo
-
-    if (settings.reuseWindowBetweenTasks) {
-      // 창 재사용 모드: 기존 로직 유지
-      const result = await this.postingService.launch()
-      browser = result.browser
-      context = result.context
-      proxyInfo = result.proxyInfo
-
-      await this.jobLogsService.createJobLog(jobId, '프록시 모드 - 브라우저 창 재사용')
-    } else {
-      // 새 창 모드: 매번 새 브라우저/컨텍스트 생성
-      const result = await this.postingService.launch()
-      browser = result.browser
-      context = result.context
-      proxyInfo = result.proxyInfo
-
-      await this.jobLogsService.createJobLog(jobId, '프록시 모드 - 새 브라우저 창 생성')
-    }
+    const { browser, context, proxyInfo } = await this.postingService.launch()
 
     try {
       // 프록시 정보 로깅
