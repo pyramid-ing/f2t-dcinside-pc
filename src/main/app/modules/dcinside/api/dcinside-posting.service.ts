@@ -474,12 +474,18 @@ export class DcinsidePostingService {
     await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
     await sleep(2000) // 2초 고정 딜레이
 
-    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시: 해당 문구를 에러 메시지로 예외 처리
+    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시 처리
     const abnormalText = await page.evaluate(() => {
       const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
       return el?.textContent?.trim() || null
     })
     if (abnormalText) {
+      // 이미 삭제된 게시물인 경우 성공으로 처리
+      if (abnormalText.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
+        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${abnormalText} (이미 삭제됨)`)
+        return
+      }
+      // 다른 비정상 상태는 에러로 처리
       throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
     }
 
