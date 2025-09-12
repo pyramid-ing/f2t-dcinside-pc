@@ -55,7 +55,7 @@ const SettingsForm: React.FC = () => {
         onFinish={handleSave}
         initialValues={{
           showBrowserWindow: true,
-          reuseWindowBetweenTasks: true,
+          reuseWindowBetweenTasks: false,
           taskDelay: 10,
           actionDelay: 1.0,
           imageUploadFailureAction: 'fail',
