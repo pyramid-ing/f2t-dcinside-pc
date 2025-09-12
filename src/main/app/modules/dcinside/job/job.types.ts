@@ -20,4 +20,9 @@ export enum JobStatus {
   PROCESSING = 'processing',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  // 삭제 관련 상태들
+  DELETE_REQUEST = 'delete_request',
+  DELETE_PROCESSING = 'delete_processing',
+  DELETE_COMPLETED = 'delete_completed',
+  DELETE_FAILED = 'delete_failed',
 }

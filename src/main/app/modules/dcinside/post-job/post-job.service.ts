@@ -349,63 +349,60 @@ export class PostJobService implements JobProcessor {
   }
 
   /**
-   * 예약된 삭제 처리: 완료된 게시글 중 deleteAt 시간이 된 것들을 삭제
+   * 게시글 삭제 작업 처리 (DELETE_REQUEST 상태인 작업용)
    */
-  async processScheduledDeletions() {
-    const now = new Date()
-
-    // 완료된 게시글 중 삭제 예정시간이 지난 것들을 찾기
-    const jobsToDelete = await this.prismaService.job.findMany({
-      where: {
-        type: JobType.POST,
-        status: JobStatus.COMPLETED,
-        postJob: {
-          deleteAt: {
-            lte: now, // 현재 시간보다 이전
-          },
-          deletedAt: null, // 아직 삭제되지 않음
-          resultUrl: {
-            not: null, // 결과 URL이 있어야 삭제 가능
-          },
-        },
-      },
-      include: {
-        postJob: true,
-      },
-    })
-
-    this.logger.log(`예약된 삭제 대상 작업 ${jobsToDelete.length}개 발견`)
-
-    // 각 작업에 대해 삭제 처리
-    for (const job of jobsToDelete) {
-      try {
-        await this.jobLogsService.createJobLog(job.id, `예약된 삭제 시간 도달: ${job.postJob!.deleteAt}`)
-        await this.processDeleteJob(job)
-        this.logger.log(`게시글 삭제 완료: ${job.id}`)
-      } catch (error) {
-        this.logger.error(`게시글 삭제 실패: ${job.id}`, error)
-      }
-    }
-  }
-
-  /**
-   * 게시글 삭제 작업 처리
-   */
-  private async processDeleteJob(job: any): Promise<void> {
+  async processDeleteJob(job: any): Promise<void> {
     if (!job.postJob?.resultUrl) {
       throw new Error('삭제할 게시글의 URL이 없습니다.')
     }
 
-    this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
-    await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
+    try {
+      // 삭제 시작 - DELETE_PROCESSING 상태로 변경
+      await this.prismaService.job.updateMany({
+        where: {
+          id: job.id,
+          status: JobStatus.DELETE_REQUEST, // DELETE_REQUEST 상태인 것만 처리
+        },
+        data: {
+          status: JobStatus.DELETE_PROCESSING,
+        },
+      })
 
-    const settings = await this.settingsService.getSettings()
+      this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
+      await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
-    // 브라우저 재사용/신규 생성 분기
-    if (settings.reuseWindowBetweenTasks) {
-      await this.processDeleteJobWithReuseMode(job, settings)
-    } else {
-      await this.processDeleteJobWithNewMode(job, settings)
+      const settings = await this.settingsService.getSettings()
+
+      // 브라우저 재사용/신규 생성 분기
+      if (settings.reuseWindowBetweenTasks) {
+        await this.processDeleteJobWithReuseMode(job, settings)
+      } else {
+        await this.processDeleteJobWithNewMode(job, settings)
+      }
+
+      // 삭제 성공 - DELETE_COMPLETED 상태로 변경
+      await this.prismaService.job.update({
+        where: { id: job.id },
+        data: {
+          status: JobStatus.DELETE_COMPLETED,
+        },
+      })
+
+      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+    } catch (error) {
+      // 삭제 실패 - DELETE_FAILED 상태로 변경
+      await this.prismaService.job.update({
+        where: { id: job.id },
+        data: {
+          status: JobStatus.DELETE_FAILED,
+          errorMsg: `삭제 실패: ${error.message}`,
+          completedAt: new Date(),
+        },
+      })
+
+      await this.jobLogsService.createJobLog(job.id, `삭제 실패: ${error.message}`, 'error')
+      this.logger.error(`게시글 삭제 실패: ${job.id}`, error)
+      throw error
     }
   }
 
@@ -413,9 +410,10 @@ export class PostJobService implements JobProcessor {
    * 삭제 작업 - 브라우저 재사용 모드
    */
   private async processDeleteJobWithReuseMode(job: any, settings: Settings): Promise<void> {
-    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 브라우저 창 재사용')
+    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 브라우저 창 재사용 (삭제 전용)')
 
-    const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+    // 삭제 전용 브라우저 사용 (등록용과 분리)
+    const browser = await this.browserManager.getOrCreateBrowser('dcinside-deletion', {
       headless: !settings.showBrowserWindow,
     })
 
@@ -446,16 +444,13 @@ export class PostJobService implements JobProcessor {
       where: { id: job.postJob.id },
       data: { deletedAt: new Date() },
     })
-
-    await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
-    this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
   }
 
   /**
    * 삭제 작업 - 브라우저 신규 생성 모드
    */
   private async processDeleteJobWithNewMode(job: any, settings: Settings): Promise<void> {
-    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성')
+    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
 
     const browser = await chromium.launch({
       headless: !settings.showBrowserWindow,
@@ -486,23 +481,17 @@ export class PostJobService implements JobProcessor {
         where: { id: job.postJob.id },
         data: { deletedAt: new Date() },
       })
-
-      await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
-      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
     } catch (error) {
-      const errorMessage = `게시글 삭제 실패: ${error.message}`
-      await this.jobLogsService.createJobLog(job.id, errorMessage, 'error')
-      this.logger.error(errorMessage, error.stack)
       throw error
     } finally {
-      // 작업 완료 후 브라우저 종료
+      // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
       try {
         if (browser) {
           await browser.close()
-          await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 브라우저 창 종료')
+          await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 삭제 전용 브라우저 창 종료')
         }
       } catch (error) {
-        this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+        this.logger.warn(`삭제 전용 브라우저 종료 중 오류: ${error.message}`)
       }
     }
   }

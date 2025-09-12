@@ -36,39 +36,20 @@ import {
 import PageContainer from '../../components/shared/PageContainer'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
-import { JobLog, PostJob } from '@render/api/type'
+import {
+  JobLog,
+  PostJob,
+  JOB_STATUS,
+  JOB_STATUS_LABEL,
+  JOB_STATUS_COLOR,
+  JOB_STATUS_OPTIONS,
+  JOB_TYPE_OPTIONS,
+  JobStatus,
+  JobType,
+} from '@render/api/type'
 import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
 import { BulkActionType } from '@render/types/bulk-action.enum'
 import { SelectionMode } from '@render/types/selection-mode.enum'
-
-// JOB_STATUS, JOB_TYPE, JOB_STATUS_LABEL 직접 정의
-const JOB_STATUS = {
-  REQUEST: 'request',
-  PENDING: 'pending',
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-} as const
-
-type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
-
-const JOB_TYPE = {
-  POST: 'post',
-} as const
-
-type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
-
-const JOB_STATUS_LABEL: Record<JobStatus, string> = {
-  request: '등록요청',
-  pending: '등록대기',
-  processing: '처리중',
-  completed: '완료',
-  failed: '실패',
-}
-
-const JOB_TYPE_LABEL: Record<JobType, string> = {
-  post: '포스팅',
-}
 
 const ResultCell = styled.div`
   max-width: 100%;
@@ -194,34 +175,6 @@ const PopoverContent = styled.div`
   }
 `
 
-const statusColor: Record<JobStatus, string> = {
-  [JOB_STATUS.REQUEST]: 'purple',
-  [JOB_STATUS.PENDING]: 'blue',
-  [JOB_STATUS.PROCESSING]: 'orange',
-  [JOB_STATUS.COMPLETED]: 'green',
-  [JOB_STATUS.FAILED]: 'red',
-}
-
-const statusLabels: Record<JobStatus, string> = JOB_STATUS_LABEL
-
-const statusOptions = [
-  { value: '', label: '전체' },
-  { value: JOB_STATUS.REQUEST, label: '등록요청' },
-  { value: JOB_STATUS.PENDING, label: '등록대기' },
-  { value: JOB_STATUS.PROCESSING, label: '처리중' },
-  { value: JOB_STATUS.COMPLETED, label: '완료' },
-  { value: JOB_STATUS.FAILED, label: '실패' },
-]
-
-const jobTypeLabels: Record<JobType, string> = {
-  [JOB_TYPE.POST]: '포스팅',
-}
-
-const jobTypeOptions = [
-  { value: '', label: '전체' },
-  { value: JOB_TYPE.POST, label: '포스팅' },
-]
-
 // 상태별 기본 메시지
 function getDefaultMessage(status: JobStatus): string {
   switch (status) {
@@ -233,6 +186,17 @@ function getDefaultMessage(status: JobStatus): string {
       return '성공적으로 완료되었습니다.'
     case JOB_STATUS.FAILED:
       return '처리 중 오류가 발생했습니다.'
+    // 삭제 관련 상태들
+    case JOB_STATUS.DELETE_REQUEST:
+      return '삭제 요청 대기 중입니다.'
+    case JOB_STATUS.DELETE_PROCESSING:
+      return '현재 삭제 중입니다.'
+    case JOB_STATUS.DELETE_COMPLETED:
+      return '성공적으로 삭제되었습니다.'
+    case JOB_STATUS.DELETE_FAILED:
+      return '삭제 중 오류가 발생했습니다.'
+    default:
+      return '알 수 없는 상태입니다.'
   }
 }
 
@@ -247,6 +211,17 @@ function getStatusType(status: JobStatus): string {
       return 'pending'
     case JOB_STATUS.PROCESSING:
       return 'processing'
+    // 삭제 관련 상태들
+    case JOB_STATUS.DELETE_REQUEST:
+      return 'pending'
+    case JOB_STATUS.DELETE_PROCESSING:
+      return 'processing'
+    case JOB_STATUS.DELETE_COMPLETED:
+      return 'success'
+    case JOB_STATUS.DELETE_FAILED:
+      return 'error'
+    default:
+      return 'pending'
   }
 }
 
@@ -261,6 +236,17 @@ function getStatusIcon(status: JobStatus): string {
       return '🎉'
     case JOB_STATUS.FAILED:
       return '⚠️'
+    // 삭제 관련 상태들
+    case JOB_STATUS.DELETE_REQUEST:
+      return '🗑️'
+    case JOB_STATUS.DELETE_PROCESSING:
+      return '🔄'
+    case JOB_STATUS.DELETE_COMPLETED:
+      return '✅'
+    case JOB_STATUS.DELETE_FAILED:
+      return '❌'
+    default:
+      return '❓'
   }
 }
 
@@ -275,6 +261,17 @@ function getStatusTitle(status: JobStatus): string {
       return '완료 상세 정보'
     case JOB_STATUS.FAILED:
       return '실패 원인 상세'
+    // 삭제 관련 상태들
+    case JOB_STATUS.DELETE_REQUEST:
+      return '삭제 요청 상세 정보'
+    case JOB_STATUS.DELETE_PROCESSING:
+      return '삭제 진행 중 상세 정보'
+    case JOB_STATUS.DELETE_COMPLETED:
+      return '삭제 완료 상세 정보'
+    case JOB_STATUS.DELETE_FAILED:
+      return '삭제 실패 원인 상세'
+    default:
+      return '상세 정보'
   }
 }
 
@@ -785,7 +782,7 @@ const JobTable: React.FC = () => {
             <Select
               value={statusFilter}
               onChange={value => setStatusFilter(value as JobStatus)}
-              options={statusOptions}
+              options={JOB_STATUS_OPTIONS}
               style={{ width: 120 }}
             />
           </Space>
@@ -794,7 +791,7 @@ const JobTable: React.FC = () => {
             <Select
               value={typeFilter}
               onChange={value => setTypeFilter(value as JobType)}
-              options={jobTypeOptions}
+              options={JOB_TYPE_OPTIONS}
               style={{ width: 120 }}
             />
           </Space>
@@ -1131,14 +1128,14 @@ const JobTable: React.FC = () => {
                   options={[
                     ...(record.status === JOB_STATUS.PENDING
                       ? [
-                          { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
-                          { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
+                          { value: JOB_STATUS.PENDING, label: JOB_STATUS_LABEL[JOB_STATUS.PENDING] },
+                          { value: JOB_STATUS.REQUEST, label: JOB_STATUS_LABEL[JOB_STATUS.REQUEST] },
                         ]
                       : []),
                     ...(record.status === JOB_STATUS.REQUEST
                       ? [
-                          { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
-                          { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
+                          { value: JOB_STATUS.REQUEST, label: JOB_STATUS_LABEL[JOB_STATUS.REQUEST] },
+                          { value: JOB_STATUS.PENDING, label: JOB_STATUS_LABEL[JOB_STATUS.PENDING] },
                         ]
                       : []),
                   ]}
@@ -1146,11 +1143,11 @@ const JobTable: React.FC = () => {
                 />
               ) : (
                 <Tag
-                  color={statusColor[value]}
+                  color={JOB_STATUS_COLOR[value]}
                   style={{ cursor: 'pointer' }}
                   onClick={() => setEditingStatusJobId(record.id)}
                 >
-                  {statusLabels[value]}
+                  {JOB_STATUS_LABEL[value]}
                 </Tag>
               ),
           },

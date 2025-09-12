@@ -7,8 +7,6 @@ import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.ser
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
-import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -19,8 +17,6 @@ export class JobQueueProcessor implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly postJobService: PostJobService,
     private readonly jobLogsService: JobLogsService,
-    private readonly postingService: DcinsidePostingService,
-    private readonly browserManager: BrowserManagerService,
   ) {}
 
   async onModuleInit() {
@@ -34,18 +30,29 @@ export class JobQueueProcessor implements OnModuleInit {
   private async removeUnprocessedJobs() {
     try {
       const processingJobs = await this.prisma.job.findMany({
-        where: { status: JobStatus.PROCESSING },
+        where: {
+          status: {
+            in: [JobStatus.PROCESSING, JobStatus.DELETE_PROCESSING],
+          },
+        },
       })
       for (const job of processingJobs) {
+        const errorMsg =
+          job.status === JobStatus.PROCESSING
+            ? '시스템 재시작으로 인한 작업 중단'
+            : '시스템 재시작으로 인한 삭제 작업 중단'
+
+        const failedStatus = job.status === JobStatus.PROCESSING ? JobStatus.FAILED : JobStatus.DELETE_FAILED
+
         await this.prisma.job.update({
           where: { id: job.id },
           data: {
-            status: JobStatus.FAILED,
-            errorMsg: '시스템 재시작으로 인한 작업 중단',
+            status: failedStatus,
+            errorMsg,
             completedAt: new Date(),
           },
         })
-        await this.jobLogsService.createJobLog(job.id, '시스템 재시작으로 인한 작업 중단', 'error')
+        await this.jobLogsService.createJobLog(job.id, errorMsg, 'error')
       }
       this.logger.log(`처리 중이던 ${processingJobs.length}개 작업을 실패 처리했습니다.`)
     } catch (error) {
@@ -55,19 +62,20 @@ export class JobQueueProcessor implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async processNextJobs() {
-    // 새로운 포스팅 등록 전에 예약된 삭제 작업 먼저 처리
-    await this.postJobService.processScheduledDeletions()
-
-    // 현재 processing 중인 job이 있는지 확인
+    // 현재 processing 중인 등록 job이 있는지 확인 (등록 작업만)
     const processingCount = await this.prisma.job.count({
-      where: { status: JobStatus.PROCESSING },
+      where: {
+        status: JobStatus.PROCESSING,
+        type: JobType.POST, // 등록 작업만 확인
+      },
     })
 
     if (processingCount === 0) {
-      // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
+      // processing 중인 등록 job이 없을 때만 pending job을 하나만 가져와서 처리
       const requestJobs = await this.prisma.job.findMany({
         where: {
           status: JobStatus.REQUEST,
+          type: JobType.POST,
           scheduledAt: { lte: new Date() },
         },
         orderBy: [{ priority: 'desc' }, { scheduledAt: 'asc' }],
@@ -76,6 +84,41 @@ export class JobQueueProcessor implements OnModuleInit {
 
       for (const job of requestJobs) {
         await this.processJob(job)
+      }
+    }
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async processScheduledDeletions() {
+    const processingDeleteCount = await this.prisma.job.count({
+      where: { status: JobStatus.DELETE_PROCESSING },
+    })
+
+    if (processingDeleteCount === 0) {
+      const jobsToDelete = await this.prisma.job.findMany({
+        where: {
+          type: JobType.POST,
+          status: JobStatus.COMPLETED,
+          postJob: {
+            deleteAt: {
+              lte: new Date(), // 현재 시간보다 이전
+            },
+            deletedAt: null, // 아직 삭제되지 않음
+            resultUrl: {
+              not: null, // 결과 URL이 있어야 삭제 가능
+            },
+          },
+        },
+        include: {
+          postJob: true,
+        },
+      })
+
+      this.logger.log(`예약된 삭제 대상 작업 ${jobsToDelete.length}개 발견`)
+
+      // 4. 삭제 대상 작업들을 원자적으로 처리하고 바로 삭제 진행
+      for (const job of jobsToDelete) {
+        await this.postJobService.processDeleteJob(job)
       }
     }
   }
