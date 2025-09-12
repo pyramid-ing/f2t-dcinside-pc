@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
-import { BrowserContext, Page } from 'playwright'
+import { BrowserContext, Page, chromium } from 'playwright'
 import { PostJob } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -50,7 +50,12 @@ export class PostJobService implements JobProcessor {
     switch (settings?.ipMode) {
       case IpMode.TETHERING:
         await this.handleTetheringMode(jobId, settings)
-        await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        // 테더링 후 브라우저 재사용/신규 생성 분기
+        if (settings.reuseWindowBetweenTasks) {
+          await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        } else {
+          await this.handleBrowserNewMode(jobId, settings, job.postJob)
+        }
         break
 
       case IpMode.PROXY:
@@ -59,7 +64,12 @@ export class PostJobService implements JobProcessor {
 
       case IpMode.NONE:
       default:
-        await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        // IP 변경 없음 - 브라우저 재사용/신규 생성 분기
+        if (settings.reuseWindowBetweenTasks) {
+          await this.handleBrowserReuseMode(jobId, settings, job.postJob)
+        } else {
+          await this.handleBrowserNewMode(jobId, settings, job.postJob)
+        }
         break
     }
   }
@@ -97,30 +107,61 @@ export class PostJobService implements JobProcessor {
    * 프록시 모드 처리
    */
   private async handleProxyMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
-    const { browser, context, proxyInfo } = await this.postingService.launch()
+    // 설정에 따라 브라우저/컨텍스트 재사용 여부 결정
+    let browser, context, proxyInfo
 
-    // 프록시 정보 로깅
-    if (proxyInfo) {
-      const proxyStr = proxyInfo.id
-        ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
-        : `${proxyInfo.ip}:${proxyInfo.port}`
-      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+    if (settings.reuseWindowBetweenTasks) {
+      // 창 재사용 모드: 기존 로직 유지
+      const result = await this.postingService.launch()
+      browser = result.browser
+      context = result.context
+      proxyInfo = result.proxyInfo
+
+      await this.jobLogsService.createJobLog(jobId, '프록시 모드 - 브라우저 창 재사용')
     } else {
-      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+      // 새 창 모드: 매번 새 브라우저/컨텍스트 생성
+      const result = await this.postingService.launch()
+      browser = result.browser
+      context = result.context
+      proxyInfo = result.proxyInfo
+
+      await this.jobLogsService.createJobLog(jobId, '프록시 모드 - 새 브라우저 창 생성')
     }
 
-    // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
-    await this.logExternalIp(jobId, context, true)
+    try {
+      // 프록시 정보 로깅
+      if (proxyInfo) {
+        const proxyStr = proxyInfo.id
+          ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+          : `${proxyInfo.ip}:${proxyInfo.port}`
+        await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+      }
 
-    await this.applyTaskDelay(jobId, settings)
+      // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
+      await this.logExternalIp(jobId, context, true)
 
-    // 프록시 모드에서도 페이지만 생성하고 브라우저는 유지
-    const page = await context.newPage()
-    await this.handlePostJob(jobId, context, page, postJob)
+      await this.applyTaskDelay(jobId, settings)
+
+      // 페이지 생성 후 포스팅 처리
+      const page = await context.newPage()
+      await this.handlePostJob(jobId, context, page, postJob)
+    } finally {
+      // 새 창 모드일 때만 브라우저 종료
+      if (!settings.reuseWindowBetweenTasks && browser) {
+        try {
+          await browser.close()
+          await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+        } catch (error) {
+          this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+        }
+      }
+    }
   }
 
   /**
-   * 브라우저 재사용 모드 처리 (테더링/NONE 모드)
+   * 브라우저 재사용 모드 처리
    */
   private async handleBrowserReuseMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
     const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
@@ -149,8 +190,50 @@ export class PostJobService implements JobProcessor {
 
     await this.applyTaskDelay(jobId, settings)
 
-    // 동일 페이지에서 포스팅 처리 (페이지 종료/브라우저 종료 없음)
     await this.handlePostJob(jobId, context, page, postJob)
+  }
+
+  /**
+   * 브라우저 신규 생성 모드 처리
+   */
+  private async handleBrowserNewMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
+    const browser = await chromium.launch({
+      headless: !settings.showBrowserWindow,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+    })
+
+    let context: BrowserContext | null = null
+    let page: Page | null = null
+
+    try {
+      context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      })
+
+      await context.addInitScript(() => {
+        window.sessionStorage.clear()
+      })
+
+      page = await context.newPage()
+
+      // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
+      await this.logExternalIp(jobId, page, false)
+
+      await this.applyTaskDelay(jobId, settings)
+
+      // 포스팅 처리
+      await this.handlePostJob(jobId, context, page, postJob)
+    } finally {
+      // 작업 완료 후 브라우저 종료
+      try {
+        if (browser) {
+          await browser.close()
+        }
+      } catch (error) {
+        this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+      }
+    }
   }
 
   /**
@@ -335,25 +418,79 @@ export class PostJobService implements JobProcessor {
     this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
     await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
+    const settings = await this.settingsService.getSettings()
+
+    // 브라우저 재사용/신규 생성 분기
+    if (settings.reuseWindowBetweenTasks) {
+      await this.processDeleteJobWithReuseMode(job, settings)
+    } else {
+      await this.processDeleteJobWithNewMode(job, settings)
+    }
+  }
+
+  /**
+   * 삭제 작업 - 브라우저 재사용 모드
+   */
+  private async processDeleteJobWithReuseMode(job: any, settings: Settings): Promise<void> {
+    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 브라우저 창 재사용')
+
+    const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+      headless: !settings.showBrowserWindow,
+    })
+
+    let context = browser.contexts()[0]
+    if (!context) {
+      context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      })
+    }
+
+    // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
+    let page = context.pages()[0]
+    if (!page) {
+      page = await context.newPage()
+    }
+
+    // 로그인 처리
+    if (job.postJob.loginId && job.postJob.loginPassword) {
+      await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
+    }
+
+    // 게시글 삭제 실행
+    await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
+
+    // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+    await this.prismaService.postJob.update({
+      where: { id: job.postJob.id },
+      data: { deletedAt: new Date() },
+    })
+
+    await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
+    this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+  }
+
+  /**
+   * 삭제 작업 - 브라우저 신규 생성 모드
+   */
+  private async processDeleteJobWithNewMode(job: any, settings: Settings): Promise<void> {
+    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성')
+
+    const browser = await chromium.launch({
+      headless: !settings.showBrowserWindow,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+    })
+
+    let context: BrowserContext | null = null
+    let page: Page | null = null
+
     try {
-      // 등록용 창과 동일한 브라우저 관리 방식 사용
-      const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
-        headless: false, // 삭제 과정도 사용자가 확인할 수 있도록 창 표시
+      context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
       })
 
-      let context = browser.contexts()[0]
-      if (!context) {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
-      }
-
-      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
-      let page = context.pages()[0]
-      if (!page) {
-        page = await context.newPage()
-      }
+      page = await context.newPage()
 
       // 로그인 처리
       if (job.postJob.loginId && job.postJob.loginPassword) {
@@ -371,13 +508,21 @@ export class PostJobService implements JobProcessor {
 
       await this.jobLogsService.createJobLog(job.id, '게시글 삭제 완료')
       this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
-
-      // 삭제 성공 시에는 브라우저를 종료하지 않음 - 사용자가 결과를 확인할 수 있도록 유지
     } catch (error) {
       const errorMessage = `게시글 삭제 실패: ${error.message}`
       await this.jobLogsService.createJobLog(job.id, errorMessage, 'error')
       this.logger.error(errorMessage, error.stack)
       throw error
+    } finally {
+      // 작업 완료 후 브라우저 종료
+      try {
+        if (browser) {
+          await browser.close()
+          await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 브라우저 창 종료')
+        }
+      } catch (error) {
+        this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+      }
     }
   }
 

@@ -17,6 +17,7 @@ export class SettingsService {
 
     const defaultSettings: Settings = {
       showBrowserWindow: false,
+      reuseWindowBetweenTasks: true, // 기본값은 창 재사용
       taskDelay: 10,
       actionDelay: 0,
       imageUploadFailureAction: 'skip',

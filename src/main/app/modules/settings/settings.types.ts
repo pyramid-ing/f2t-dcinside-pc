@@ -2,6 +2,7 @@ import { Permission } from '@main/app/modules/auth/auth.guard'
 
 export interface Settings {
   showBrowserWindow: boolean // 창보임/창숨김 모드 (true = 창보임, false = 창숨김)
+  reuseWindowBetweenTasks: boolean // 작업 간 브라우저 창 재사용 여부 (true = 창 유지, false = 매번 새 창)
   taskDelay: number // 작업간 딜레이 (초)
   actionDelay: number // 포스팅 과정 중 각 동작 사이의 딜레이 (초)
   imageUploadFailureAction: 'fail' | 'skip' // 이미지 업로드 실패 시 처리 방식 ('fail' = 작업 실패, 'skip' = 이미지 무시하고 진행)

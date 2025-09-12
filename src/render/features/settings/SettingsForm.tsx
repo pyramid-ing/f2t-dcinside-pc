@@ -55,6 +55,7 @@ const SettingsForm: React.FC = () => {
         onFinish={handleSave}
         initialValues={{
           showBrowserWindow: true,
+          reuseWindowBetweenTasks: true,
           taskDelay: 10,
           actionDelay: 1.0,
           imageUploadFailureAction: 'fail',
@@ -67,6 +68,15 @@ const SettingsForm: React.FC = () => {
           extra="포스팅 시 브라우저 창을 보여줄지 설정합니다. 끄면 백그라운드에서 실행됩니다."
         >
           <Switch checkedChildren="창 보임" unCheckedChildren="창 숨김" loading={loading} />
+        </Form.Item>
+
+        <Form.Item
+          label="작업 간 브라우저 창 재사용"
+          name="reuseWindowBetweenTasks"
+          valuePropName="checked"
+          extra="작업 간 브라우저 창을 재사용할지 설정합니다. 끄면 매 작업마다 새 창을 생성합니다."
+        >
+          <Switch checkedChildren="창 재사용" unCheckedChildren="새 창 생성" loading={loading} />
         </Form.Item>
 
         <Form.Item
