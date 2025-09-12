@@ -493,6 +493,7 @@ export class DcinsidePostingService {
           message: '삭제 비밀번호가 설정되지 않았습니다.',
         })
       }
+      await page.waitForSelector('#password', { timeout: 60_000 })
       const pwInput = page.locator('#password')
       await pwInput.fill(post.password)
       await sleep(1000)
