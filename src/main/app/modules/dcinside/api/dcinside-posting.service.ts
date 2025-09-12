@@ -90,90 +90,20 @@ async function moveCursorToPosition(page: any, position: '상단' | '하단') {
   }, position)
 }
 
-// reCAPTCHA(리캡챠) 감지 함수: 모든 프레임에서 검사
+// reCAPTCHA(리캡챠) 감지 함수: iframe에서 사이트 키 추출
 async function detectRecaptcha(page: Page): Promise<{ found: boolean; siteKey?: string }> {
-  // 메인 페이지에서 data-sitekey 속성을 가진 요소 검사
-  const mainPageResult = await page.evaluate(() => {
-    // 1. data-sitekey 속성을 가진 요소 찾기 (가장 확실한 방법)
-    const recaptchaDiv = document.querySelector('[data-sitekey]')
-    if (recaptchaDiv) {
-      return {
-        found: true,
-        siteKey: recaptchaDiv.getAttribute('data-sitekey'),
-      }
-    }
-
-    // 2. g-recaptcha 클래스를 가진 요소 찾기
-    const gRecaptcha = document.querySelector('.g-recaptcha[data-sitekey]')
-    if (gRecaptcha) {
-      return {
-        found: true,
-        siteKey: gRecaptcha.getAttribute('data-sitekey'),
-      }
-    }
-
-    // 3. reCAPTCHA iframe 검사
+  return await page.evaluate(() => {
+    // reCAPTCHA iframe 찾기
     const iframe = document.querySelector('iframe[src*="recaptcha"]') as HTMLIFrameElement
     if (iframe && iframe.src) {
       const url = new URL(iframe.src)
-      const siteKey = url.searchParams.get('k') || url.searchParams.get('googlekey')
+      const siteKey = url.searchParams.get('k')
       if (siteKey) {
         return { found: true, siteKey }
       }
     }
-
-    // 4. 스크립트에서 사이트 키 찾기
-    const scripts = Array.from(document.querySelectorAll('script'))
-    for (const script of scripts) {
-      const content = script.textContent || script.innerHTML || ''
-
-      // grecaptcha.render() 호출에서 sitekey 찾기
-      const renderMatch = content.match(/grecaptcha\.render\([^,]+,\s*{[^}]*sitekey\s*:\s*['"]([^'"]+)['"]/i)
-      if (renderMatch && renderMatch[1]) {
-        return { found: true, siteKey: renderMatch[1] }
-      }
-
-      // 일반적인 6L로 시작하는 40자리 키 패턴
-      const siteKeyMatch = content.match(/['"]6L[0-9A-Za-z_-]{38}['"]/g)
-      if (siteKeyMatch && siteKeyMatch.length > 0) {
-        const siteKey = siteKeyMatch[0].replace(/['"]/g, '')
-        return { found: true, siteKey }
-      }
-    }
-
     return { found: false }
   })
-
-  if (mainPageResult.found) {
-    return mainPageResult
-  }
-
-  // 프레임에서도 검사
-  for (const frame of page.frames()) {
-    try {
-      const recaptchaElement = await frame.$('#rc-anchor-container')
-      if (recaptchaElement) {
-        // 프레임에서 사이트 키 추출
-        const siteKey = await frame.evaluate(() => {
-          const iframe = document.querySelector('iframe[src*="recaptcha"]') as HTMLIFrameElement
-          if (iframe && iframe.src) {
-            const url = new URL(iframe.src)
-            return url.searchParams.get('k') || url.searchParams.get('googlekey')
-          }
-          return null
-        })
-
-        if (siteKey) {
-          return { found: true, siteKey }
-        }
-      }
-    } catch (error) {
-      // 프레임 접근 오류는 무시하고 계속 진행
-      continue
-    }
-  }
-
-  return { found: false }
 }
 
 @Injectable()
@@ -394,75 +324,13 @@ export class DcinsidePostingService {
         await this.jobLogsService.createJobLog(jobId, 'reCAPTCHA 토큰 획득 완료, 페이지에 적용 중...')
       }
 
-      // 토큰을 페이지에 적용 (공식 문서 방식 따름)
+      // 토큰을 g-recaptcha-response textarea에 적용
       await page.evaluate(token => {
-        // 1. g-recaptcha-response textarea에 토큰 설정 (핵심)
         const responseElement = document.querySelector('#g-recaptcha-response') as HTMLTextAreaElement
         if (responseElement) {
           responseElement.value = token
           responseElement.style.display = 'block'
-
-          // input 이벤트 발생시켜 변경사항 알림
-          responseElement.dispatchEvent(new Event('input', { bubbles: true }))
-          responseElement.dispatchEvent(new Event('change', { bubbles: true }))
         }
-
-        // 2. 모든 g-recaptcha-response 요소에 토큰 설정 (여러 개 있을 수 있음)
-        const allResponseElements = document.querySelectorAll(
-          'textarea[name="g-recaptcha-response"]',
-        ) as NodeListOf<HTMLTextAreaElement>
-        allResponseElements.forEach(element => {
-          element.value = token
-          element.style.display = 'block'
-          element.dispatchEvent(new Event('input', { bubbles: true }))
-          element.dispatchEvent(new Event('change', { bubbles: true }))
-        })
-
-        // 3. 콜백 함수 호출 (data-callback 속성)
-        const recaptchaElements = document.querySelectorAll('[data-callback]')
-        recaptchaElements.forEach(element => {
-          const callbackName = element.getAttribute('data-callback')
-          if (callbackName && typeof (window as any)[callbackName] === 'function') {
-            try {
-              ;(window as any)[callbackName](token)
-            } catch (e) {
-              console.warn('reCAPTCHA 콜백 함수 실행 오류:', e)
-            }
-          }
-        })
-
-        // 4. grecaptcha API가 있는 경우 추가 처리
-        if (typeof (window as any).grecaptcha !== 'undefined') {
-          try {
-            // 모든 reCAPTCHA 위젯에 대해 응답 설정
-            const widgets = document.querySelectorAll('.g-recaptcha')
-            widgets.forEach((widget, index) => {
-              try {
-                if ((window as any).grecaptcha.getResponse) {
-                  // 위젯 ID 가져오기 또는 인덱스 사용
-                  const widgetId = widget.getAttribute('data-widget-id') || index
-                  // 응답이 비어있다면 설정
-                  if (!(window as any).grecaptcha.getResponse(widgetId)) {
-                    // grecaptcha API로 직접 설정하는 방법은 공개되지 않으므로
-                    // textarea 값 설정에 의존
-                  }
-                }
-              } catch (e) {
-                console.warn('grecaptcha API 처리 오류:', e)
-              }
-            })
-          } catch (e) {
-            console.warn('grecaptcha 전역 처리 오류:', e)
-          }
-        }
-
-        // 5. 폼 유효성 검사 트리거 (필요한 경우)
-        const forms = document.querySelectorAll('form')
-        forms.forEach(form => {
-          if (form.contains(responseElement)) {
-            form.dispatchEvent(new Event('change', { bubbles: true }))
-          }
-        })
       }, recaptchaToken)
 
       if (jobId) {
