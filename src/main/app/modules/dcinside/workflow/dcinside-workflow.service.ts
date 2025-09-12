@@ -18,50 +18,68 @@ export class DcinsideWorkflowService {
     const invalidRows = []
 
     // 1단계: 데이터 검증 및 분류
-    for (const row of rows) {
-      const parseResult = ExcelRowSchema.safeParse(row)
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex]
 
-      if (!parseResult.success) {
-        // Zod 에러에서 실제 에러 추출
-        let errorMessage = parseResult.error.message
+      try {
+        const parseResult = ExcelRowSchema.safeParse(row)
 
-        // CustomHttpException이 포함된 경우 처리
-        const zodError = parseResult.error
-        if (zodError.issues && zodError.issues.length > 0) {
-          const issue = zodError.issues[0]
-          if (issue.message && issue.message.includes('예약날짜 형식이 잘못되었습니다')) {
-            errorMessage = issue.message
+        if (!parseResult.success) {
+          // Zod 에러에서 실제 에러 추출
+          let errorMessage = parseResult.error.message
+
+          // CustomHttpException이 포함된 경우 처리
+          const zodError = parseResult.error
+          if (zodError.issues && zodError.issues.length > 0) {
+            const issue = zodError.issues[0]
+            if (issue.message && issue.message.includes('예약날짜 형식이 잘못되었습니다')) {
+              errorMessage = issue.message
+            }
           }
+
+          const isDateFormatError = errorMessage.includes('예약날짜 형식이 잘못되었습니다')
+
+          invalidRows.push({
+            row,
+            success: false,
+            message: `행 ${rowIndex + 2}: ${isDateFormatError ? errorMessage : `데이터 검증 실패: ${errorMessage}`}`,
+          })
+          continue
         }
 
-        const isDateFormatError = errorMessage.includes('예약날짜 형식이 잘못되었습니다')
+        const transformedRow = parseResult.data
+        validRows.push({
+          galleryUrl: transformedRow.galleryUrl,
+          title: transformedRow.title,
+          contentHtml: transformedRow.contentHtml,
+          password: transformedRow.password ?? null,
+          nickname: transformedRow.nickname ?? null,
+          headtext: transformedRow.headtext ?? null,
+          imagePaths: transformedRow.imagePaths ? JSON.stringify(transformedRow.imagePaths) : null,
+          loginId: transformedRow.loginId ?? null,
+          loginPassword: transformedRow.loginPassword ?? null,
+          scheduledAt: transformedRow.scheduledAt || new Date(),
+          imagePosition: transformedRow.imagePosition ?? null,
+          deleteAt: transformedRow.deleteAt ?? undefined,
+          autoDeleteMinutes: transformedRow.autoDeleteMinutes ?? undefined,
+          // 원본 데이터 보존 (결과 반환용)
+          originalData: transformedRow,
+        })
+      } catch (error) {
+        // CustomHttpException이나 다른 예외가 직접 발생한 경우
+        let errorMessage = error.message || '알 수 없는 오류'
+
+        // CustomHttpException인 경우 metadata에서 메시지 추출
+        if (error.metadata && error.metadata.message) {
+          errorMessage = error.metadata.message
+        }
 
         invalidRows.push({
           row,
           success: false,
-          message: isDateFormatError ? errorMessage : `데이터 검증 실패: ${errorMessage}`,
+          message: `행 ${rowIndex + 2}: ${errorMessage}`,
         })
-        continue
       }
-
-      const transformedRow = parseResult.data
-      validRows.push({
-        galleryUrl: transformedRow.galleryUrl,
-        title: transformedRow.title,
-        contentHtml: transformedRow.contentHtml,
-        password: transformedRow.password ?? null,
-        nickname: transformedRow.nickname ?? null,
-        headtext: transformedRow.headtext ?? null,
-        imagePaths: transformedRow.imagePaths ? JSON.stringify(transformedRow.imagePaths) : null,
-        loginId: transformedRow.loginId ?? null,
-        loginPassword: transformedRow.loginPassword ?? null,
-        scheduledAt: transformedRow.scheduledAt || new Date(),
-        imagePosition: transformedRow.imagePosition ?? null,
-        deleteAt: transformedRow.deleteAt ?? undefined,
-        autoDeleteMinutes: transformedRow.autoDeleteMinutes ?? undefined,
-        // 원본 데이터 보존 (결과 반환용)
-        originalData: transformedRow,
-      })
     }
 
     // 2단계: 유효한 데이터를 배치로 처리
