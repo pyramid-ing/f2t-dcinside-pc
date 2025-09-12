@@ -14,22 +14,13 @@ export class DcinsideWorkflowController {
   @Post('upload-excel')
   @UseInterceptors(FileInterceptor('file'))
   async uploadExcel(@UploadedFile() file: any) {
-    try {
-      if (!file) {
-        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
-          message: '파일이 업로드되지 않았습니다.',
-        })
-      }
-
-      const result = await this.dcinsideWorkflowService.handleExcelUpload(file)
-      return result
-    } catch (error) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
+    if (!file) {
       throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
-        message: '엑셀 파일 처리 중 오류가 발생했습니다.',
+        message: '파일이 업로드되지 않았습니다.',
       })
     }
+
+    const result = await this.dcinsideWorkflowService.handleExcelUpload(file)
+    return result
   }
 }

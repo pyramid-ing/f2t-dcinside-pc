@@ -67,27 +67,22 @@ export class SettingsController {
   @Permissions(Permission.TETHERING)
   @Post('tethering/change-ip')
   async changeIp() {
-    try {
-      const prevIp = this.tetheringService.getCurrentIp()
-      this.logger.log(`IP 변경 시작 - 현재 IP: ${prevIp.ip}`)
+    const prevIp = this.tetheringService.getCurrentIp()
+    this.logger.log(`IP 변경 시작 - 현재 IP: ${prevIp.ip}`)
 
-      await this.tetheringService.resetUsbTethering()
+    await this.tetheringService.resetUsbTethering()
 
-      // 잠시 대기 후 새 IP 확인
-      await sleep(5_000)
-      const newIp = this.tetheringService.getCurrentIp()
+    // 잠시 대기 후 새 IP 확인
+    await sleep(5_000)
+    const newIp = this.tetheringService.getCurrentIp()
 
-      this.logger.log(`IP 변경 완료 - 이전 IP: ${prevIp.ip}, 새 IP: ${newIp.ip}`)
+    this.logger.log(`IP 변경 완료 - 이전 IP: ${prevIp.ip}, 새 IP: ${newIp.ip}`)
 
-      return {
-        success: true,
-        previousIp: prevIp.ip,
-        newIp: newIp.ip,
-        changed: prevIp.ip !== newIp.ip,
-      }
-    } catch (error: any) {
-      this.logger.error(`IP 변경 실패: ${error?.message || error}`)
-      throw error
+    return {
+      success: true,
+      previousIp: prevIp.ip,
+      newIp: newIp.ip,
+      changed: prevIp.ip !== newIp.ip,
     }
   }
 }
