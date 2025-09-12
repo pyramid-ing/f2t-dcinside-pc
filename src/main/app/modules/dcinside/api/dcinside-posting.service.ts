@@ -106,6 +106,13 @@ async function detectRecaptcha(page: Page): Promise<{ found: boolean; siteKey?: 
   })
 }
 
+// DC 일반 캡챠 감지 함수
+async function detectDcCaptcha(page: Page): Promise<{ found: boolean }> {
+  const captchaImg = page.locator('#kcaptcha')
+  const captchaCount = await captchaImg.count()
+  return { found: captchaCount > 0 }
+}
+
 @Injectable()
 export class DcinsidePostingService {
   private readonly logger = new Logger(DcinsidePostingService.name)
@@ -312,8 +319,9 @@ export class DcinsidePostingService {
       })
     }
 
+    this.logger.log(`reCAPTCHA 감지됨 (사이트 키: ${siteKey}), 2captcha로 해결 시작`)
     if (jobId) {
-      await this.jobLogsService.createJobLog(jobId, '2captcha를 이용한 reCAPTCHA 해결 시작')
+      await this.jobLogsService.createJobLog(jobId, `2captcha를 이용한 reCAPTCHA 해결 시작 (사이트 키: ${siteKey})`)
     }
 
     try {
@@ -352,10 +360,10 @@ export class DcinsidePostingService {
     }
   }
 
-  private async solveCapcha(page: Page): Promise<void> {
+  private async solveDcCaptcha(page: Page): Promise<void> {
+    this.logger.log('DC 일반 캡챠 해결 시작')
+
     const captchaImg = page.locator('#kcaptcha')
-    const captchaCount = await captchaImg.count()
-    if (captchaCount === 0) return
     // 캡챠 클릭해서 리프레쉬
     await captchaImg.click()
     await sleep(2000)
@@ -846,7 +854,7 @@ export class DcinsidePostingService {
     let captchaTryCount = 0
 
     while (true) {
-      // 리캡챠 감지: 등록 시도 전 검사 (모든 프레임)
+      // 1. 리캡챠 감지 및 처리: 등록 시도 전 검사 (모든 프레임)
       const recaptchaResult = await detectRecaptcha(page)
       if (recaptchaResult.found) {
         if (!recaptchaResult.siteKey) {
@@ -864,9 +872,15 @@ export class DcinsidePostingService {
 
         // 2captcha를 이용한 reCAPTCHA 해결
         await this.solveRecaptchaWith2Captcha(page, recaptchaResult.siteKey, jobId)
+      }
+
+      // 2. DC 일반 캡챠 감지 및 처리 (리캡챠와 독립적으로 확인)
+      // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
+      const dcCaptchaResult = await detectDcCaptcha(page)
+      if (dcCaptchaResult.found) {
+        await this.solveDcCaptcha(page)
       } else {
-        // 일반 캡챠 처리
-        await this.solveCapcha(page)
+        this.logger.log('DC 일반 캡챠가 존재하지 않음')
       }
 
       let dialogHandler: ((dialog: any) => Promise<void>) | null = null
