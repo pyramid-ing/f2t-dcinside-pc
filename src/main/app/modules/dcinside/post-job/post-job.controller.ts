@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } fro
 import { PostJobService } from './post-job.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { AuthGuard, Permissions } from '@main/app/modules/auth/auth.guard'
+import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 
 @Controller('post-jobs')
 export class PostJobController {
@@ -35,7 +35,7 @@ export class PostJobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Post()
   async createPostJob(@Body() data: any) {
     try {
@@ -46,7 +46,7 @@ export class PostJobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Put(':id')
   async updatePostJob(@Param('id') id: string, @Body() data: any) {
     try {
@@ -57,7 +57,7 @@ export class PostJobController {
   }
 
   @UseGuards(AuthGuard)
-  @Permissions('posting')
+  @Permissions(Permission.POSTING)
   @Delete(':id')
   async deletePostJob(@Param('id') id: string) {
     try {
