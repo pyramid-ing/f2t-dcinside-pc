@@ -22,10 +22,24 @@ export class DcinsideWorkflowService {
       const parseResult = ExcelRowSchema.safeParse(row)
 
       if (!parseResult.success) {
+        // Zod 에러에서 실제 에러 추출
+        let errorMessage = parseResult.error.message
+
+        // CustomHttpException이 포함된 경우 처리
+        const zodError = parseResult.error
+        if (zodError.issues && zodError.issues.length > 0) {
+          const issue = zodError.issues[0]
+          if (issue.message && issue.message.includes('예약날짜 형식이 잘못되었습니다')) {
+            errorMessage = issue.message
+          }
+        }
+
+        const isDateFormatError = errorMessage.includes('예약날짜 형식이 잘못되었습니다')
+
         invalidRows.push({
           row,
           success: false,
-          message: `데이터 검증 실패: ${parseResult.error.message}`,
+          message: isDateFormatError ? errorMessage : `데이터 검증 실패: ${errorMessage}`,
         })
         continue
       }

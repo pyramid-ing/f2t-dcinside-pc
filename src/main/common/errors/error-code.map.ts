@@ -42,6 +42,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.POST_SUBMIT_FAILED]: { status: 500, message: m => m?.message || '글 등록 실패' },
   [ErrorCode.CAPTCHA_FAILED]: { status: 400, message: () => '캡챠 해제 실패' },
   [ErrorCode.RECAPTCHA_NOT_SUPPORTED]: { status: 400, message: () => 'reCAPTCHA는 지원하지 않습니다.' },
+  [ErrorCode.SCHEDULED_DATE_FORMAT_INVALID]: {
+    status: 400,
+    message: meta => meta?.message || '예약날짜 형식이 잘못되었습니다.',
+  },
 
   [ErrorCode.JOB_NOT_FOUND]: { status: 404, message: () => '작업을 찾을 수 없습니다.' },
   [ErrorCode.JOB_ID_REQUIRED]: { status: 400, message: () => '작업 ID가 제공되지 않았습니다.' },

@@ -1,4 +1,6 @@
 import { z } from 'zod/v4'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 // Excel 데이터 처리를 위한 스키마
 export const ExcelRowSchema = z
@@ -38,7 +40,7 @@ export const ExcelRowSchema = z
       }
     }
 
-    // 예약날짜 파싱
+    // 예약날짜 파싱 및 검증
     let scheduledAt: Date | undefined
     let deleteAt: Date | undefined
     if (data.예약날짜) {
@@ -47,15 +49,18 @@ export const ExcelRowSchema = z
       dayjs.extend(customParseFormat)
 
       const trimmed = data.예약날짜.toString().trim()
-      let parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
+
+      // 정확한 형식 (YYYY-MM-DD HH:mm)만 허용
+      const parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
 
       if (!parsed.isValid()) {
-        parsed = dayjs(trimmed)
+        throw new CustomHttpException(ErrorCode.SCHEDULED_DATE_FORMAT_INVALID, {
+          message: `예약날짜 형식이 잘못되었습니다. 올바른 형식: YYYY-MM-DD HH:mm (예: 2025-09-12 14:21), 입력값: "${trimmed}"`,
+          inputValue: trimmed,
+        })
       }
 
-      if (parsed.isValid()) {
-        scheduledAt = parsed.toDate()
-      }
+      scheduledAt = parsed.toDate()
     }
 
     // '등록후자동삭제(분)' 처리: autoDeleteMinutes로 저장 (deleteAt은 등록 완료 시 계산)
