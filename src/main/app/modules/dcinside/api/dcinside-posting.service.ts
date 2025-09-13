@@ -471,7 +471,24 @@ export class DcinsidePostingService {
     const deletePath = galleryType === 'board' ? 'board/delete' : `${galleryType}/board/delete`
     const deleteUrl = `https://gall.dcinside.com/${deletePath}/?id=${galleryId}&no=${postNo}`
     await this.jobLogsService.createJobLog(jobId, `삭제 페이지 이동: ${deleteUrl}`)
-    await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+
+    // 네트워크 오류에 대한 retry 처리
+    const success = await retry(
+      async () => {
+        try {
+          await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+          return true
+        } catch (error) {
+          this.logger.warn(`삭제 페이지 이동 실패 (재시도 중): ${error.message}`)
+          throw error
+        }
+      },
+      2000,
+      3,
+      'linear',
+    )
+
+    assertRetrySuccess(success, '삭제 페이지 이동 실패 (3회 시도)')
     await sleep(2000) // 2초 고정 딜레이
 
     // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시 처리
