@@ -654,12 +654,17 @@ export class JobService {
       throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
     }
 
-    // DELETE_FAILED -> DELETE_REQUEST로 변경
+    // DELETE_FAILED -> DELETE_REQUEST로 변경하고 deleteAt을 현재 시간으로 설정
     await this.prisma.job.update({
       where: { id: jobId },
       data: {
         status: JobStatus.DELETE_REQUEST,
         errorMsg: null, // 에러 메시지 초기화
+        postJob: {
+          update: {
+            deleteAt: new Date(), // 현재 시간으로 설정하여 바로 삭제되도록 함
+          },
+        },
       },
     })
 
@@ -715,14 +720,25 @@ export class JobService {
       return { success: true, message: '재시도할 삭제 실패 작업이 없습니다.', count: 0 }
     }
 
-    // DELETE_FAILED -> DELETE_REQUEST로 변경
-    const updateResult = await this.prisma.job.updateMany({
-      where: whereCondition,
-      data: {
-        status: JobStatus.DELETE_REQUEST,
-        errorMsg: null, // 에러 메시지 초기화
-      },
-    })
+    // DELETE_FAILED -> DELETE_REQUEST로 변경하고 deleteAt을 현재 시간으로 설정
+    // updateMany에서는 중첩 관계 업데이트가 불가능하므로 각 작업을 개별적으로 업데이트
+    const updatePromises = failedDeleteJobs.map(job =>
+      this.prisma.job.update({
+        where: { id: job.id },
+        data: {
+          status: JobStatus.DELETE_REQUEST,
+          errorMsg: null, // 에러 메시지 초기화
+          postJob: {
+            update: {
+              deleteAt: new Date(), // 현재 시간으로 설정하여 바로 삭제되도록 함
+            },
+          },
+        },
+      }),
+    )
+
+    await Promise.all(updatePromises)
+    const updateResult = { count: failedDeleteJobs.length }
 
     // 각 작업에 재시도 로그 추가
     const logPromises = failedDeleteJobs.map(job => this.jobLogsService.createJobLog(job.id, '삭제 재시도 요청 (벌크)'))
