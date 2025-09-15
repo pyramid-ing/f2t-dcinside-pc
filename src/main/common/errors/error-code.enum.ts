@@ -46,4 +46,7 @@ export enum ErrorCode {
   JOB_FETCH_FAILED = 4310,
   JOB_STATUS_INVALID = 4311,
   JOB_STATUS_CHANGE_FAILED = 4312,
+
+  // ✅ 시스템 관련 (5000번대)
+  CHROME_NOT_INSTALLED = 5001,
 }

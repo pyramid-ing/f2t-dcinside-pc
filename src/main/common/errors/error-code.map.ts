@@ -62,4 +62,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     message: meta => `현재 상태에서는 허용되지 않은 작업입니다.${meta?.status ? ` (현재 상태: ${meta.status})` : ''}`,
   },
   [ErrorCode.JOB_STATUS_CHANGE_FAILED]: { status: 500, message: () => '작업 상태 변경에 실패했습니다.' },
+
+  // 시스템 관련
+  [ErrorCode.CHROME_NOT_INSTALLED]: {
+    status: 500,
+    message: () => 'Chrome 브라우저가 설치되어 있지 않습니다. Chrome을 설치한 후 다시 시도해주세요.',
+  },
 }

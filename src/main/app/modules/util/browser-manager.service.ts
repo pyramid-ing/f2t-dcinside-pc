@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { chromium, Browser, BrowserContext, Page } from 'playwright'
+import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 
 export interface BrowserLaunchOptions {
   headless?: boolean
@@ -62,9 +63,17 @@ export class BrowserManagerService {
       launchOptions.executablePath = process.env.PLAYWRIGHT_BROWSERS_PATH
     }
 
-    const browser = await chromium.launch(launchOptions)
-    this.logger.log('브라우저 세션 시작됨')
-    return browser
+    try {
+      const browser = await chromium.launch(launchOptions)
+      this.logger.log('브라우저 세션 시작됨')
+      return browser
+    } catch (error) {
+      // Playwright 브라우저 설치 관련 에러 처리
+      if (error.message.includes("Executable doesn't exist")) {
+        throw new ChromeNotInstalledError('크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.')
+      }
+      throw error
+    }
   }
 
   // 새 페이지 생성

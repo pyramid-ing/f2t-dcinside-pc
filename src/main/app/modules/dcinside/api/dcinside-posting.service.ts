@@ -14,6 +14,7 @@ import { PostJob } from '@prisma/client'
 import UserAgent from 'user-agents'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 import { getProxyByMethod } from '@main/app/modules/util/browser-manager.service'
 import { IpMode } from '@main/app/modules/settings/settings.types'
 
@@ -158,26 +159,38 @@ export class DcinsidePostingService {
             window.sessionStorage.clear()
           })
           return { browser, context, proxyInfo }
-        } catch (err) {
-          this.logger.warn(`프록시 브라우저 실행 실패: ${err.message}`)
-          lastError = err
+        } catch (error) {
+          // Playwright 브라우저 설치 관련 에러 처리
+          if (error.message.includes("Executable doesn't exist")) {
+            throw new ChromeNotInstalledError('크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.')
+          }
+          this.logger.warn(`프록시 브라우저 실행 실패: ${error.message}`)
+          lastError = error
         }
       }
     }
     // fallback: 프록시 없이 재시도
-    const browser = await chromium.launch({
-      headless: !settings.showBrowserWindow,
-      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-    })
-    const context = await browser.newContext({
-      viewport: { width: 1200, height: 1142 },
-      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-    })
-    await context.addInitScript(() => {
-      window.sessionStorage.clear()
-    })
-    if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
-    return { browser, context, proxyInfo: null }
+    try {
+      const browser = await chromium.launch({
+        headless: !settings.showBrowserWindow,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+      })
+      const context = await browser.newContext({
+        viewport: { width: 1200, height: 1142 },
+        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      })
+      await context.addInitScript(() => {
+        window.sessionStorage.clear()
+      })
+      if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
+      return { browser, context, proxyInfo: null }
+    } catch (error) {
+      // Playwright 브라우저 설치 관련 에러 처리
+      if (error.message.includes("Executable doesn't exist")) {
+        throw new ChromeNotInstalledError('크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.')
+      }
+      throw error
+    }
   }
 
   async login(page: Page, params: { id: string; password: string }): Promise<{ success: boolean; message: string }> {
