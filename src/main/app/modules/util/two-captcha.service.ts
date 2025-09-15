@@ -102,7 +102,7 @@ export class TwoCaptchaService {
             id: captchaId,
             json: 1,
           },
-          timeout: 30000,
+          timeout: 30_000,
         })
 
         const data: TwoCaptchaResultResponse = response.data
@@ -112,7 +112,7 @@ export class TwoCaptchaService {
           return data.request
         } else if (data.request === 'CAPCHA_NOT_READY') {
           // 아직 준비되지 않음 - 재시도를 위해 에러 던지기
-          this.logger.log('캡챠가 아직 준비되지 않았습니다. 10초 후 재시도...')
+          this.logger.log('캡챠가 아직 준비되지 않았습니다. 5초 후 재시도...')
           throw new Error('CAPTCHA_NOT_READY')
         } else {
           // 오류 - 재시도하지 않고 즉시 실패
@@ -121,8 +121,8 @@ export class TwoCaptchaService {
           })
         }
       },
-      10000, // 10초 간격
-      30, // 최대 30번 시도 (5분)
+      5_000, // 5초 간격
+      12, // 최대 12번 시도 (60초)
       'linear',
     )
   }
