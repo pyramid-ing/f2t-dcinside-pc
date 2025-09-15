@@ -330,12 +330,62 @@ const JobTable: React.FC = () => {
   const [autoDeleteMinutes, setAutoDeleteMinutes] = useState<number | null>(null)
   const [autoDeleteApplyLoading, setAutoDeleteApplyLoading] = useState(false)
 
+  // 툴바: 자동삭제 제거
+  const [autoDeleteRemoveLoading, setAutoDeleteRemoveLoading] = useState(false)
+
+  // 툴바: 선택된 작업에 등록후자동삭제(분) 일괄 적용
+  const handleBulkSetAutoDeleteMinutes = async () => {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('적용할 작업을 선택해주세요.')
+      return
+    }
+    const m = Number(autoDeleteMinutes)
+    if (Number.isNaN(m) || m < 0) {
+      message.warning('분은 0 이상의 정수로 입력해주세요.')
+      return
+    }
+
+    setAutoDeleteApplyLoading(true)
+    try {
+      const request: BulkActionRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
+        action: BulkActionType.AUTO_DELETE,
+        autoDeleteMinutes: m,
+      }
+
+      const response = await bulkUpdateAutoDelete(request)
+      message.success(response.message)
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        includeIds: new Set(),
+        excludedIds: new Set(),
+      })
+      setPreviewCount(null)
+      fetchJobs()
+    } catch (error: any) {
+      message.error(error.message || '등록후자동삭제(분) 적용 실패')
+    }
+    setAutoDeleteApplyLoading(false)
+  }
+
   // 개별 작업의 등록후자동삭제(분) 변경
   const handleAutoDeleteMinutesChange = async (job: PostJob, minutes: number | null) => {
     try {
       const m = Number(minutes)
       if (Number.isNaN(m) || m < 0) {
+        message.warning('분은 0 이상의 정수로 입력해주세요.')
+        return
+      }
+      if (m === 0) {
+        // autoDeleteMinutes 제거
         await updateJobAutoDeleteMinutes(job.id, null, null)
+        message.success('자동삭제 설정이 제거되었습니다')
       } else {
         // autoDeleteMinutes 설정
         await updateJobAutoDeleteMinutes(job.id, m)
@@ -343,11 +393,11 @@ const JobTable: React.FC = () => {
         // 완료된 작업이면 즉시 deleteAt 계산하여 적용 (현재시간 기준)
         if (job.status === JOB_STATUS.COMPLETED) {
           const now = dayjs()
-          const deleteAt = m === 0 ? now.toISOString() : now.add(m, 'minute').toISOString()
+          const deleteAt = now.add(m, 'minute').toISOString()
           await updateJobAutoDeleteMinutes(job.id, m, deleteAt)
         }
+        message.success('등록후자동삭제(분) 설정이 적용되었습니다')
       }
-      message.success('등록후자동삭제(분) 설정이 적용되었습니다')
       fetchJobs()
     } catch {
       message.error('등록후자동삭제(분) 설정 실패')
@@ -663,20 +713,15 @@ const JobTable: React.FC = () => {
     setBulkDeleteLoading(false)
   }
 
-  // 툴바: 선택된 작업에 등록후자동삭제(분) 일괄 적용
-  const handleBulkSetAutoDeleteMinutes = async () => {
+  // 툴바: 선택된 작업의 자동삭제 설정 제거
+  const handleBulkRemoveAutoDelete = async () => {
     const selectedCount = getSelectedCount()
     if (selectedCount === 0) {
       message.warning('적용할 작업을 선택해주세요.')
       return
     }
-    const m = Number(autoDeleteMinutes)
-    if (Number.isNaN(m) || m < 0) {
-      message.warning('분은 0 이상의 정수로 입력해주세요.')
-      return
-    }
 
-    setAutoDeleteApplyLoading(true)
+    setAutoDeleteRemoveLoading(true)
     try {
       const request: BulkActionRequest = {
         mode: selection.mode,
@@ -684,7 +729,7 @@ const JobTable: React.FC = () => {
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.AUTO_DELETE,
-        autoDeleteMinutes: m,
+        autoDeleteMinutes: null, // null로 설정하여 자동삭제 제거
       }
 
       const response = await bulkUpdateAutoDelete(request)
@@ -699,9 +744,9 @@ const JobTable: React.FC = () => {
       setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
-      message.error(error.message || '등록후자동삭제(분) 적용 실패')
+      message.error(error.message || '자동삭제 설정 제거 실패')
     }
-    setAutoDeleteApplyLoading(false)
+    setAutoDeleteRemoveLoading(false)
   }
 
   const handleApplyInterval = async () => {
@@ -951,8 +996,20 @@ const JobTable: React.FC = () => {
             onChange={v => setAutoDeleteMinutes((v as number) || null)}
             style={{ width: 110 }}
           />
-          <Button danger loading={autoDeleteApplyLoading} onClick={handleBulkSetAutoDeleteMinutes}>
+          <Button loading={autoDeleteApplyLoading} onClick={handleBulkSetAutoDeleteMinutes}>
             자동삭제 적용
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                ({data.filter(job => selection.includeIds.has(job.id) && !job.postJob?.deletedAt).length}개)
+              </span>
+            )}
+          </Button>
+          <Button danger loading={autoDeleteRemoveLoading} onClick={handleBulkRemoveAutoDelete}>
+            자동삭제 제거
             {selection.mode === SelectionMode.ALL ? (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
                 {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}

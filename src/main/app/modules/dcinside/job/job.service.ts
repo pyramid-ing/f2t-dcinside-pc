@@ -528,7 +528,8 @@ export class JobService {
   async bulkUpdateAutoDelete(body: BulkActionDto) {
     const { mode, filters, includeIds, excludeIds, autoDeleteMinutes } = body
 
-    if (!autoDeleteMinutes && autoDeleteMinutes !== 0) {
+    // autoDeleteMinutes가 null이면 자동삭제 제거, 숫자면 설정
+    if (autoDeleteMinutes === undefined) {
       throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
     }
 
@@ -566,9 +567,16 @@ export class JobService {
         postJob: {
           update: {
             autoDeleteMinutes,
-            ...(job.status === JobStatus.COMPLETED && {
-              deleteAt: new Date(),
+            // 자동삭제 제거 시 deleteAt도 null로 설정
+            ...(autoDeleteMinutes === null && {
+              deleteAt: null,
             }),
+            // 자동삭제 설정 시 deleteAt 계산
+            ...(autoDeleteMinutes !== null &&
+              autoDeleteMinutes > 0 &&
+              job.status === JobStatus.COMPLETED && {
+                deleteAt: new Date(Date.now() + autoDeleteMinutes * 60 * 1000),
+              }),
           },
         },
       }
@@ -579,9 +587,14 @@ export class JobService {
       })
     }
 
+    const actionMessage =
+      autoDeleteMinutes === null
+        ? `${eligibleJobs.length}개 작업의 자동삭제 설정이 제거되었습니다.`
+        : `${eligibleJobs.length}개 작업의 등록후자동삭제(분)이 설정되었습니다.`
+
     return {
       success: true,
-      message: `${eligibleJobs.length}개 작업의 등록후자동삭제(분)이 설정되었습니다.`,
+      message: actionMessage,
       details: {
         errors,
       },
@@ -599,6 +612,8 @@ export class JobService {
         update: {
           ...(body.deleteAt !== undefined && { deleteAt: body.deleteAt ? new Date(body.deleteAt) : null }),
           ...(body.autoDeleteMinutes !== undefined && { autoDeleteMinutes: body.autoDeleteMinutes }),
+          // 자동삭제 제거 시 deleteAt도 null로 설정
+          ...(body.autoDeleteMinutes === null && { deleteAt: null }),
           ...(body.deleteAt !== undefined && { deletedAt: null }),
         },
       }
