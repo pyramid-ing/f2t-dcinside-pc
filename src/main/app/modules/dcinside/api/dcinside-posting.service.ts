@@ -463,6 +463,99 @@ export class DcinsidePostingService {
     await page.fill('input[name=kcaptcha_code]', answer)
   }
 
+  // 공통 삭제 처리 로직
+  private async processDeletePage(page: Page, post: PostJob, jobId: string, isMember?: boolean): Promise<void> {
+    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시 처리
+    const abnormalText = await page.evaluate(() => {
+      const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
+      return el?.textContent?.trim() || null
+    })
+    if (abnormalText) {
+      // 이미 삭제된 게시물인 경우 성공으로 처리
+      if (abnormalText.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
+        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${abnormalText} (이미 삭제됨)`)
+        return
+      }
+      // 다른 비정상 상태는 에러로 처리
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
+    }
+
+    // 비회원인 경우 비밀번호 입력
+    if (!isMember) {
+      if (!post.password) {
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+          message: '삭제 비밀번호가 설정되지 않았습니다.',
+        })
+      }
+      await page.waitForSelector('#password', { timeout: 60_000 })
+      const pwInput = page.locator('#password')
+      await pwInput.fill(post.password)
+      await sleep(1000)
+      await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
+    }
+
+    // 다이얼로그 처리
+    let confirmMessage = ''
+    let alertMessage = ''
+
+    const dialogHandler = async (dialog: any) => {
+      try {
+        const type = dialog.type?.() || 'unknown'
+        const msg = dialog.message?.() || ''
+        switch (type) {
+          case 'confirm':
+            confirmMessage = msg
+            break
+          case 'alert':
+            alertMessage = msg
+            break
+        }
+        await sleep(1000)
+        await dialog.accept()
+      } catch (_) {}
+    }
+    page.on('dialog', dialogHandler)
+
+    try {
+      // 삭제 버튼 클릭
+      await page
+        .locator('.btn_ok')
+        .click({ timeout: 5000 })
+        .catch(() => {})
+
+      // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
+      {
+        const start = Date.now()
+        while (!alertMessage && Date.now() - start < 30_000) {
+          await sleep(200)
+        }
+      }
+
+      // alert 메시지 우선으로 결과 판정 (없으면 빈 문자열)
+      if (alertMessage.includes('게시물이 삭제 되었습니다')) {
+        await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
+        return
+      }
+      // 비밀번호 오류
+      if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
+        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 실패: 비밀번호가 맞지 않습니다.' })
+      }
+
+      // confirm만 떴고 alert가 없을 수 있으므로, confirm 메시지는 정보성으로 로그
+      if (confirmMessage) {
+        this.logger.warn(`삭제 confirm 메시지: ${confirmMessage}`)
+      }
+
+      // 최종 성공 alert를 받지 못한 경우 실패로 간주
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '게시물 삭제 확인 메시지를 받지 못했습니다. 삭제가 결과를 모릅니다.',
+      })
+    } finally {
+      // 리스너 해제
+      page.off('dialog', dialogHandler)
+    }
+  }
+
   // 기존 URL 직접 접근 방식 (별도 함수로 분리)
   private async deleteArticleByDirectUrl(post: PostJob, page: Page, jobId: string, isMember?: boolean): Promise<void> {
     const idMatch = post.galleryUrl.match(/[?&]id=([^&]+)/)
@@ -505,91 +598,8 @@ export class DcinsidePostingService {
     assertRetrySuccess(success, '삭제 페이지 이동 실패 (3회 시도)')
     await sleep(2000) // 2초 고정 딜레이
 
-    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시 처리
-    const abnormalText = await page.evaluate(() => {
-      const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
-      return el?.textContent?.trim() || null
-    })
-    if (abnormalText) {
-      // 이미 삭제된 게시물인 경우 성공으로 처리
-      if (abnormalText.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
-        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${abnormalText} (이미 삭제됨)`)
-        return
-      }
-      // 다른 비정상 상태는 에러로 처리
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
-    }
-
-    // 삭제 버튼 클릭 후, dialog(확인 → 알림) 순서대로 처리
-    let confirmMessage = ''
-    let alertMessage = ''
-    // 상위에서 로그인 시도 여부 반영: true면 회원, 아니면 비회원 처리
-    if (!isMember) {
-      if (!post.password) {
-        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
-          message: '삭제 비밀번호가 설정되지 않았습니다.',
-        })
-      }
-      await page.waitForSelector('#password', { timeout: 60_000 })
-      const pwInput = page.locator('#password')
-      await pwInput.fill(post.password)
-      await sleep(1000)
-    }
-
-    const dialogHandler = async (dialog: any) => {
-      try {
-        const type = dialog.type?.() || 'unknown'
-        const msg = dialog.message?.() || ''
-        switch (type) {
-          case 'confirm':
-            confirmMessage = msg
-            break
-          case 'alert':
-            alertMessage = msg
-            break
-        }
-        await sleep(1000)
-        await dialog.accept()
-      } catch (_) {}
-    }
-    page.on('dialog', dialogHandler)
-
-    // 삭제 버튼 한 번만 클릭
-    await page
-      .locator('.btn_ok')
-      .click({ timeout: 5000 })
-      .catch(() => {})
-
-    // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
-    {
-      const start = Date.now()
-      while (!alertMessage && Date.now() - start < 30_000) {
-        await sleep(200)
-      }
-    }
-
-    // 리스너 해제
-    page.off('dialog', dialogHandler)
-
-    // alert 메시지 우선으로 결과 판정 (없으면 빈 문자열)
-    if (alertMessage.includes('게시물이 삭제 되었습니다')) {
-      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
-      return
-    }
-    // 비밀번호 오류
-    if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
-      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 실패: 비밀번호가 맞지 않습니다.' })
-    }
-
-    // confirm만 떴고 alert가 없을 수 있으므로, confirm 메시지는 정보성으로 로그
-    if (confirmMessage) {
-      this.logger.warn(`삭제 confirm 메시지: ${confirmMessage}`)
-    }
-
-    // 최종 성공 alert를 받지 못한 경우 실패로 간주
-    throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-      message: '게시물 삭제 확인 메시지를 받지 못했습니다. 삭제가 결과를 모릅니다.',
-    })
+    // 공통 삭제 처리 로직 사용
+    await this.processDeletePage(page, post, jobId, isMember)
   }
 
   // 새로운 방식: 글 페이지에서 삭제 버튼 클릭
@@ -646,96 +656,9 @@ export class DcinsidePostingService {
       throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
     }
 
-    // 3. 삭제 페이지에서 비밀번호 입력 및 삭제 처리
+    // 3. 공통 삭제 처리 로직 사용
     await this.jobLogsService.createJobLog(jobId, '삭제 페이지에서 비밀번호 입력 및 삭제 처리 시작')
-
-    // 비정상 페이지(이미 삭제/존재하지 않음 등) 문구 감지 시 처리
-    const abnormalText = await page.evaluate(() => {
-      const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
-      return el?.textContent?.trim() || null
-    })
-    if (abnormalText) {
-      // 이미 삭제된 게시물인 경우 성공으로 처리
-      if (abnormalText.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
-        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${abnormalText} (이미 삭제됨)`)
-        return
-      }
-      // 다른 비정상 상태는 에러로 처리
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
-    }
-
-    // 삭제 버튼 클릭 후, dialog(확인 → 알림) 순서대로 처리
-    let confirmMessage = ''
-    let alertMessage = ''
-
-    // 비회원인 경우 비밀번호 입력
-    if (!isMember) {
-      if (!post.password) {
-        throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
-          message: '삭제 비밀번호가 설정되지 않았습니다.',
-        })
-      }
-      await page.waitForSelector('#password', { timeout: 60_000 })
-      const pwInput = page.locator('#password')
-      await pwInput.fill(post.password)
-      await sleep(1000)
-      await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
-    }
-
-    const dialogHandler = async (dialog: any) => {
-      try {
-        const type = dialog.type?.() || 'unknown'
-        const msg = dialog.message?.() || ''
-        switch (type) {
-          case 'confirm':
-            confirmMessage = msg
-            break
-          case 'alert':
-            alertMessage = msg
-            break
-        }
-        await sleep(1000)
-        await dialog.accept()
-      } catch (_) {}
-    }
-    page.on('dialog', dialogHandler)
-
-    // 삭제 버튼 클릭
-    await page
-      .locator('.btn_ok')
-      .click({ timeout: 5000 })
-      .catch(() => {})
-
-    // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
-    {
-      const start = Date.now()
-      while (!alertMessage && Date.now() - start < 30_000) {
-        await sleep(200)
-      }
-    }
-
-    // 리스너 해제
-    page.off('dialog', dialogHandler)
-
-    // alert 메시지 우선으로 결과 판정 (없으면 빈 문자열)
-    if (alertMessage.includes('게시물이 삭제 되었습니다')) {
-      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
-      return
-    }
-    // 비밀번호 오류
-    if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
-      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '삭제 실패: 비밀번호가 맞지 않습니다.' })
-    }
-
-    // confirm만 떴고 alert가 없을 수 있으므로, confirm 메시지는 정보성으로 로그
-    if (confirmMessage) {
-      this.logger.warn(`삭제 confirm 메시지: ${confirmMessage}`)
-    }
-
-    // 최종 성공 alert를 받지 못한 경우 실패로 간주
-    throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-      message: '게시물 삭제 확인 메시지를 받지 못했습니다. 삭제가 결과를 모릅니다.',
-    })
+    await this.processDeletePage(page, post, jobId, isMember)
   }
 
   private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
