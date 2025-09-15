@@ -494,6 +494,18 @@ export class DcinsidePostingService {
       await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
     }
 
+    // 삭제 처리 실행
+    const deleteSuccess = await this.attemptDelete(page, post, jobId)
+
+    if (!deleteSuccess) {
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '삭제 처리 실패',
+      })
+    }
+  }
+
+  // 삭제 시도 로직 (단일 시도)
+  private async attemptDelete(page: Page, post: PostJob, jobId: string): Promise<boolean> {
     // 다이얼로그 처리
     let confirmMessage = ''
     let alertMessage = ''
@@ -534,7 +546,7 @@ export class DcinsidePostingService {
       // alert 메시지 우선으로 결과 판정 (없으면 빈 문자열)
       if (alertMessage.includes('게시물이 삭제 되었습니다')) {
         await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
-        return
+        return true
       }
       // 비밀번호 오류
       if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
@@ -546,13 +558,50 @@ export class DcinsidePostingService {
         this.logger.warn(`삭제 confirm 메시지: ${confirmMessage}`)
       }
 
-      // 최종 성공 alert를 받지 못한 경우 실패로 간주
+      // alert 메시지를 받지 못한 경우, 실제 삭제가 완료되었는지 확인
+      await this.jobLogsService.createJobLog(jobId, '삭제 확인 메시지 없음, 실제 삭제 상태 확인 중...')
+
+      // 삭제 완료 여부 확인을 위해 원본 게시물 페이지로 이동하여 확인
+      const isActuallyDeleted = await this.verifyDeletion(page, post, jobId)
+      if (isActuallyDeleted) {
+        await this.jobLogsService.createJobLog(jobId, '삭제 성공: 실제 삭제 완료 확인됨')
+        return true
+      }
+
+      // 삭제가 실제로 되지 않은 경우 실패로 간주
       throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
-        message: '게시물 삭제 확인 메시지를 받지 못했습니다. 삭제가 결과를 모릅니다.',
+        message: '게시물 삭제 확인 메시지를 받지 못했고, 실제 삭제도 완료되지 않았습니다.',
       })
     } finally {
       // 리스너 해제
       page.off('dialog', dialogHandler)
+    }
+  }
+
+  // 삭제 완료 여부 확인
+  private async verifyDeletion(page: Page, post: PostJob, jobId: string): Promise<boolean> {
+    try {
+      // 원본 게시물 페이지로 이동하여 삭제 여부 확인
+      await page.goto(post.resultUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+      await sleep(2000)
+
+      // 페이지 내용 확인
+      const pageContent = await page.evaluate(() => document.body.textContent || '')
+
+      // 삭제된 게시물 확인 문구들
+      const deletionIndicators = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
+
+      for (const indicator of deletionIndicators) {
+        if (pageContent.includes(indicator)) {
+          await this.jobLogsService.createJobLog(jobId, `삭제 확인: ${indicator}`)
+          return true
+        }
+      }
+
+      return false
+    } catch (error) {
+      this.logger.warn(`삭제 확인 중 오류: ${error.message}`)
+      return false
     }
   }
 
@@ -579,86 +628,126 @@ export class DcinsidePostingService {
     const deleteUrl = `https://gall.dcinside.com/${deletePath}/?id=${galleryId}&no=${postNo}`
     await this.jobLogsService.createJobLog(jobId, `삭제 페이지 이동: ${deleteUrl}`)
 
-    // 네트워크 오류에 대한 retry 처리
-    const success = await retry(
+    // 삭제 페이지 이동 및 처리 재시도 로직 (최대 3회)
+    const deleteSuccess = await retry(
       async () => {
         try {
-          await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+          // 네트워크 오류에 대한 retry 처리
+          const success = await retry(
+            async () => {
+              try {
+                await page.goto(deleteUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+                return true
+              } catch (error) {
+                this.logger.warn(`삭제 페이지 이동 실패 (재시도 중): ${error.message}`)
+                throw error
+              }
+            },
+            2000,
+            3,
+            'linear',
+          )
+
+          assertRetrySuccess(success, '삭제 페이지 이동 실패 (3회 시도)')
+          await sleep(2000) // 2초 고정 딜레이
+
+          // 공통 삭제 처리 로직 사용
+          await this.processDeletePage(page, post, jobId, isMember)
           return true
         } catch (error) {
-          this.logger.warn(`삭제 페이지 이동 실패 (재시도 중): ${error.message}`)
+          this.logger.warn(`삭제 처리 실패 (재시도 중): ${error.message}`)
           throw error
         }
       },
-      2000,
-      3,
+      3000, // 3초 간격
+      3, // 최대 3회 시도
       'linear',
     )
 
-    assertRetrySuccess(success, '삭제 페이지 이동 실패 (3회 시도)')
-    await sleep(2000) // 2초 고정 딜레이
-
-    // 공통 삭제 처리 로직 사용
-    await this.processDeletePage(page, post, jobId, isMember)
+    if (!deleteSuccess) {
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '삭제 처리 실패 (3회 시도 후 실패)',
+      })
+    }
   }
 
   // 새로운 방식: 글 페이지에서 삭제 버튼 클릭
   async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string, isMember?: boolean): Promise<void> {
     await this.jobLogsService.createJobLog(jobId, '글 페이지에서 삭제 버튼 클릭 방식으로 삭제 시작')
 
-    // 1. 글 페이지로 이동
-    await this.jobLogsService.createJobLog(jobId, `글 페이지 이동: ${post.resultUrl}`)
-
-    const success = await retry(
+    // 삭제 처리 재시도 로직 (최대 3회)
+    const deleteSuccess = await retry(
       async () => {
         try {
-          await page.goto(post.resultUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+          // 1. 글 페이지로 이동
+          await this.jobLogsService.createJobLog(jobId, `글 페이지 이동: ${post.resultUrl}`)
+
+          const success = await retry(
+            async () => {
+              try {
+                await page.goto(post.resultUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+                return true
+              } catch (error) {
+                this.logger.warn(`글 페이지 이동 실패 (재시도 중): ${error.message}`)
+                throw error
+              }
+            },
+            2000,
+            3,
+            'linear',
+          )
+
+          assertRetrySuccess(success, '글 페이지 이동 실패 (3회 시도)')
+          await sleep(2000)
+
+          // 2. 삭제 버튼 찾기 및 클릭
+          await this.jobLogsService.createJobLog(jobId, '삭제 버튼 찾는 중...')
+
+          try {
+            // 삭제 버튼 대기 및 클릭
+            await page.waitForSelector('button.btn_grey.cancle', { timeout: 60_000 })
+            await this.jobLogsService.createJobLog(jobId, '삭제 버튼 발견, 클릭 시도')
+
+            // 삭제 버튼 클릭
+            await page.click('button.btn_grey.cancle')
+            await sleep(2000)
+
+            await this.jobLogsService.createJobLog(jobId, '삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
+          } catch (error) {
+            // 삭제 버튼이 없는 경우 (이미 삭제됨, 권한 없음 등)
+            const errorMessage = `삭제 버튼을 찾을 수 없습니다: ${error.message}`
+            this.logger.warn(errorMessage)
+            await this.jobLogsService.createJobLog(jobId, errorMessage)
+
+            // 페이지 내용 확인하여 이미 삭제된 게시물인지 체크
+            const pageContent = await page.evaluate(() => document.body.textContent || '')
+            if (pageContent.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
+              await this.jobLogsService.createJobLog(jobId, '삭제 완료: 이미 삭제된 게시물')
+              return true
+            }
+
+            throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
+          }
+
+          // 3. 공통 삭제 처리 로직 사용
+          await this.jobLogsService.createJobLog(jobId, '삭제 페이지에서 비밀번호 입력 및 삭제 처리 시작')
+          await this.processDeletePage(page, post, jobId, isMember)
           return true
         } catch (error) {
-          this.logger.warn(`글 페이지 이동 실패 (재시도 중): ${error.message}`)
+          this.logger.warn(`삭제 처리 실패 (재시도 중): ${error.message}`)
           throw error
         }
       },
-      2000,
-      3,
+      3000, // 3초 간격
+      3, // 최대 3회 시도
       'linear',
     )
 
-    assertRetrySuccess(success, '글 페이지 이동 실패 (3회 시도)')
-    await sleep(2000)
-
-    // 2. 삭제 버튼 찾기 및 클릭
-    await this.jobLogsService.createJobLog(jobId, '삭제 버튼 찾는 중...')
-
-    try {
-      // 삭제 버튼 대기 및 클릭
-      await page.waitForSelector('button.btn_grey.cancle', { timeout: 60_000 })
-      await this.jobLogsService.createJobLog(jobId, '삭제 버튼 발견, 클릭 시도')
-
-      // 삭제 버튼 클릭
-      await page.click('button.btn_grey.cancle')
-      await sleep(2000)
-
-      await this.jobLogsService.createJobLog(jobId, '삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
-    } catch (error) {
-      // 삭제 버튼이 없는 경우 (이미 삭제됨, 권한 없음 등)
-      const errorMessage = `삭제 버튼을 찾을 수 없습니다: ${error.message}`
-      this.logger.warn(errorMessage)
-      await this.jobLogsService.createJobLog(jobId, errorMessage)
-
-      // 페이지 내용 확인하여 이미 삭제된 게시물인지 체크
-      const pageContent = await page.evaluate(() => document.body.textContent || '')
-      if (pageContent.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
-        await this.jobLogsService.createJobLog(jobId, '삭제 완료: 이미 삭제된 게시물')
-        return
-      }
-
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
+    if (!deleteSuccess) {
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '삭제 처리 실패 (3회 시도 후 실패)',
+      })
     }
-
-    // 3. 공통 삭제 처리 로직 사용
-    await this.jobLogsService.createJobLog(jobId, '삭제 페이지에서 비밀번호 입력 및 삭제 처리 시작')
-    await this.processDeletePage(page, post, jobId, isMember)
   }
 
   private async waitForCustomPopup(page: Page): Promise<{ isCustomPopup: true; message: string } | null> {
