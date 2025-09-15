@@ -3,7 +3,7 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page, chromium } from 'playwright'
-import { PostJob } from '@prisma/client'
+import { PostJob, Job } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
@@ -18,6 +18,7 @@ import { assertPermission } from '@main/app/utils/permission.assert'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import UserAgent from 'user-agents'
+import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -35,6 +36,71 @@ export class PostJobService implements JobProcessor {
 
   canProcess(job: any): boolean {
     return job.type === JobType.POST
+  }
+
+  async processPostingJob(job: Job) {
+    const processor = this
+    if (!processor || !processor.canProcess(job)) {
+      this.logger.error(`No valid processor for job type ${job.type}`)
+      await this.markJobAsFailed(job.id, `해당 작업 타입이 없습니다. ${job.type}`)
+      return
+    }
+
+    try {
+      const updateResult = await this.prismaService.job.updateMany({
+        where: {
+          id: job.id,
+          status: JobStatus.REQUEST, // 이 조건이 중복 처리를 방지합니다
+        },
+        data: {
+          status: JobStatus.PROCESSING,
+          startedAt: new Date(),
+        },
+      })
+
+      // 다른 프로세스가 이미 처리 중인 경우 건너뛰기
+      if (updateResult.count === 0) {
+        this.logger.debug(`Job ${job.id} is already being processed by another instance`)
+        return
+      }
+
+      this.logger.debug(`Starting job ${job.id} (${job.type})`)
+
+      await processor.process(job.id)
+
+      await this.prismaService.job.update({
+        where: { id: job.id },
+        data: {
+          status: JobStatus.COMPLETED,
+          completedAt: new Date(),
+        },
+      })
+
+      this.logger.debug(`Completed job ${job.id}`)
+    } catch (error) {
+      // ErrorCodeMap에서 매핑
+      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
+      if (error instanceof CustomHttpException) {
+        const mapped = ErrorCodeMap[error.errorCode]
+        if (mapped) {
+          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+        }
+      }
+      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+      this.logger.error(logMessage, error.stack)
+      await this.markJobAsFailed(job.id, error.message)
+    }
+  }
+
+  async markJobAsFailed(jobId: string, errorMsg: string) {
+    await this.prismaService.job.update({
+      where: { id: jobId },
+      data: {
+        status: JobStatus.FAILED,
+        errorMsg,
+        completedAt: new Date(),
+      },
+    })
   }
 
   async process(jobId: string): Promise<void> {
@@ -412,6 +478,17 @@ export class PostJobService implements JobProcessor {
 
       this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
     } catch (error) {
+      // ErrorCodeMap에서 매핑
+      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
+      if (error instanceof CustomHttpException) {
+        const mapped = ErrorCodeMap[error.errorCode]
+        if (mapped) {
+          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+        }
+      }
+      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+      this.logger.error(logMessage, error.stack)
+
       // 삭제 실패 - DELETE_FAILED 상태로 변경
       await this.prismaService.job.update({
         where: { id: job.id },
@@ -421,10 +498,6 @@ export class PostJobService implements JobProcessor {
           completedAt: new Date(),
         },
       })
-
-      await this.jobLogsService.createJobLog(job.id, `삭제 실패: ${error.message}`, 'error')
-      this.logger.error(`게시글 삭제 실패: ${job.id}`, error)
-      throw error
     }
   }
 

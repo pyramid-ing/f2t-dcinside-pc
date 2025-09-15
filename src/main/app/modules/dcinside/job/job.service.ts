@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { JobQueueProcessor } from './job-queue.processor'
+import { PostJobService } from '@main/app/modules/dcinside/post-job/post-job.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus, JobType } from './job.types'
@@ -17,6 +18,7 @@ export class JobService {
     private readonly prisma: PrismaService,
     private readonly jobLogsService: JobLogsService,
     private readonly jobProcessor: JobQueueProcessor,
+    private readonly postJobService: PostJobService,
   ) {}
 
   private buildWhere(filters: JobFiltersDto): Prisma.JobWhereInput {
@@ -214,7 +216,7 @@ export class JobService {
       })
 
       // 작업 큐에 다시 추가
-      await this.jobProcessor.processJob(job)
+      await this.postJobService.processPostingJob(job)
     }
 
     // 실패하지 않은 작업이 있다면 메시지에 포함
@@ -372,7 +374,7 @@ export class JobService {
     })
 
     // 작업 큐에 다시 추가
-    await this.jobProcessor.processJob(job)
+    await this.postJobService.processPostingJob(job)
 
     return {
       success: true,
