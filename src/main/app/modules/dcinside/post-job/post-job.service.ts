@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
-import { BrowserContext, Page, chromium } from 'playwright'
+import { BrowserContext, Page } from 'playwright'
 import { PostJob, Job } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -260,9 +260,8 @@ export class PostJobService implements JobProcessor {
    */
   private async handleBrowserNewMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
     try {
-      const browser = await chromium.launch({
+      const browser = await this.browserManager.getOrCreateBrowser(`post-job-new-${jobId}`, {
         headless: !settings.showBrowserWindow,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       })
 
       let context: BrowserContext | null = null
@@ -555,9 +554,8 @@ export class PostJobService implements JobProcessor {
     await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
 
     try {
-      const browser = await chromium.launch({
+      const browser = await this.browserManager.getOrCreateBrowser(`delete-job-new-${job.id}`, {
         headless: !settings.showBrowserWindow,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       })
 
       let context: BrowserContext | null = null

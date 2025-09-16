@@ -6,7 +6,7 @@ import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
 import { OpenAI } from 'openai'
-import { BrowserContext, chromium, Page } from 'playwright'
+import { BrowserContext, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
@@ -15,7 +15,7 @@ import UserAgent from 'user-agents'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
-import { getProxyByMethod } from '@main/app/modules/util/browser-manager.service'
+import { getProxyByMethod, BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { IpMode } from '@main/app/modules/settings/settings.types'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
@@ -122,6 +122,7 @@ export class DcinsidePostingService {
     private readonly cookieService: CookieService,
     private readonly jobLogsService: JobLogsService,
     private readonly twoCaptchaService: TwoCaptchaService,
+    private readonly browserManagerService: BrowserManagerService,
   ) {}
 
   async launch() {
@@ -145,9 +146,8 @@ export class DcinsidePostingService {
         }
         proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
         try {
-          const browser = await chromium.launch({
+          const browser = await this.browserManagerService.getOrCreateBrowser('dcinside-posting-proxy', {
             headless: !settings.showBrowserWindow,
-            executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
             args: [proxyArg],
           })
           const context = await browser.newContext({
@@ -171,9 +171,8 @@ export class DcinsidePostingService {
     }
     // fallback: 프록시 없이 재시도
     try {
-      const browser = await chromium.launch({
+      const browser = await this.browserManagerService.getOrCreateBrowser('dcinside-posting-fallback', {
         headless: !settings.showBrowserWindow,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       })
       const context = await browser.newContext({
         viewport: { width: 1200, height: 1142 },
