@@ -12,6 +12,7 @@ interface ManagedBrowser {
   browserId: string
   browser: Browser
   context: BrowserContext
+  options: BrowserLaunchOptions // 브라우저 생성 시 사용된 옵션 저장
 }
 
 /**
@@ -136,15 +137,41 @@ export class BrowserManagerService {
   async getOrCreateBrowser(browserId: string, options: BrowserLaunchOptions = {}): Promise<Browser> {
     let managedBrowser = this.managedBrowsers.get(browserId)
 
+    // 브라우저가 존재하는 경우
+    if (managedBrowser) {
+      try {
+        // 브라우저가 실제로 연결되어 있는지 확인
+        managedBrowser.browser.version()
+
+        // 브라우저 옵션이 변경되었는지 확인 (특히 headless 모드)
+        const currentOptions = managedBrowser.options
+        const newOptions = this.normalizeOptions(options)
+
+        if (this.hasOptionsChanged(currentOptions, newOptions)) {
+          this.logger.log(`브라우저 옵션 변경 감지: ${browserId}, 기존 브라우저 종료 후 새로 생성합니다`)
+          await this.closeBrowser(managedBrowser.browser)
+          this.managedBrowsers.delete(browserId)
+          managedBrowser = null
+        }
+      } catch (error) {
+        // 브라우저가 연결되지 않은 경우 Map에서 제거
+        this.logger.log(`브라우저 연결 끊어짐 감지: ${browserId}, 새로 생성합니다`)
+        this.managedBrowsers.delete(browserId)
+        managedBrowser = null
+      }
+    }
+
     if (!managedBrowser) {
       // 새 브라우저 생성
-      const browser = await this.launchBrowser(options)
+      const normalizedOptions = this.normalizeOptions(options)
+      const browser = await this.launchBrowser(normalizedOptions)
       const context = await browser.newContext()
 
       managedBrowser = {
         browserId,
         browser,
         context,
+        options: normalizedOptions, // 옵션 저장
       }
 
       this.managedBrowsers.set(browserId, managedBrowser)
@@ -202,5 +229,27 @@ export class BrowserManagerService {
       return await contexts[0].cookies()
     }
     return []
+  }
+
+  // 브라우저 옵션 정규화 (기본값 적용)
+  private normalizeOptions(options: BrowserLaunchOptions): BrowserLaunchOptions {
+    return {
+      headless: options.headless ?? true,
+      args: options.args || ['--no-sandbox', '--disable-setuid-sandbox', '--lang=ko-KR,ko'],
+    }
+  }
+
+  // 옵션 변경 여부 확인
+  private hasOptionsChanged(current: BrowserLaunchOptions, newOptions: BrowserLaunchOptions): boolean {
+    // headless 모드 변경 확인
+    if (current.headless !== newOptions.headless) {
+      return true
+    }
+
+    // args 변경 확인 (간단한 비교)
+    const currentArgs = current.args?.sort().join(',') || ''
+    const newArgs = newOptions.args?.sort().join(',') || ''
+
+    return currentArgs !== newArgs
   }
 }
