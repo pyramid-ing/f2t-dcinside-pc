@@ -24,6 +24,14 @@ import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 export class PostJobService implements JobProcessor {
   private readonly logger = new Logger(PostJobService.name)
 
+  // 브라우저 ID 상수
+  private static readonly BROWSER_IDS = {
+    DCINSIDE_REUSE: 'dcinside',
+    DCINSIDE_DELETION: 'dcinside-deletion',
+    POST_JOB_NEW: (jobId: string) => `post-job-new-${jobId}`,
+    DELETE_JOB_NEW: (jobId: string) => `delete-job-new-${jobId}`,
+  } as const
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jobLogsService: JobLogsService,
@@ -198,9 +206,9 @@ export class PostJobService implements JobProcessor {
         await this.handlePostJob(jobId, context, page, postJob)
       } finally {
         // 새 창 모드일 때만 브라우저 종료
-        if (!settings.reuseWindowBetweenTasks && browser) {
+        if (!settings.reuseWindowBetweenTasks) {
           try {
-            await browser.close()
+            await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
             await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
           } catch (error) {
             this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
@@ -220,7 +228,7 @@ export class PostJobService implements JobProcessor {
    */
   private async handleBrowserReuseMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
     try {
-      const browser = await this.browserManager.getOrCreateBrowser('dcinside', {
+      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DCINSIDE_REUSE, {
         headless: !settings.showBrowserWindow,
       })
 
@@ -260,7 +268,7 @@ export class PostJobService implements JobProcessor {
    */
   private async handleBrowserNewMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
     try {
-      const browser = await this.browserManager.getOrCreateBrowser(`post-job-new-${jobId}`, {
+      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId), {
         headless: !settings.showBrowserWindow,
       })
 
@@ -287,14 +295,7 @@ export class PostJobService implements JobProcessor {
         // 포스팅 처리
         await this.handlePostJob(jobId, context, page, postJob)
       } finally {
-        // 작업 완료 후 브라우저 종료
-        try {
-          if (browser) {
-            await browser.close()
-          }
-        } catch (error) {
-          this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
-        }
+        // 재사용 모드에서는 브라우저를 종료하지 않음
       }
     } catch (error) {
       if (error instanceof ChromeNotInstalledError) {
@@ -508,7 +509,7 @@ export class PostJobService implements JobProcessor {
 
     try {
       // 삭제 전용 브라우저 사용 (등록용과 분리)
-      const browser = await this.browserManager.getOrCreateBrowser('dcinside-deletion', {
+      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DCINSIDE_DELETION, {
         headless: !settings.showBrowserWindow,
       })
 
@@ -554,7 +555,7 @@ export class PostJobService implements JobProcessor {
     await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
 
     try {
-      const browser = await this.browserManager.getOrCreateBrowser(`delete-job-new-${job.id}`, {
+      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id), {
         headless: !settings.showBrowserWindow,
       })
 
@@ -587,10 +588,8 @@ export class PostJobService implements JobProcessor {
       } finally {
         // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
         try {
-          if (browser) {
-            await browser.close()
-            await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 삭제 전용 브라우저 창 종료')
-          }
+          await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
+          await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 삭제 전용 브라우저 창 종료')
         } catch (error) {
           this.logger.warn(`삭제 전용 브라우저 종료 중 오류: ${error.message}`)
         }

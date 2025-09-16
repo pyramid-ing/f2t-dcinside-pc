@@ -77,15 +77,22 @@ export class BrowserManagerService {
     }
   }
 
-  // 브라우저 종료 (세션 종료)
-  async closeBrowser(browser: Browser): Promise<void> {
-    if (browser) {
-      try {
-        await browser.close()
-        this.logger.log('브라우저 세션 종료됨')
-      } catch (error) {
-        this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
-      }
+  // 브라우저 ID로 브라우저 종료 (managedBrowsers Map에서도 제거)
+  async closeManagedBrowser(browserId: string): Promise<void> {
+    const managedBrowser = this.managedBrowsers.get(browserId)
+    if (!managedBrowser) {
+      this.logger.warn(`브라우저를 찾을 수 없습니다: ${browserId}`)
+      return
+    }
+
+    try {
+      await managedBrowser.browser.close()
+      this.managedBrowsers.delete(browserId)
+      this.logger.log(`브라우저 종료: ${browserId}`)
+    } catch (error) {
+      this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+      // 오류가 발생해도 Map에서 제거
+      this.managedBrowsers.delete(browserId)
     }
   }
 
@@ -105,14 +112,13 @@ export class BrowserManagerService {
 
         if (this.hasOptionsChanged(currentOptions, newOptions)) {
           this.logger.log(`브라우저 옵션 변경 감지: ${browserId}, 기존 브라우저 종료 후 새로 생성합니다`)
-          await this.closeBrowser(managedBrowser.browser)
-          this.managedBrowsers.delete(browserId)
+          await this.closeManagedBrowser(browserId)
           managedBrowser = null
         }
       } catch (error) {
         // 브라우저가 연결되지 않은 경우 Map에서 제거
         this.logger.log(`브라우저 연결 끊어짐 감지: ${browserId}, 새로 생성합니다`)
-        this.managedBrowsers.delete(browserId)
+        await this.closeManagedBrowser(browserId)
         managedBrowser = null
       }
     }
