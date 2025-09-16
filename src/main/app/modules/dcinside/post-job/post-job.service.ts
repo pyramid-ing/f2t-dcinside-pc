@@ -1,13 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
-import { CookieService } from '@main/app/modules/util/cookie.service'
 import { BrowserContext, Page } from 'playwright'
-import { PostJob, Job } from '@prisma/client'
+import { Job, PostJob } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
 import { getExternalIp } from '@main/app/utils/ip'
@@ -17,7 +15,6 @@ import { Permission } from '@main/app/modules/auth/auth.guard'
 import { assertPermission } from '@main/app/utils/permission.assert'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
-import UserAgent from 'user-agents'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
 @Injectable()
@@ -30,6 +27,8 @@ export class PostJobService implements JobProcessor {
     DCINSIDE_DELETION: 'dcinside-deletion',
     POST_JOB_NEW: (jobId: string) => `post-job-new-${jobId}`,
     DELETE_JOB_NEW: (jobId: string) => `delete-job-new-${jobId}`,
+    PROXY: 'dcinside-posting-proxy',
+    FALLBACK: 'dcinside-posting-fallback',
   } as const
 
   constructor(
@@ -37,7 +36,6 @@ export class PostJobService implements JobProcessor {
     private readonly jobLogsService: JobLogsService,
     private readonly postingService: DcinsidePostingService,
     private readonly settingsService: SettingsService,
-    private readonly cookieService: CookieService,
     private readonly tetheringService: TetheringService,
     private readonly browserManager: BrowserManagerService,
   ) {}
@@ -50,7 +48,7 @@ export class PostJobService implements JobProcessor {
     const processor = this
     if (!processor || !processor.canProcess(job)) {
       this.logger.error(`No valid processor for job type ${job.type}`)
-      await this.markJobAsFailed(job.id, `해당 작업 타입이 없습니다. ${job.type}`)
+      await this.markJobAsStatus(job.id, JobStatus.FAILED, `해당 작업 타입이 없습니다. ${job.type}`)
       return
     }
 
@@ -96,15 +94,66 @@ export class PostJobService implements JobProcessor {
       }
       await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
       this.logger.error(logMessage, error.stack)
-      await this.markJobAsFailed(job.id, error.message)
+      await this.markJobAsStatus(job.id, JobStatus.FAILED, error.message)
     }
   }
 
-  async markJobAsFailed(jobId: string, errorMsg: string) {
+  /**
+   * 게시글 삭제 작업 처리 (DELETE_REQUEST 상태인 작업용)
+   */
+  async processDeleteJob(job: any): Promise<void> {
+    if (!job.postJob?.resultUrl) {
+      throw new Error('삭제할 게시글의 URL이 없습니다.')
+    }
+
+    try {
+      // 삭제 시작 - DELETE_PROCESSING 상태로 변경
+      await this.prismaService.job.updateMany({
+        where: {
+          id: job.id,
+          status: JobStatus.DELETE_REQUEST, // DELETE_REQUEST 상태인 것만 처리
+        },
+        data: {
+          status: JobStatus.DELETE_PROCESSING,
+        },
+      })
+
+      this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
+      await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
+
+      const settings = await this.settingsService.getSettings()
+
+      // 브라우저 재사용/신규 생성 분기
+      if (settings.reuseWindowBetweenTasks) {
+        await this.processDeleteJobWithReuseMode(job, settings)
+      } else {
+        await this.processDeleteJobWithNewMode(job, settings)
+      }
+
+      await this.markJobAsStatus(job.id, JobStatus.DELETE_COMPLETED)
+
+      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+    } catch (error) {
+      // ErrorCodeMap에서 매핑
+      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
+      if (error instanceof CustomHttpException) {
+        const mapped = ErrorCodeMap[error.errorCode]
+        if (mapped) {
+          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+        }
+      }
+      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+      this.logger.error(logMessage, error.stack)
+
+      await this.markJobAsStatus(job.id, JobStatus.DELETE_FAILED, `삭제 실패: ${error.message}`)
+    }
+  }
+
+  async markJobAsStatus(jobId: string, status: JobStatus, errorMsg?: string) {
     await this.prismaService.job.update({
       where: { id: jobId },
       data: {
-        status: JobStatus.FAILED,
+        status,
         errorMsg,
         completedAt: new Date(),
       },
@@ -182,44 +231,41 @@ export class PostJobService implements JobProcessor {
    * 프록시 모드 처리
    */
   private async handleProxyMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
+    const { browser, context, page, proxyInfo } = await this.postingService.launch({
+      browserId: PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId),
+      headless: !settings.showBrowserWindow,
+      reuseExisting: settings.reuseWindowBetweenTasks,
+      respectProxy: true,
+    })
+
     try {
-      const { browser, context, proxyInfo } = await this.postingService.launch()
+      // 프록시 정보 로깅
+      if (proxyInfo) {
+        const proxyStr = proxyInfo.id
+          ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+          : `${proxyInfo.ip}:${proxyInfo.port}`
+        await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+      }
 
-      try {
-        // 프록시 정보 로깅
-        if (proxyInfo) {
-          const proxyStr = proxyInfo.id
-            ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
-            : `${proxyInfo.ip}:${proxyInfo.port}`
-          await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
-        } else {
-          await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
-        }
+      // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
+      await this.logExternalIp(jobId, page)
 
-        // 실제 외부 IP 로깅 (별도 페이지 사용 후 닫기)
-        await this.logExternalIp(jobId, context, true)
+      await this.applyTaskDelay(jobId, settings)
 
-        await this.applyTaskDelay(jobId, settings)
-
-        // 페이지 생성 후 포스팅 처리
-        const page = await context.newPage()
-        await this.handlePostJob(jobId, context, page, postJob)
-      } finally {
-        // 새 창 모드일 때만 브라우저 종료
-        if (!settings.reuseWindowBetweenTasks) {
-          try {
-            await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
-            await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
-          } catch (error) {
-            this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
-          }
+      // 페이지는 launch에서 공통 생성됨
+      await this.handlePostJob(jobId, context, page, postJob)
+    } finally {
+      // 새 창 모드일 때만 브라우저 종료
+      if (!settings.reuseWindowBetweenTasks) {
+        try {
+          await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
+          await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+        } catch (error) {
+          this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
         }
       }
-    } catch (error) {
-      if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, { message: error.message })
-      }
-      throw error
     }
   }
 
@@ -227,101 +273,57 @@ export class PostJobService implements JobProcessor {
    * 브라우저 재사용 모드 처리
    */
   private async handleBrowserReuseMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
-    try {
-      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DCINSIDE_REUSE, {
-        headless: !settings.showBrowserWindow,
-      })
+    const { context, page } = await this.postingService.launch({
+      browserId: PostJobService.BROWSER_IDS.DCINSIDE_REUSE,
+      headless: !settings.showBrowserWindow,
+      reuseExisting: true,
+      respectProxy: false,
+    })
 
-      let context = browser.contexts()[0]
-      if (!context) {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
-        await context.addInitScript(() => {
-          window.sessionStorage.clear()
-        })
-      }
+    // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
+    await this.logExternalIp(jobId, page)
 
-      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
-      let page = context.pages()[0]
-      if (!page) {
-        page = await context.newPage()
-      }
+    await this.applyTaskDelay(jobId, settings)
 
-      // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
-      await this.logExternalIp(jobId, page, false)
-
-      await this.applyTaskDelay(jobId, settings)
-
-      await this.handlePostJob(jobId, context, page, postJob)
-    } catch (error) {
-      if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, { message: error.message })
-      }
-      throw error
-    }
+    await this.handlePostJob(jobId, context, page, postJob)
   }
 
   /**
    * 브라우저 신규 생성 모드 처리
    */
   private async handleBrowserNewMode(jobId: string, settings: Settings, postJob: PostJob): Promise<void> {
+    let context: BrowserContext | null = null
+    let page: Page | null = null
+
     try {
-      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId), {
+      const launched = await this.postingService.launch({
+        browserId: PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId),
         headless: !settings.showBrowserWindow,
+        reuseExisting: false,
+        respectProxy: false,
       })
+      context = launched.context
+      page = launched.page
 
-      let context: BrowserContext | null = null
-      let page: Page | null = null
+      // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
+      await this.logExternalIp(jobId, page)
 
-      try {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
+      await this.applyTaskDelay(jobId, settings)
 
-        await context.addInitScript(() => {
-          window.sessionStorage.clear()
-        })
-
-        page = await context.newPage()
-
-        // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
-        await this.logExternalIp(jobId, page, false)
-
-        await this.applyTaskDelay(jobId, settings)
-
-        // 포스팅 처리
-        await this.handlePostJob(jobId, context, page, postJob)
-      } finally {
-        // 작업 완료 후 브라우저 종료 (등록 전용 브라우저)
-        await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
-      }
-    } catch (error) {
-      if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, { message: error.message })
-      }
-      throw error
+      // 포스팅 처리
+      await this.handlePostJob(jobId, context, page, postJob)
+    } finally {
+      // 작업 완료 후 브라우저 종료 (등록 전용 브라우저)
+      await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
     }
   }
 
   /**
    * 외부 IP 로깅
    */
-  private async logExternalIp(jobId: string, target: any, useNewPage: boolean): Promise<void> {
+  private async logExternalIp(jobId: string, target: Page): Promise<void> {
     try {
-      let externalIp: string
-
-      if (useNewPage) {
-        // 프록시 모드: 별도 페이지 사용 후 닫기
-        const ipCheckPage = await target.newPage()
-        externalIp = await getExternalIp(ipCheckPage)
-        await ipCheckPage.close()
-      } else {
-        // 테더링/NONE 모드: 동일 페이지에서 이동하여 조회
-        externalIp = await getExternalIp(target)
-      }
+      const externalIp = await getExternalIp(target)
 
       await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
     } catch (e) {
@@ -350,7 +352,7 @@ export class PostJobService implements JobProcessor {
     let isMember = false
     if (postJob.loginId && postJob.loginPassword) {
       await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
-      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.postingService.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
       await this.jobLogsService.createJobLog(jobId, '로그인 성공')
       isMember = true
     } else {
@@ -438,99 +440,50 @@ export class PostJobService implements JobProcessor {
   }
 
   /**
-   * 게시글 삭제 작업 처리 (DELETE_REQUEST 상태인 작업용)
-   */
-  async processDeleteJob(job: any): Promise<void> {
-    if (!job.postJob?.resultUrl) {
-      throw new Error('삭제할 게시글의 URL이 없습니다.')
-    }
-
-    try {
-      // 삭제 시작 - DELETE_PROCESSING 상태로 변경
-      await this.prismaService.job.updateMany({
-        where: {
-          id: job.id,
-          status: JobStatus.DELETE_REQUEST, // DELETE_REQUEST 상태인 것만 처리
-        },
-        data: {
-          status: JobStatus.DELETE_PROCESSING,
-        },
-      })
-
-      this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
-      await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
-
-      const settings = await this.settingsService.getSettings()
-
-      // 브라우저 재사용/신규 생성 분기
-      if (settings.reuseWindowBetweenTasks) {
-        await this.processDeleteJobWithReuseMode(job, settings)
-      } else {
-        await this.processDeleteJobWithNewMode(job, settings)
-      }
-
-      // 삭제 성공 - DELETE_COMPLETED 상태로 변경
-      await this.prismaService.job.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.DELETE_COMPLETED,
-        },
-      })
-
-      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
-    } catch (error) {
-      // ErrorCodeMap에서 매핑
-      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
-      if (error instanceof CustomHttpException) {
-        const mapped = ErrorCodeMap[error.errorCode]
-        if (mapped) {
-          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
-        }
-      }
-      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
-      this.logger.error(logMessage, error.stack)
-
-      // 삭제 실패 - DELETE_FAILED 상태로 변경
-      await this.prismaService.job.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.DELETE_FAILED,
-          errorMsg: `삭제 실패: ${error.message}`,
-          completedAt: new Date(),
-        },
-      })
-    }
-  }
-
-  /**
    * 삭제 작업 - 브라우저 재사용 모드
    */
   private async processDeleteJobWithReuseMode(job: any, settings: Settings): Promise<void> {
     await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 브라우저 창 재사용 (삭제 전용)')
 
+    const { context, page } = await this.postingService.launch({
+      browserId: PostJobService.BROWSER_IDS.DCINSIDE_DELETION,
+      headless: !settings.showBrowserWindow,
+      reuseExisting: true,
+      respectProxy: false,
+    })
+
+    // 로그인 처리
+    if (job.postJob.loginId && job.postJob.loginPassword) {
+      await this.postingService.handleBrowserLogin(context, page, job.loginId, job.loginPassword)
+    }
+
+    // 게시글 삭제 실행
+    await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
+
+    // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+    await this.prismaService.postJob.update({
+      where: { id: job.postJob.id },
+      data: { deletedAt: new Date() },
+    })
+  }
+
+  /**
+   * 삭제 작업 - 브라우저 신규 생성 모드
+   */
+  private async processDeleteJobWithNewMode(job: any, settings: Settings): Promise<void> {
+    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
+
     try {
-      // 삭제 전용 브라우저 사용 (등록용과 분리)
-      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DCINSIDE_DELETION, {
+      const { context, page } = await this.postingService.launch({
+        browserId: PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id),
         headless: !settings.showBrowserWindow,
+        reuseExisting: false,
+        respectProxy: false,
       })
-
-      let context = browser.contexts()[0]
-      if (!context) {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
-      }
-
-      // 동일 컨텍스트의 첫 페이지 재사용, 없으면 해당 컨텍스트에서 생성
-      let page = context.pages()[0]
-      if (!page) {
-        page = await context.newPage()
-      }
 
       // 로그인 처리
       if (job.postJob.loginId && job.postJob.loginPassword) {
-        await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
+        await this.postingService.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
       }
 
       // 게시글 삭제 실행
@@ -541,110 +494,9 @@ export class PostJobService implements JobProcessor {
         where: { id: job.postJob.id },
         data: { deletedAt: new Date() },
       })
-    } catch (error) {
-      if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, { message: error.message })
-      }
-      throw error
-    }
-  }
-
-  /**
-   * 삭제 작업 - 브라우저 신규 생성 모드
-   */
-  private async processDeleteJobWithNewMode(job: any, settings: Settings): Promise<void> {
-    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
-
-    try {
-      const browser = await this.browserManager.getOrCreateBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id), {
-        headless: !settings.showBrowserWindow,
-      })
-
-      let context: BrowserContext | null = null
-      let page: Page | null = null
-
-      try {
-        context = await browser.newContext({
-          viewport: { width: 1200, height: 1142 },
-          userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-        })
-
-        page = await context.newPage()
-
-        // 로그인 처리
-        if (job.postJob.loginId && job.postJob.loginPassword) {
-          await this.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
-        }
-
-        // 게시글 삭제 실행
-        await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
-
-        // 삭제 성공 시 원본 작업의 deletedAt 업데이트
-        await this.prismaService.postJob.update({
-          where: { id: job.postJob.id },
-          data: { deletedAt: new Date() },
-        })
-      } catch (error) {
-        throw error
-      } finally {
-        // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
-        await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
-      }
-    } catch (error) {
-      if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, { message: error.message })
-      }
-      throw error
-    }
-  }
-
-  /**
-   * 브라우저별 로그인 처리 (브라우저 생성 직후 한 번만 실행)
-   */
-  private async handleBrowserLogin(
-    browserContext: BrowserContext,
-    page: Page,
-    loginId: string,
-    loginPassword: string,
-  ): Promise<void> {
-    this.logger.log(`로그인 처리 시작: ${loginId}`)
-
-    // 브라우저 생성 직후 쿠키 로드 및 적용
-    const cookies = this.cookieService.loadCookies('dcinside', loginId)
-
-    // 쿠키가 있으면 먼저 적용해보기
-    if (cookies && cookies.length > 0) {
-      this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
-      await browserContext.addCookies(cookies)
-    }
-
-    // 로그인 상태 확인
-    const isLoggedIn = await this.postingService.isLogin(page)
-
-    if (!isLoggedIn) {
-      // 로그인이 안되어 있으면 로그인 실행
-      if (!loginPassword) {
-        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
-          message: '로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.',
-        })
-      }
-
-      this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
-      const loginResult = await this.postingService.login(page, {
-        id: loginId,
-        password: loginPassword,
-      })
-
-      if (!loginResult.success) {
-        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: `자동 로그인 실패: ${loginResult.message}` })
-      }
-
-      // 로그인 성공 후 새로운 쿠키 저장
-      const newCookies = await browserContext.cookies()
-      this.cookieService.saveCookies('dcinside', loginId, newCookies)
-      this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
-    } else {
-      this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
+    } finally {
+      // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
+      await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
     }
   }
 

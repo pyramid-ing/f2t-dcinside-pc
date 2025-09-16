@@ -126,16 +126,23 @@ export class DcinsidePostingService {
   ) {}
 
   // Public methods
-  public async launch() {
+  public async launch(options?: {
+    browserId?: string
+    headless?: boolean
+    reuseExisting?: boolean
+    respectProxy?: boolean
+  }) {
     let proxyArg = undefined
     let proxyAuth = undefined
     let lastError = null
     let proxyInfo = null
 
     const settings = await this.settingsService.getSettings()
+    const headless = options?.headless ?? !settings.showBrowserWindow
+    const respectProxy = options?.respectProxy ?? true
 
     // ipMode가 proxy일 때만 프록시 적용
-    if (settings?.ipMode === IpMode.PROXY && settings?.proxies && settings.proxies.length > 0) {
+    if (respectProxy && settings?.ipMode === IpMode.PROXY && settings?.proxies && settings.proxies.length > 0) {
       const method = settings.proxyChangeMethod || 'random'
       const { proxy } = getProxyByMethod(settings.proxies, method)
       if (proxy) {
@@ -147,23 +154,30 @@ export class DcinsidePostingService {
         }
         proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
         try {
-          const browser = await this.browserManagerService.getOrCreateBrowser('dcinside-posting-proxy', {
-            headless: !settings.showBrowserWindow,
+          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
+            headless,
             args: [proxyArg],
           })
-          const context = await browser.newContext({
-            viewport: { width: 1200, height: 1142 },
-            userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-            proxy: proxyAuth,
-          })
-          await context.addInitScript(() => {
-            window.sessionStorage.clear()
-          })
-          return { browser, context, proxyInfo }
+          if (options?.reuseExisting) {
+            let context = browser.contexts()[0] || null
+            let page: Page | null = null
+            if (context) {
+              page = context.pages()[0] || (await context.newPage())
+            } else {
+              const cp = await this.initContextAndPage(browser, { proxyAuth })
+              context = cp.context
+              page = cp.page
+            }
+            return { browser, context, page, proxyInfo }
+          }
+          const { context, page } = await this.initContextAndPage(browser, { proxyAuth })
+          return { browser, context, page, proxyInfo }
         } catch (error) {
-          // Playwright 브라우저 설치 관련 에러 처리
-          if (error.message.includes("Executable doesn't exist")) {
-            throw new ChromeNotInstalledError('크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.')
+          // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
+          if (error instanceof ChromeNotInstalledError) {
+            throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, {
+              message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
+            })
           }
           this.logger.warn(`프록시 브라우저 실행 실패: ${error.message}`)
           lastError = error
@@ -172,25 +186,57 @@ export class DcinsidePostingService {
     }
     // fallback: 프록시 없이 재시도
     try {
-      const browser = await this.browserManagerService.getOrCreateBrowser('dcinside-posting-fallback', {
-        headless: !settings.showBrowserWindow,
+      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId || 'dcinside', {
+        headless,
       })
-      const context = await browser.newContext({
-        viewport: { width: 1200, height: 1142 },
-        userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
-      })
-      await context.addInitScript(() => {
-        window.sessionStorage.clear()
-      })
+      if (options?.reuseExisting) {
+        let context = browser.contexts()[0] || null
+        let page: Page | null = null
+        if (context) {
+          page = context.pages()[0] || (await context.newPage())
+        } else {
+          const cp = await this.initContextAndPage(browser)
+          context = cp.context
+          page = cp.page
+        }
+        if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
+        return { browser, context, page, proxyInfo: null }
+      }
+      const { context, page } = await this.initContextAndPage(browser)
       if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
-      return { browser, context, proxyInfo: null }
+      return { browser, context, page, proxyInfo: null }
     } catch (error) {
-      // Playwright 브라우저 설치 관련 에러 처리
-      if (error.message.includes("Executable doesn't exist")) {
-        throw new ChromeNotInstalledError('크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.')
+      // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
+      if (error instanceof ChromeNotInstalledError) {
+        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, {
+          message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
+        })
       }
       throw error
     }
+  }
+
+  /**
+   * 공통 컨텍스트/페이지 생성 유틸
+   * - viewport, userAgent, sessionStorage 초기화 스크립트 공통 적용
+   * - 필요 시 컨텍스트 레벨 프록시 옵션 적용
+   */
+  public async initContextAndPage(
+    browser: any,
+    options?: { proxyAuth?: { server: string; username?: string; password?: string } },
+  ): Promise<{ context: BrowserContext; page: Page }> {
+    const context = await browser.newContext({
+      viewport: { width: 1200, height: 1142 },
+      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      ...(options?.proxyAuth ? { proxy: options.proxyAuth } : {}),
+    })
+
+    await context.addInitScript(() => {
+      window.sessionStorage.clear()
+    })
+
+    const page = await context.newPage()
+    return { context, page }
   }
 
   public async login(
@@ -239,6 +285,56 @@ export class DcinsidePostingService {
       return !!userName
     } catch {
       return false
+    }
+  }
+
+  /**
+   * 브라우저별 로그인 처리 (브라우저 생성 직후 한 번만 실행)
+   */
+  public async handleBrowserLogin(
+    browserContext: BrowserContext,
+    page: Page,
+    loginId: string,
+    loginPassword: string,
+  ): Promise<void> {
+    this.logger.log(`로그인 처리 시작: ${loginId}`)
+
+    // 브라우저 생성 직후 쿠키 로드 및 적용
+    const cookies = this.cookieService.loadCookies('dcinside', loginId)
+
+    // 쿠키가 있으면 먼저 적용해보기
+    if (cookies && cookies.length > 0) {
+      this.logger.log('저장된 쿠키를 브라우저에 적용합니다.')
+      await browserContext.addCookies(cookies)
+    }
+
+    // 로그인 상태 확인
+    const isLoggedIn = await this.isLogin(page)
+
+    if (!isLoggedIn) {
+      // 로그인이 안되어 있으면 로그인 실행
+      if (!loginPassword) {
+        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+          message: '로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.',
+        })
+      }
+
+      this.logger.log('로그인이 필요합니다. 자동 로그인을 시작합니다.')
+      const loginResult = await this.login(page, {
+        id: loginId,
+        password: loginPassword,
+      })
+
+      if (!loginResult.success) {
+        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: `자동 로그인 실패: ${loginResult.message}` })
+      }
+
+      // 로그인 성공 후 새로운 쿠키 저장
+      const newCookies = await browserContext.cookies()
+      this.cookieService.saveCookies('dcinside', loginId, newCookies)
+      this.logger.log('로그인 성공 후 쿠키를 저장했습니다.')
+    } else {
+      this.logger.log('기존 쿠키로 로그인 상태가 유지되고 있습니다.')
     }
   }
 
