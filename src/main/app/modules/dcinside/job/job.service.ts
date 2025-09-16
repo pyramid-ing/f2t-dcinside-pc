@@ -649,11 +649,6 @@ export class JobService {
       throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
     }
 
-    // 아직 삭제되지 않았는지 확인
-    if (job.postJob.deletedAt) {
-      throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
-    }
-
     // DELETE_FAILED -> DELETE_REQUEST로 변경하고 deleteAt을 현재 시간으로 설정
     await this.prisma.job.update({
       where: { id: jobId },
@@ -663,6 +658,7 @@ export class JobService {
         postJob: {
           update: {
             deleteAt: new Date(), // 현재 시간으로 설정하여 바로 삭제되도록 함
+            deletedAt: null,
           },
         },
       },
