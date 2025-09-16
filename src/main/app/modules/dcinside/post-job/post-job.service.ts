@@ -295,7 +295,8 @@ export class PostJobService implements JobProcessor {
         // 포스팅 처리
         await this.handlePostJob(jobId, context, page, postJob)
       } finally {
-        // 재사용 모드에서는 브라우저를 종료하지 않음
+        // 작업 완료 후 브라우저 종료 (등록 전용 브라우저)
+        await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId))
       }
     } catch (error) {
       if (error instanceof ChromeNotInstalledError) {
@@ -587,12 +588,7 @@ export class PostJobService implements JobProcessor {
         throw error
       } finally {
         // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
-        try {
-          await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
-          await this.jobLogsService.createJobLog(job.id, '삭제 작업 완료 - 삭제 전용 브라우저 창 종료')
-        } catch (error) {
-          this.logger.warn(`삭제 전용 브라우저 종료 중 오류: ${error.message}`)
-        }
+        await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
       }
     } catch (error) {
       if (error instanceof ChromeNotInstalledError) {
