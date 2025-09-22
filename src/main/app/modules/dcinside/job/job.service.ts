@@ -508,9 +508,9 @@ export class JobService {
           data: { scheduledAt: base },
         })
       } else {
-        // 랜덤 간격(분) 추가
+        // 랜덤 간격(초) 추가
         const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
-        base = new Date(base.getTime() + interval * 60000)
+        base = new Date(base.getTime() + interval * 1000)
         await this.prisma.job.update({
           where: { id: job.id },
           data: { scheduledAt: base },

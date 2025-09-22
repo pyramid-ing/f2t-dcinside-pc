@@ -322,6 +322,7 @@ const JobTable: React.FC = () => {
 
   const [intervalStart, setIntervalStart] = useState<number>(60)
   const [intervalEnd, setIntervalEnd] = useState<number>(90)
+  const [intervalUnit, setIntervalUnit] = useState<'sec' | 'min'>('min')
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
 
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
@@ -756,19 +757,22 @@ const JobTable: React.FC = () => {
       return
     }
     if (intervalStart > intervalEnd) {
-      message.warning('시작 분이 끝 분보다 클 수 없습니다.')
+      const unitLabel = intervalUnit === 'min' ? '분' : '초'
+      message.warning(`시작 ${unitLabel}가 끝 ${unitLabel}보다 클 수 없습니다.`)
       return
     }
     setIntervalApplyLoading(true)
     try {
+      const startInSeconds = intervalUnit === 'min' ? intervalStart * 60 : intervalStart
+      const endInSeconds = intervalUnit === 'min' ? intervalEnd * 60 : intervalEnd
       const request: BulkActionRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
         action: BulkActionType.APPLY_INTERVAL,
-        intervalStart,
-        intervalEnd,
+        intervalStart: startInSeconds,
+        intervalEnd: endInSeconds,
       }
 
       const response = await bulkApplyInterval(request)
@@ -958,10 +962,30 @@ const JobTable: React.FC = () => {
             )}
           </Button>
           <Divider />
-          <span>등록 간격(분):</span>
-          <InputNumber min={1} max={1440} value={intervalStart} onChange={v => setIntervalStart(Number(v))} />
+          <span>등록 간격</span>
+          <Select
+            size="small"
+            value={intervalUnit}
+            onChange={val => setIntervalUnit(val as 'sec' | 'min')}
+            style={{ width: 80 }}
+            options={[
+              { label: '분', value: 'min' },
+              { label: '초', value: 'sec' },
+            ]}
+          />
+          <InputNumber
+            min={1}
+            max={intervalUnit === 'min' ? 1440 : 86400}
+            value={intervalStart}
+            onChange={v => setIntervalStart(Number(v))}
+          />
           <span>~</span>
-          <InputNumber min={1} max={1440} value={intervalEnd} onChange={v => setIntervalEnd(Number(v))} />
+          <InputNumber
+            min={1}
+            max={intervalUnit === 'min' ? 1440 : 86400}
+            value={intervalEnd}
+            onChange={v => setIntervalEnd(Number(v))}
+          />
           <Button
             type="primary"
             loading={intervalApplyLoading}
