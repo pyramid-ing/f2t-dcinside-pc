@@ -342,31 +342,26 @@ export class DcinsidePostingService {
   public async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string, isMember?: boolean): Promise<void> {
     await this.jobLogsService.createJobLog(jobId, '단순화된 삭제 로직 시작')
 
-    try {
-      // 1. 글쓰기 페이지 이동
-      await this._navigateToPostPage(page, post, jobId)
+    // 1. 글쓰기 페이지 이동
+    await this._navigateToPostPage(page, post, jobId)
 
-      // 2. 비정상 페이지 체크
-      const isAbnormalPage = await this._checkAbnormalPage(page, jobId)
-      if (isAbnormalPage) {
-        return // 이미 삭제된 경우 성공으로 처리
-      }
-
-      // 3. 삭제 버튼 찾기
-      await this._findAndClickDeleteButton(page, jobId)
-
-      // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
-      await this._handleAuthentication(page, post, jobId, isMember)
-
-      // 5. 삭제 버튼 클릭 및 삭제 처리
-      const alertMessage = await this._executeDelete(page, jobId)
-
-      // 6. 성공 여부 체크
-      await this._verifyDeleteSuccess(alertMessage, jobId)
-    } catch (error) {
-      this.logger.error(`삭제 처리 실패: ${error.message}`)
-      throw error
+    // 2. 비정상 페이지 체크
+    const isAbnormalPage = await this._checkAbnormalPage(page, jobId)
+    if (isAbnormalPage) {
+      return // 이미 삭제된 경우 성공으로 처리
     }
+
+    // 3. 삭제 버튼 찾기
+    await this._findAndClickDeleteButton(page, jobId)
+
+    // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
+    await this._handleAuthentication(page, post, jobId, isMember)
+
+    // 5. 삭제 버튼 클릭 및 삭제 처리
+    const alertMessage = await this._executeDelete(page, jobId)
+
+    // 6. 성공 여부 체크
+    await this._verifyDeleteSuccess(alertMessage, jobId)
   }
 
   public async postArticle(
