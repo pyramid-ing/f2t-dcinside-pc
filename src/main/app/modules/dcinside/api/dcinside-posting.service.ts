@@ -347,6 +347,35 @@ export class DcinsidePostingService {
   ): Promise<void> {
     await this.jobLogsService.createJobLog(jobId, '통합된 삭제 로직 시작')
 
+    const maxRetries = 5
+    const retryInterval = 10 * 1_000
+
+    await this.jobLogsService.createJobLog(
+      jobId,
+      `삭제 재시도 설정: 최대 ${maxRetries}회, 간격 ${retryInterval / 1000}초`,
+    )
+
+    let attemptCount = 0
+    await retry(
+      async () => {
+        attemptCount++
+        await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount}/${maxRetries}`)
+        await this._executeDeleteWithRetry(post, jobId, settings, browserManager)
+        await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount} 성공`)
+      },
+      retryInterval,
+      maxRetries,
+      'linear',
+    )
+  }
+
+  // 재시도 가능한 삭제 실행 로직
+  private async _executeDeleteWithRetry(
+    post: PostJob,
+    jobId: string,
+    settings: any,
+    browserManager: any,
+  ): Promise<void> {
     const browserId = settings.reuseWindowBetweenTasks ? 'dcinside-deletion' : `delete-job-new-${jobId}`
 
     try {
