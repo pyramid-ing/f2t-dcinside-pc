@@ -50,12 +50,17 @@ export const ExcelRowSchema = z
 
       const trimmed = data.예약날짜.toString().trim()
 
-      // 정확한 형식 (YYYY-MM-DD HH:mm)만 허용
-      const parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
+      // 정확한 형식 (YYYY-MM-DD HH:mm 또는 YYYY-MM-DD HH:mm:ss) 허용
+      let parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm:ss', true)
+
+      if (!parsed.isValid()) {
+        // 초단위가 없는 경우 분단위로 재시도
+        parsed = dayjs(trimmed, 'YYYY-MM-DD HH:mm', true)
+      }
 
       if (!parsed.isValid()) {
         throw new CustomHttpException(ErrorCode.SCHEDULED_DATE_FORMAT_INVALID, {
-          message: `예약날짜 형식이 잘못되었습니다. 올바른 형식: YYYY-MM-DD HH:mm (예: 2025-09-12 14:21), 입력값: "${trimmed}"`,
+          message: `예약날짜 형식이 잘못되었습니다. 올바른 형식: YYYY-MM-DD HH:mm 또는 YYYY-MM-DD HH:mm:ss (예: 2025-09-12 14:21 또는 2025-09-12 14:21:30), 입력값: "${trimmed}"`,
           inputValue: trimmed,
         })
       }

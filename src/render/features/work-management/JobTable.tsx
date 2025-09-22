@@ -1264,8 +1264,8 @@ const JobTable: React.FC = () => {
             align: 'center',
             render: (value: string, record: PostJob) => (
               <DatePicker
-                showTime
-                format="YYYY-MM-DD HH:mm"
+                showTime={{ format: 'HH:mm:ss' }}
+                format="YYYY-MM-DD HH:mm:ss"
                 value={value ? dayjs(value) : null}
                 onChange={date => handleScheduledAtChange(record, date)}
                 style={{ width: 180 }}
