@@ -1257,7 +1257,7 @@ const JobTable: React.FC = () => {
               ),
           },
           {
-            title: '예약시간',
+            title: '글쓰기예약시간',
             dataIndex: 'scheduledAt',
             key: 'scheduledAt',
             width: 200,
