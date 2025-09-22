@@ -119,10 +119,8 @@ export class PostJobService implements JobProcessor {
       this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
       await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
-      const settings = await this.settingsService.getSettings()
-
       // 통합된 삭제 로직 호출
-      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, settings, this.browserManager)
+      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
 
       // 삭제 성공 시 원본 작업의 deletedAt 업데이트
       await this.prismaService.postJob.update({
@@ -438,7 +436,6 @@ export class PostJobService implements JobProcessor {
   async deletePostJob(id: string) {
     return this.prismaService.postJob.delete({ where: { id } })
   }
-
 
   /**
    * Job + PostJob을 1:1로 생성하는 메서드

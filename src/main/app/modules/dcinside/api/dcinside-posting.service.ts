@@ -339,13 +339,11 @@ export class DcinsidePostingService {
   }
 
   // 통합된 삭제 로직 (브라우저 관리 및 로그인 처리 포함)
-  public async deleteArticleByResultUrl(
-    post: PostJob,
-    jobId: string,
-    settings: any,
-    browserManager: any,
-  ): Promise<void> {
+  public async deleteArticleByResultUrl(post: PostJob, jobId: string, browserManager: any): Promise<void> {
     await this.jobLogsService.createJobLog(jobId, '통합된 삭제 로직 시작')
+
+    // 설정 가져오기
+    const settings = await this.settingsService.getSettings()
 
     const maxRetries = 5
     const retryInterval = 10 * 1_000
