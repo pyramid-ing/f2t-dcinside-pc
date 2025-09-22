@@ -338,30 +338,67 @@ export class DcinsidePostingService {
     }
   }
 
-  // 단순화된 삭제 로직
-  public async deleteArticleByResultUrl(post: PostJob, page: Page, jobId: string, isMember?: boolean): Promise<void> {
-    await this.jobLogsService.createJobLog(jobId, '단순화된 삭제 로직 시작')
+  // 통합된 삭제 로직 (브라우저 관리 및 로그인 처리 포함)
+  public async deleteArticleByResultUrl(
+    post: PostJob,
+    jobId: string,
+    settings: any,
+    browserManager: any,
+  ): Promise<void> {
+    await this.jobLogsService.createJobLog(jobId, '통합된 삭제 로직 시작')
 
-    // 1. 글쓰기 페이지 이동
-    await this._navigateToPostPage(page, post, jobId)
+    const browserId = settings.reuseWindowBetweenTasks ? 'dcinside-deletion' : `delete-job-new-${jobId}`
 
-    // 2. 비정상 페이지 체크
-    const isAbnormalPage = await this._checkAbnormalPage(page, jobId)
-    if (isAbnormalPage) {
-      return // 이미 삭제된 경우 성공으로 처리
+    try {
+      // 브라우저 실행
+      const { context, page } = await this.launch({
+        browserId,
+        headless: !settings.showBrowserWindow,
+        reuseExisting: settings.reuseWindowBetweenTasks,
+        respectProxy: false,
+      })
+
+      // 로그인 처리
+      if (post.loginId && post.loginPassword) {
+        await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${post.loginId}`)
+        await this.handleBrowserLogin(context, page, post.loginId, post.loginPassword)
+        await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+      }
+
+      // 1. 글쓰기 페이지 이동
+      await this._navigateToPostPage(page, post, jobId)
+
+      // 2. 비정상 페이지 체크
+      const isAbnormalPage = await this._checkAbnormalPage(page, jobId)
+      if (isAbnormalPage) {
+        return // 이미 삭제된 경우 성공으로 처리
+      }
+
+      // 3. 삭제 버튼 찾기
+      await this._findAndClickDeleteButton(page, jobId)
+
+      // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
+      const isMember = !!(post.loginId && post.loginPassword)
+      await this._handleAuthentication(page, post, jobId, isMember)
+
+      // 5. 삭제 버튼 클릭 및 삭제 처리
+      const alertMessage = await this._executeDelete(page, jobId)
+
+      // 6. 성공 여부 체크
+      await this._verifyDeleteSuccess(alertMessage, jobId)
+    } finally {
+      // 브라우저 신규 생성 모드일 때만 브라우저 종료
+      if (!settings.reuseWindowBetweenTasks) {
+        try {
+          await browserManager.closeManagedBrowser(browserId)
+          await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+        } catch (error) {
+          console.warn(`브라우저 종료 중 오류: ${error.message}`)
+        }
+      }
     }
-
-    // 3. 삭제 버튼 찾기
-    await this._findAndClickDeleteButton(page, jobId)
-
-    // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
-    await this._handleAuthentication(page, post, jobId, isMember)
-
-    // 5. 삭제 버튼 클릭 및 삭제 처리
-    const alertMessage = await this._executeDelete(page, jobId)
-
-    // 6. 성공 여부 체크
-    await this._verifyDeleteSuccess(alertMessage, jobId)
   }
 
   public async postArticle(

@@ -24,9 +24,7 @@ export class PostJobService implements JobProcessor {
   // 브라우저 ID 상수
   private static readonly BROWSER_IDS = {
     DCINSIDE_REUSE: 'dcinside',
-    DCINSIDE_DELETION: 'dcinside-deletion',
     POST_JOB_NEW: (jobId: string) => `post-job-new-${jobId}`,
-    DELETE_JOB_NEW: (jobId: string) => `delete-job-new-${jobId}`,
     PROXY: 'dcinside-posting-proxy',
     FALLBACK: 'dcinside-posting-fallback',
   } as const
@@ -123,12 +121,14 @@ export class PostJobService implements JobProcessor {
 
       const settings = await this.settingsService.getSettings()
 
-      // 브라우저 재사용/신규 생성 분기
-      if (settings.reuseWindowBetweenTasks) {
-        await this.processDeleteJobWithReuseMode(job, settings)
-      } else {
-        await this.processDeleteJobWithNewMode(job, settings)
-      }
+      // 통합된 삭제 로직 호출
+      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, settings, this.browserManager)
+
+      // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+      await this.prismaService.postJob.update({
+        where: { id: job.postJob.id },
+        data: { deletedAt: new Date() },
+      })
 
       await this.markJobAsStatus(job.id, JobStatus.DELETE_COMPLETED)
 
@@ -439,66 +439,6 @@ export class PostJobService implements JobProcessor {
     return this.prismaService.postJob.delete({ where: { id } })
   }
 
-  /**
-   * 삭제 작업 - 브라우저 재사용 모드
-   */
-  private async processDeleteJobWithReuseMode(job: any, settings: Settings): Promise<void> {
-    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 브라우저 창 재사용 (삭제 전용)')
-
-    const { context, page } = await this.postingService.launch({
-      browserId: PostJobService.BROWSER_IDS.DCINSIDE_DELETION,
-      headless: !settings.showBrowserWindow,
-      reuseExisting: true,
-      respectProxy: false,
-    })
-
-    // 로그인 처리
-    if (job.postJob.loginId && job.postJob.loginPassword) {
-      await this.postingService.handleBrowserLogin(context, page, job.loginId, job.loginPassword)
-    }
-
-    // 게시글 삭제 실행
-    await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
-
-    // 삭제 성공 시 원본 작업의 deletedAt 업데이트
-    await this.prismaService.postJob.update({
-      where: { id: job.postJob.id },
-      data: { deletedAt: new Date() },
-    })
-  }
-
-  /**
-   * 삭제 작업 - 브라우저 신규 생성 모드
-   */
-  private async processDeleteJobWithNewMode(job: any, settings: Settings): Promise<void> {
-    await this.jobLogsService.createJobLog(job.id, '삭제 작업 - 새 브라우저 창 생성 (삭제 전용)')
-
-    try {
-      const { context, page } = await this.postingService.launch({
-        browserId: PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id),
-        headless: !settings.showBrowserWindow,
-        reuseExisting: false,
-        respectProxy: false,
-      })
-
-      // 로그인 처리
-      if (job.postJob.loginId && job.postJob.loginPassword) {
-        await this.postingService.handleBrowserLogin(context, page, job.postJob.loginId, job.postJob.loginPassword)
-      }
-
-      // 게시글 삭제 실행
-      await this.postingService.deleteArticleByResultUrl(job.postJob, page, job.id, !!job.postJob.loginId)
-
-      // 삭제 성공 시 원본 작업의 deletedAt 업데이트
-      await this.prismaService.postJob.update({
-        where: { id: job.postJob.id },
-        data: { deletedAt: new Date() },
-      })
-    } finally {
-      // 작업 완료 후 브라우저 종료 (삭제 전용 브라우저)
-      await this.browserManager.closeManagedBrowser(PostJobService.BROWSER_IDS.DELETE_JOB_NEW(job.id))
-    }
-  }
 
   /**
    * Job + PostJob을 1:1로 생성하는 메서드
