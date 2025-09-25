@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Page, Browser } from 'playwright'
-import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
+import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 
 @Injectable()
 export class CommentAutomationService {
@@ -9,7 +9,7 @@ export class CommentAutomationService {
 
   constructor(
     private prisma: PrismaService,
-    private twoCaptchaService: TwoCaptchaService,
+    private dcCaptchaSolverService: DcCaptchaSolverService,
   ) {}
 
   /**
@@ -38,15 +38,7 @@ export class CommentAutomationService {
 
       for (const postUrl of postUrls) {
         try {
-          await this.commentOnPost(
-            browser,
-            postUrl,
-            commentJob.comment,
-            commentJob.nickname,
-            commentJob.password,
-            true, // ipChangeEnabled - 항상 true
-            true, // captchaEnabled - 항상 true
-          )
+          await this.commentOnPost(browser, postUrl, commentJob.comment, commentJob.nickname, commentJob.password)
 
           // 작업 간격 대기
           if (commentJob.taskDelay > 0) {
@@ -101,8 +93,6 @@ export class CommentAutomationService {
     comment: string,
     nickname: string,
     password: string,
-    ipChangeEnabled: boolean,
-    captchaEnabled: boolean,
   ): Promise<void> {
     const page = await browser.newPage()
 
@@ -114,10 +104,8 @@ export class CommentAutomationService {
       })
 
       // IP 변경이 필요한 경우 여기서 처리
-      if (ipChangeEnabled) {
-        // TODO: IP 변경 로직 구현
-        this.logger.log('IP change requested but not implemented yet')
-      }
+      // TODO: IP 변경 로직 구현
+      this.logger.log('IP change requested but not implemented yet')
 
       // 게시물 페이지로 이동
       await page.goto(postUrl, { waitUntil: 'networkidle' })
@@ -164,11 +152,9 @@ export class CommentAutomationService {
       }
 
       // 캡차 확인
-      if (captchaEnabled) {
-        const captchaResult = await this.handleCaptcha(page)
-        if (!captchaResult.success) {
-          throw new Error('Captcha solving failed')
-        }
+      const captchaResult = await this.handleCaptcha(page)
+      if (!captchaResult.success) {
+        throw new Error('Captcha solving failed')
       }
 
       // 댓글 등록 버튼 클릭
@@ -194,85 +180,36 @@ export class CommentAutomationService {
    */
   private async handleCaptcha(page: Page): Promise<{ success: boolean; error?: string }> {
     try {
-      // reCAPTCHA 확인 및 처리
-      const recaptchaResult = await this.detectAndSolveRecaptcha(page)
-      if (recaptchaResult.found && recaptchaResult.success) {
-        return { success: true }
-      }
+      // 댓글용 캡차 감지 (id가 kcaptcha_로 시작하는 요소 확인)
+      const captchaElement = page.locator('.cmt_write_box [id^="kcaptcha_"]')
+      const captchaCount = await captchaElement.count()
 
-      // DC인사이드 캡차 확인
-      const dcCaptchaResult = await this.detectDcCaptcha(page)
-      if (dcCaptchaResult.found) {
-        // DC인사이드 캡차는 별도 처리 필요
-        this.logger.warn('DC Inside captcha detected, manual intervention may be required')
-        return { success: false, error: 'DC Inside captcha detected' }
+      if (captchaCount > 0) {
+        this.logger.log('댓글용 문자 캡차 감지됨, 해결 시작')
+
+        // 캡차 이미지 추출 (댓글용 동적 selector)
+        const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(
+          page,
+          '.cmt_write_box [id^="kcaptcha_"]',
+        )
+
+        // 캡차 해결
+        const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
+
+        // 캡차 입력 필드에 답안 입력 (id가 code_로 시작하는 요소)
+        const captchaInput = page.locator('.cmt_write_box [id^="code_"]')
+        if ((await captchaInput.count()) > 0) {
+          await captchaInput.fill(answer)
+          this.logger.log(`댓글용 캡차 답안 입력 완료: ${answer}`)
+        }
+      } else {
+        this.logger.log('댓글용 캡차가 감지되지 않음')
       }
 
       return { success: true }
     } catch (error) {
-      this.logger.error(`Captcha handling failed: ${error.message}`)
+      this.logger.error(`댓글용 캡차 처리 실패: ${error.message}`)
       return { success: false, error: error.message }
-    }
-  }
-
-  /**
-   * reCAPTCHA 감지 및 해결
-   */
-  private async detectAndSolveRecaptcha(page: Page): Promise<{ found: boolean; success: boolean; error?: string }> {
-    try {
-      // reCAPTCHA iframe 확인
-      const recaptchaIframe = page.locator('iframe[src*="recaptcha"]')
-      if ((await recaptchaIframe.count()) === 0) {
-        return { found: false, success: true }
-      }
-
-      // reCAPTCHA 사이트 키 추출
-      const siteKeyElement = page.locator('[data-sitekey]')
-      if ((await siteKeyElement.count()) === 0) {
-        return { found: true, success: false, error: 'reCAPTCHA site key not found' }
-      }
-
-      const siteKey = await siteKeyElement.getAttribute('data-sitekey')
-      if (!siteKey) {
-        return { found: true, success: false, error: 'reCAPTCHA site key is empty' }
-      }
-
-      // TODO: 2captcha API 키를 설정에서 가져와야 함
-      const apiKey = 'YOUR_2CAPTCHA_API_KEY' // 실제로는 설정에서 가져와야 함
-
-      if (apiKey === 'YOUR_2CAPTCHA_API_KEY') {
-        this.logger.warn('2captcha API key not configured, skipping reCAPTCHA solving')
-        return { found: true, success: false, error: '2captcha API key not configured' }
-      }
-
-      // 2captcha로 reCAPTCHA 해결
-      const token = await this.twoCaptchaService.solveRecaptchaV2(apiKey, siteKey, page.url())
-
-      // reCAPTCHA 토큰을 페이지에 주입
-      await page.evaluate(token => {
-        const responseElement = document.querySelector('[name="g-recaptcha-response"]') as HTMLTextAreaElement
-        if (responseElement) {
-          responseElement.value = token
-          responseElement.style.display = 'block'
-        }
-      }, token)
-
-      return { found: true, success: true }
-    } catch (error) {
-      this.logger.error(`reCAPTCHA solving failed: ${error.message}`)
-      return { found: true, success: false, error: error.message }
-    }
-  }
-
-  /**
-   * DC인사이드 캡차 감지
-   */
-  private async detectDcCaptcha(page: Page): Promise<{ found: boolean }> {
-    try {
-      const captchaElement = page.locator('.captcha')
-      return { found: (await captchaElement.count()) > 0 }
-    } catch (error) {
-      return { found: false }
     }
   }
 

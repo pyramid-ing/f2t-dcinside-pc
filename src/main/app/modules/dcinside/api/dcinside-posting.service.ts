@@ -5,11 +5,11 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { Injectable, Logger } from '@nestjs/common'
-import { OpenAI } from 'openai'
 import { BrowserContext, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
+import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { PostJob } from '@prisma/client'
 import UserAgent from 'user-agents'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -122,6 +122,7 @@ export class DcinsidePostingService {
     private readonly cookieService: CookieService,
     private readonly jobLogsService: JobLogsService,
     private readonly twoCaptchaService: TwoCaptchaService,
+    private readonly dcCaptchaSolverService: DcCaptchaSolverService,
     private readonly browserManagerService: BrowserManagerService,
   ) {}
 
@@ -963,11 +964,30 @@ export class DcinsidePostingService {
 
       // 2. DC 일반 캡챠 감지 및 처리 (리캡챠와 독립적으로 확인)
       // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
-      const dcCaptchaResult = await detectDcCaptcha(page)
-      if (dcCaptchaResult.found) {
-        await this._solveDcCaptcha(page)
+      const captchaImg = page.locator('#kcaptcha')
+      const captchaCount = await captchaImg.count()
+
+      if (captchaCount > 0) {
+        this.logger.log('글쓰기용 문자 캡차 감지됨, 해결 시작')
+
+        try {
+          // 캡차 이미지 추출 (글쓰기용 selector)
+          const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, '#kcaptcha')
+
+          // 캡차 해결
+          const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
+
+          // 캡차 입력 필드에 답안 입력
+          const captchaInput = page.locator('input[name=kcaptcha_code]')
+          if ((await captchaInput.count()) > 0) {
+            await captchaInput.fill(answer)
+            this.logger.log(`글쓰기용 캡차 답안 입력 완료: ${answer}`)
+          }
+        } catch (error) {
+          throw new CustomHttpException(ErrorCode.CAPTCHA_FAILED, { message: error.message })
+        }
       } else {
-        this.logger.log('DC 일반 캡챠가 존재하지 않음')
+        this.logger.log('글쓰기용 캡차가 존재하지 않음')
       }
 
       let dialogHandler: ((dialog: any) => Promise<void>) | null = null
@@ -1327,95 +1347,5 @@ export class DcinsidePostingService {
         message: errorMessage,
       })
     }
-  }
-
-  private async _solveDcCaptcha(page: Page): Promise<void> {
-    this.logger.log('DC 일반 캡챠 해결 시작')
-
-    const captchaImg = page.locator('#kcaptcha')
-    // 캡챠 클릭해서 리프레쉬
-    await captchaImg.click()
-    await sleep(2000)
-
-    const captchaBase64 = await captchaImg.screenshot({ type: 'png' })
-    const captchaBase64String = captchaBase64.toString('base64')
-    const settings = await this.settingsService.getSettings()
-    const openAIApiKey = settings.openAIApiKey
-    if (!openAIApiKey) throw new CustomHttpException(ErrorCode.OPENAI_APIKEY_REQUIRED)
-
-    const openai = new OpenAI({ apiKey: openAIApiKey })
-
-    // OpenAI 호출 재시도 로직 (최대 3회)
-    const answer = await retry(
-      async () => {
-        const response = await openai.chat.completions.create({
-          model: 'gpt-5-mini',
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a CAPTCHA solver that ONLY responds with JSON format: { "answer": "captcha_text" }. Never provide explanations or additional text.',
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `이 이미지는 CAPTCHA입니다. 
-규칙:
-- 캡챠는 영어 소문자(a-z)와 숫자(0-9)로만 구성됩니다
-- 대문자는 절대 포함되지 않습니다
-- 특수문자나 공백은 없습니다
-- 보통 4-6자리입니다
-
-이미지를 정확히 읽고 반드시 다음 JSON 형식으로만 응답하세요:
-{ "answer": "정답" }
-
-정답은 이미지에 보이는 문자를 정확히 입력하세요.`,
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${captchaBase64String}` },
-                },
-              ],
-            },
-          ],
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'captcha_schema',
-              schema: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  answer: { type: 'string' },
-                },
-                required: ['answer'],
-              },
-              strict: true,
-            },
-          },
-        })
-
-        const responseContent = response.choices[0]?.message?.content
-        if (!responseContent) {
-          throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: 'OpenAI 응답이 비어있습니다.' })
-        }
-
-        const parsed = JSON.parse(responseContent)
-        assertOpenAIResponse(parsed)
-        return parsed.answer
-      },
-      1000,
-      3,
-      'linear',
-    )
-
-    // 기존 입력값을 지우고 새로 입력
-    await page.evaluate(() => {
-      const el = document.querySelector('input[name=kcaptcha_code]') as HTMLInputElement | null
-      if (el) el.value = ''
-    })
-    await page.fill('input[name=kcaptcha_code]', answer)
   }
 }
