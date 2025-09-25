@@ -143,6 +143,11 @@ export class CommentAutomationService {
         await passwordInput.fill(password)
       }
 
+      // 댓글 내용 검증
+      if (!comment || comment.trim() === '') {
+        throw new Error('내용을 입력하세요.')
+      }
+
       // 댓글 내용 입력
       const commentTextarea = page.locator('#memo_' + postNo)
       if ((await commentTextarea.count()) > 0) {
@@ -154,22 +159,33 @@ export class CommentAutomationService {
       // 캡차 확인
       const captchaResult = await this.handleCaptcha(page)
       if (!captchaResult.success) {
-        throw new Error('Captcha solving failed')
+        throw new Error(`자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`)
       }
 
       // 댓글 등록 버튼 클릭
       const submitButton = page.locator(`button[data-no="${postNo}"].repley_add`)
       if ((await submitButton.count()) > 0) {
-        await submitButton.click()
-        await page.waitForTimeout(3000)
+        // 댓글 등록 전에 dialog 이벤트 리스너 등록
+        let alertMessage = ''
+        const dialogHandler = async (dialog: any) => {
+          alertMessage = dialog.message()
+          this.logger.log(`Alert detected: ${alertMessage}`)
+          await dialog.accept()
+        }
+        page.on('dialog', dialogHandler)
 
-        // 댓글 등록 후 성공/실패 메시지 확인
-        await this.checkCommentSubmissionResult(page)
+        try {
+          await submitButton.click()
+          // 댓글 등록 후 성공/실패 메시지 확인
+          await this.checkCommentSubmissionResult(page, alertMessage)
+          this.logger.log(`Comment posted successfully on: ${postUrl}`)
+        } finally {
+          // 이벤트 리스너 정리
+          page.removeAllListeners('dialog')
+        }
       } else {
         throw new Error('댓글 등록 버튼을 찾을 수 없습니다')
       }
-
-      this.logger.log(`Comment posted successfully on: ${postUrl}`)
     } finally {
       await page.close()
     }
@@ -265,55 +281,64 @@ export class CommentAutomationService {
       // 닉네임 입력 실패는 치명적이지 않으므로 계속 진행
     }
   }
-
-  /**
-   * 댓글 등록 결과 확인
-   */
-  private async checkCommentSubmissionResult(page: Page): Promise<void> {
-    try {
-      // 에러 메시지 확인
-      const errorSelectors = ['.error_msg', '.fail_msg', '.alert_msg', '.warning_msg', '.notice_msg']
-
-      for (const selector of errorSelectors) {
-        const errorElement = page.locator(selector)
-        if ((await errorElement.count()) > 0) {
-          const errorText = await errorElement.textContent()
-          if (errorText && errorText.trim()) {
-            throw new Error(`댓글 등록 실패: ${errorText.trim()}`)
-          }
-        }
-      }
-
-      // 성공 메시지나 새로운 댓글이 추가되었는지 확인
-      const successIndicators = ['.success_msg', '.complete_msg', '.new_comment', '.comment_added']
-
-      let successFound = false
-      for (const selector of successIndicators) {
-        const successElement = page.locator(selector)
-        if ((await successElement.count()) > 0) {
-          successFound = true
-          break
-        }
-      }
-
-      // 성공 지표가 없어도 에러가 없으면 성공으로 간주
-      if (!successFound) {
-        this.logger.log('Comment submission completed (no explicit success message found)')
-      } else {
-        this.logger.log('Comment submission successful')
-      }
-    } catch (error) {
-      this.logger.error(`Comment submission result check failed: ${error.message}`)
-      throw error
-    }
-  }
-
   /**
    * 게시물 번호 추출
    */
   private extractPostNo(url: string): string {
     const match = url.match(/no=(\d+)/)
     return match ? match[1] : ''
+  }
+
+  /**
+   * 댓글 등록 결과 확인
+   */
+  private async checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
+    // 잠시 대기하여 alert 메시지 확인
+    await page.waitForTimeout(2000)
+
+    // 댓글 내용 없음 체크
+    if (alertMessage.includes('내용을 입력하세요')) {
+      throw new Error('내용을 입력하세요.')
+    }
+
+    // 캡차 실패 체크
+    if (alertMessage.includes('자동입력 방지코드가 일치하지 않습니다')) {
+      throw new Error('자동입력 방지코드가 일치하지 않습니다.')
+    }
+
+    // 기타 에러 메시지들
+    if (alertMessage.includes('댓글을 입력')) {
+      throw new Error('댓글을 입력해주세요.')
+    }
+
+    if (alertMessage.includes('비밀번호를 입력')) {
+      throw new Error('비밀번호를 입력해주세요.')
+    }
+
+    if (alertMessage.includes('닉네임을 입력')) {
+      throw new Error('닉네임을 입력해주세요.')
+    }
+
+    // 성공적으로 댓글이 등록되었는지 확인
+    const successIndicator = page.locator('.comment_success, .cmt_success, .success_message')
+    if ((await successIndicator.count()) > 0) {
+      this.logger.log('댓글 등록 성공 확인됨')
+      return
+    }
+
+    // 댓글 목록에 새 댓글이 추가되었는지 확인
+    const commentList = page.locator('.comment_list, .cmt_list')
+    if ((await commentList.count()) > 0) {
+      this.logger.log('댓글 목록 확인됨 - 등록 성공으로 간주')
+      return
+    }
+
+    // alert 메시지가 있었다면 에러로 처리
+    if (alertMessage) {
+      throw new Error(`댓글 등록 실패: ${alertMessage}`)
+    }
+
+    this.logger.log('댓글 등록 완료 (에러 메시지 없음)')
   }
 
   /**
