@@ -35,20 +35,9 @@ export class DcinsideCommentQueueService {
 
       this.logger.log(`Queueing comment job: ${jobId}`)
 
-      // 브라우저 매니저를 통해 브라우저 생성 및 작업 실행
-      const browserId = `comment-job-${jobId}`
-      const browser = await this.browserManagerService.getOrCreateBrowser(browserId, {
-        headless: false, // 디버깅을 위해 headless: false로 설정
-      })
-
       this.processingJobs.add(jobId)
 
-      try {
-        await this.commentAutomationService.executeCommentJob(jobId, browser)
-      } finally {
-        this.processingJobs.delete(jobId)
-        await this.browserManagerService.closeManagedBrowser(browserId)
-      }
+      await this.commentAutomationService.executeCommentJob(jobId)
     } catch (error) {
       this.logger.error(`Failed to queue comment job ${jobId}: ${error.message}`, error.stack)
       throw error

@@ -8,9 +8,10 @@ import { BrowserManagerService } from '@main/app/modules/util/browser-manager.se
 import { DcCaptchaSolverService } from '../util/dc-captcha-solver.service'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
+import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.module'
 
 @Module({
-  imports: [SettingsModule, UtilModule],
+  imports: [SettingsModule, UtilModule, JobLogsModule],
   controllers: [DcinsideCommentController],
   providers: [
     DcinsideCommentService,

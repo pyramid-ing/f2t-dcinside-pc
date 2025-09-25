@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { Page, Browser } from 'playwright'
+import { Page, BrowserContext } from 'playwright'
 import { DcinsideBaseService } from '@main/app/modules/dcinside/base/dcinside-base.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
@@ -11,9 +11,19 @@ import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
+import { JobStatus } from '@main/app/modules/dcinside/job/job.types'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
+  // 브라우저 ID 상수
+  private static readonly BROWSER_IDS = {
+    DCINSIDE_REUSE: 'dcinside',
+    COMMENT_JOB_NEW: (jobId: string) => `comment-job-new-${jobId}`,
+    PROXY: 'dcinside-comment-proxy',
+    FALLBACK: 'dcinside-comment-fallback',
+  } as const
+
   constructor(
     settingsService: SettingsService,
     cookieService: CookieService,
@@ -38,7 +48,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 댓글 자동화 작업 실행
    */
-  async executeCommentJob(jobId: string, browser: Browser): Promise<void> {
+  async executeCommentJob(jobId: string): Promise<void> {
     try {
       const commentJob = await this.prisma.commentJob.findFirst({
         where: { jobId },
@@ -54,7 +64,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       // 작업 상태를 processing으로 변경
       await this.prisma.job.update({
         where: { id: commentJob.jobId },
-        data: { status: 'processing' },
+        data: { status: JobStatus.PROCESSING },
       })
 
       const postUrls = JSON.parse(commentJob.postUrls)
@@ -64,13 +74,13 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         try {
           // 로그인 모드면 닉네임/비밀번호 입력을 생략하고, 추후 로그인 로직을 사용할 수 있도록 분기
           await this.commentOnPost(
-            browser,
             postUrl,
             commentJob.comment,
             useLogin ? null : (commentJob.nickname as any),
             useLogin ? null : (commentJob.password as any),
             useLogin ? (commentJob.loginId as any) : null,
             useLogin ? (commentJob.loginPassword as any) : null,
+            jobId,
           )
 
           // 작업 간격 대기
@@ -118,61 +128,133 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 개별 게시물에 댓글 작성
+   * 개별 게시물에 댓글 작성 (순차적 함수 호출로 가독성 향상)
    */
   private async commentOnPost(
-    browser: Browser,
     postUrl: string,
     comment: string,
     nickname: string | null,
     password: string | null,
     loginId: string | null,
     loginPassword: string | null,
+    jobId: string,
   ): Promise<void> {
-    const page = await browser.newPage()
+    const settings = await this.settingsService.getSettings()
+
+    // 1. 페이지 켜기 (브라우저 생성)
+    const { context, page, browserId } = await this._launchBrowser(jobId, settings)
 
     try {
-      await this._setupPage(page)
+      // 2. IP 변경 처리
+      await this._handleIpChange(jobId, settings)
 
-      // 로그인 처리: 페이지 생성 직후 즉시 수행
-      if (loginId && loginPassword) {
-        this.logger.log(`댓글 작업 로그인 시도: ${loginId}`)
-        const context = page.context()
-        await this.handleBrowserLogin(context, page, loginId, loginPassword)
-        this.logger.log('댓글 작업 로그인 성공')
-      } else {
-        this.logger.log('댓글 작업 비로그인 모드로 진행')
-      }
+      // 3. 로그인 처리
+      const isMember = await this._handleLogin(jobId, context, page, loginId, loginPassword)
 
+      // 4. 작업 간 딜레이
+      await this.applyTaskDelay(jobId, settings)
+
+      // 5. 댓글 작성 실행
       await this._navigateToPost(page, postUrl)
+
       // 비정상(삭제/존재하지 않음) 페이지 감지 시 현재 게시물은 건너뛰기
       const skipped = await this.checkAbnormalPage(page)
       if (skipped) {
         this.logger.warn(`삭제되었거나 존재하지 않는 게시물로 판단되어 건너뜁니다: ${postUrl}`)
         return
       }
+
       await this._validateCommentForm(page)
       const postNo = await this._extractPostNo(postUrl)
-      await this._fillCommentForm(page, postNo, comment, nickname, password)
+
+      // 댓글 폼 작성 (개별 함수로 분리)
+      await this._inputNickname(page, postNo, nickname)
+      await this._inputPassword(page, postNo, password)
+      await this._inputComment(page, postNo, comment)
+
       await this._submitCommentWithRetry(page, postNo, postUrl)
     } finally {
-      await page.close()
+      // 브라우저 종료 (신규 생성 모드일 때만)
+      if (!settings.reuseWindowBetweenTasks) {
+        await this._closeBrowser(jobId, browserId)
+      }
     }
   }
 
   /**
-   * 페이지 설정
+   * 1. 페이지 켜기 (브라우저 생성)
    */
-  private async _setupPage(page: Page): Promise<void> {
-    // User-Agent 설정
-    await page.setExtraHTTPHeaders({
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    })
+  private async _launchBrowser(
+    jobId: string,
+    settings: Settings,
+  ): Promise<{ context: BrowserContext; page: Page; browserId: string }> {
+    // 브라우저 ID 생성 (재사용 모드에 따라 결정)
+    const browserId = settings.reuseWindowBetweenTasks
+      ? DcinsideCommentAutomationService.BROWSER_IDS.DCINSIDE_REUSE
+      : DcinsideCommentAutomationService.BROWSER_IDS.COMMENT_JOB_NEW(jobId)
 
-    // IP 변경이 필요한 경우 여기서 처리
-    // TODO: IP 변경 로직 구현
-    this.logger.log('IP change requested but not implemented yet')
+    // IP 모드에 따른 브라우저 실행
+    switch (settings?.ipMode) {
+      case IpMode.PROXY:
+        const { context, page } = await this.handleProxyMode(jobId, settings, browserId)
+        return { context, page, browserId }
+
+      case IpMode.TETHERING:
+      case IpMode.NONE:
+      default:
+        if (settings.reuseWindowBetweenTasks) {
+          const { context, page } = await this.handleBrowserReuseMode(jobId, settings, browserId)
+          return { context, page, browserId }
+        } else {
+          const { context, page } = await this.handleBrowserNewMode(jobId, settings, browserId)
+          return { context, page, browserId }
+        }
+    }
+  }
+
+  /**
+   * 2. IP 변경 처리
+   */
+  private async _handleIpChange(jobId: string, settings: Settings): Promise<void> {
+    if (settings?.ipMode === IpMode.TETHERING) {
+      await this.handleTetheringMode(jobId, settings)
+    }
+    // 프록시 모드는 브라우저 생성 시 이미 처리됨
+  }
+
+  /**
+   * 3. 로그인 처리
+   */
+  private async _handleLogin(
+    jobId: string,
+    context: BrowserContext,
+    page: Page,
+    loginId: string | null,
+    loginPassword: string | null,
+  ): Promise<boolean> {
+    let isMember = false
+    if (loginId && loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${loginId}`)
+      await this.handleBrowserLogin(context, page, loginId, loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      isMember = true
+    } else {
+      this.logger.log(`비로그인 모드로 진행`)
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+    }
+    return isMember
+  }
+
+  /**
+   * 브라우저 종료
+   */
+  private async _closeBrowser(jobId: string, browserId: string): Promise<void> {
+    try {
+      await this.browserManagerService.closeManagedBrowser(browserId)
+      await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+    } catch (error) {
+      this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
+    }
   }
 
   /**
@@ -218,31 +300,81 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 댓글 폼 작성
+   * 1. 닉네임 입력
    */
-  private async _fillCommentForm(
-    page: Page,
-    postNo: string,
-    comment: string,
-    nickname: string | null,
-    password: string | null,
-  ): Promise<void> {
-    // 댓글 내용 검증
-    if (!comment || comment.trim() === '') {
-      throw new Error('내용을 입력하세요.')
+  private async _inputNickname(page: Page, postNo: string, nickname: string | null): Promise<void> {
+    if (!nickname || nickname.trim() === '') {
+      return
     }
 
-    // 닉네임 입력 처리
-    if (nickname && nickname.trim() !== '') {
-      await this._handleNicknameInput(page, postNo, nickname)
-    }
+    try {
+      // 갤닉네임이 있는지 확인
+      const gallNickname = await page.$(`#gall_nick_name_${postNo}`)
+      if (gallNickname) {
+        const gallNickValue = await gallNickname.inputValue()
+        this.logger.log(`Gall nickname found: "${gallNickValue}"`)
 
-    // 비밀번호 입력
+        // readonly 속성을 여러 방법으로 확인
+        const hasReadonlyAttr = await gallNickname.evaluate(el => el.hasAttribute('readonly'))
+
+        // 갤닉네임이 있고 readonly인 경우 X 버튼 클릭
+        if (gallNickValue && hasReadonlyAttr) {
+          this.logger.log('Gall nickname is readonly, clicking X button')
+          const deleteButton = await page.$(`#btn_gall_nick_name_x_${postNo}`)
+          if (deleteButton) {
+            await deleteButton.click()
+            await sleep(500)
+            this.logger.log('X button clicked successfully')
+          } else {
+            this.logger.warn('X button not found')
+          }
+        } else {
+          this.logger.log('Gall nickname is not readonly, skipping X button click')
+        }
+      }
+
+      // 사용자 닉네임 입력 (X 버튼 클릭 후 잠시 대기)
+      await sleep(300)
+
+      const userNicknameInput = page.locator(`#name_${postNo}`)
+      if ((await userNicknameInput.count()) > 0) {
+        await userNicknameInput.fill(nickname)
+        this.logger.log(`User nickname filled: ${nickname}`)
+      } else {
+        // 사용자 닉네임 필드가 없으면 갤닉네임 필드에 직접 입력 시도
+        const gallNicknameInput = page.locator(`#gall_nick_name_${postNo}`)
+        if ((await gallNicknameInput.count()) > 0) {
+          await gallNicknameInput.fill(nickname)
+          this.logger.log(`Gall nickname filled: ${nickname}`)
+        } else {
+          this.logger.warn('No nickname input field found')
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Nickname input handling failed: ${error.message}`)
+      // 닉네임 입력 실패는 치명적이지 않으므로 계속 진행
+    }
+  }
+
+  /**
+   * 2. 비밀번호 입력
+   */
+  private async _inputPassword(page: Page, postNo: string, password: string | null): Promise<void> {
     if (password && password.trim() !== '') {
       const passwordInput = page.locator('#password_' + postNo)
       if ((await passwordInput.count()) > 0) {
         await passwordInput.fill(password)
       }
+    }
+  }
+
+  /**
+   * 3. 댓글 내용 입력
+   */
+  private async _inputComment(page: Page, postNo: string, comment: string): Promise<void> {
+    // 댓글 내용 검증
+    if (!comment || comment.trim() === '') {
+      throw new Error('내용을 입력하세요.')
     }
 
     // 댓글 내용 입력
@@ -323,59 +455,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 닉네임 입력 처리 (갤닉네임과 사용자 닉네임 구분)
-   */
-  private async _handleNicknameInput(page: Page, postNo: string, nickname: string): Promise<void> {
-    try {
-      // 갤닉네임이 있는지 확인
-      const gallNickname = await page.$(`#gall_nick_name_${postNo}`)
-      if (gallNickname) {
-        const gallNickValue = await gallNickname.inputValue()
-        this.logger.log(`Gall nickname found: "${gallNickValue}"`)
-
-        // readonly 속성을 여러 방법으로 확인
-        const hasReadonlyAttr = await gallNickname.evaluate(el => el.hasAttribute('readonly'))
-
-        // 갤닉네임이 있고 readonly인 경우 X 버튼 클릭
-        if (gallNickValue && hasReadonlyAttr) {
-          this.logger.log('Gall nickname is readonly, clicking X button')
-          const deleteButton = await page.$(`#btn_gall_nick_name_x_${postNo}`)
-          if (deleteButton) {
-            await deleteButton.click()
-            await sleep(500)
-            this.logger.log('X button clicked successfully')
-          } else {
-            this.logger.warn('X button not found')
-          }
-        } else {
-          this.logger.log('Gall nickname is not readonly, skipping X button click')
-        }
-      }
-
-      // 사용자 닉네임 입력 (X 버튼 클릭 후 잠시 대기)
-      await sleep(300)
-
-      const userNicknameInput = page.locator(`#name_${postNo}`)
-      if ((await userNicknameInput.count()) > 0) {
-        await userNicknameInput.fill(nickname)
-        this.logger.log(`User nickname filled: ${nickname}`)
-      } else {
-        // 사용자 닉네임 필드가 없으면 갤닉네임 필드에 직접 입력 시도
-        const gallNicknameInput = page.locator(`#gall_nick_name_${postNo}`)
-        if ((await gallNicknameInput.count()) > 0) {
-          await gallNicknameInput.fill(nickname)
-          this.logger.log(`Gall nickname filled: ${nickname}`)
-        } else {
-          this.logger.warn('No nickname input field found')
-        }
-      }
-    } catch (error) {
-      this.logger.warn(`Nickname input handling failed: ${error.message}`)
-      // 닉네임 입력 실패는 치명적이지 않으므로 계속 진행
-    }
-  }
-
-  /**
    * 댓글 등록 결과 확인
    */
   private async _checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
@@ -403,20 +482,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
 
     if (alertMessage.includes('닉네임을 입력')) {
       throw new Error('닉네임을 입력해주세요.')
-    }
-
-    // 성공적으로 댓글이 등록되었는지 확인
-    const successIndicator = page.locator('.comment_success, .cmt_success, .success_message')
-    if ((await successIndicator.count()) > 0) {
-      this.logger.log('댓글 등록 성공 확인됨')
-      return
-    }
-
-    // 댓글 목록에 새 댓글이 추가되었는지 확인
-    const commentList = page.locator('.comment_list, .cmt_list')
-    if ((await commentList.count()) > 0) {
-      this.logger.log('댓글 목록 확인됨 - 등록 성공으로 간주')
-      return
     }
 
     // alert 메시지가 있었다면 에러로 처리
