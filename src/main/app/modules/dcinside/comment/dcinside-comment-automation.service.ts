@@ -9,6 +9,8 @@ import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captc
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
+import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
+import { TetheringService } from '@main/app/modules/util/tethering.service'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -18,9 +20,19 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     twoCaptchaService: TwoCaptchaService,
     dcCaptchaSolverService: DcCaptchaSolverService,
     browserManagerService: BrowserManagerService,
-    private prisma: PrismaService,
+    tetheringService: TetheringService,
+    jobLogsService: JobLogsService,
+    private readonly prisma: PrismaService,
   ) {
-    super(settingsService, cookieService, twoCaptchaService, dcCaptchaSolverService, browserManagerService)
+    super(
+      settingsService,
+      cookieService,
+      twoCaptchaService,
+      dcCaptchaSolverService,
+      browserManagerService,
+      tetheringService,
+      jobLogsService,
+    )
   }
 
   /**
