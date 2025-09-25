@@ -47,6 +47,7 @@ import {
   JOB_TYPE_OPTIONS,
   JobStatus,
   JobType,
+  JOB_TYPE,
 } from '@render/api/type'
 import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
 import { BulkActionType } from '@render/types/bulk-action.enum'
@@ -291,7 +292,7 @@ const JobTable: React.FC = () => {
   const [data, setData] = useState<PostJob[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [typeFilter, setTypeFilter] = useState<JobType | ''>('')
+  const [typeFilter, setTypeFilter] = useState<JobType | ''>(JOB_TYPE.POST)
   const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -457,6 +458,7 @@ const JobTable: React.FC = () => {
     try {
       const res = await getJobs({
         status: statusFilter || undefined,
+        type: typeFilter || undefined,
         search: searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
@@ -1118,7 +1120,7 @@ const JobTable: React.FC = () => {
                   borderRadius: '4px',
                 }}
               >
-                {extractGalleryId(row.postJob.galleryUrl)}
+                {extractGalleryId(row.postJob?.galleryUrl || (url as any) || '')}
               </span>
             ),
           },
@@ -1234,9 +1236,9 @@ const JobTable: React.FC = () => {
             sorter: true,
             align: 'center',
             render: (text: string, row) =>
-              row.postJob.headtext ? (
+              row.postJob?.headtext ? (
                 <Tag color="blue" style={{ fontSize: '11px' }}>
-                  {row.postJob.headtext}
+                  {row.postJob?.headtext}
                 </Tag>
               ) : (
                 '-'
