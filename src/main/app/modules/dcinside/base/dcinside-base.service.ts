@@ -4,13 +4,19 @@ import { CookieService } from '@main/app/modules/util/cookie.service'
 import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { BrowserManagerService, getProxyByMethod } from '@main/app/modules/util/browser-manager.service'
-import { IpMode } from '@main/app/modules/settings/settings.types'
+import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserContext, Page } from 'playwright'
 import UserAgent from 'user-agents'
 import { sleep } from '@main/app/utils/sleep'
 import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
+import { Permission } from '@main/app/modules/auth/auth.guard'
+import { getExternalIp } from '@main/app/utils/ip'
+import { assertPermission } from '@main/app/utils/permission.assert'
 
 export function assertValidGalleryUrl(url: string): asserts url is string {
   const urlMatch = url.match(/[?&]id=([^&]+)/)
@@ -61,6 +67,8 @@ export abstract class DcinsideBaseService {
     protected readonly twoCaptchaService: TwoCaptchaService,
     protected readonly dcCaptchaSolverService: DcCaptchaSolverService,
     protected readonly browserManagerService: BrowserManagerService,
+    protected readonly tetheringService: TetheringService,
+    protected readonly jobLogsService: JobLogsService,
   ) {
     this.logger = new Logger(this.constructor.name)
   }
@@ -449,5 +457,163 @@ export abstract class DcinsideBaseService {
       // 팝업이 나타나지 않으면 null 반환 (정상 상황)
       return null
     }
+  }
+
+  /**
+   * 테더링 모드 처리
+   */
+  public async handleTetheringMode(jobId: string, settings: Settings): Promise<void> {
+    await this.checkPermission(Permission.TETHERING)
+
+    // IP 변경이 필요한지 확인
+    const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
+
+    if (shouldChange) {
+      try {
+        const prev = this.tetheringService.getCurrentIp()
+        await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
+        const changed = await this.tetheringService.checkIpChanged(prev)
+        await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
+      } catch (e: any) {
+        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
+        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+      }
+    } else {
+      await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)
+    }
+  }
+
+  /**
+   * 프록시 모드 처리
+   */
+  public async handleProxyMode(
+    jobId: string,
+    settings: Settings,
+    postJob: any,
+    browserId: string,
+  ): Promise<{ browser: any; context: BrowserContext; page: Page; proxyInfo: any }> {
+    const { browser, context, page, proxyInfo } = await this.launch({
+      browserId,
+      headless: !settings.showBrowserWindow,
+      reuseExisting: settings.reuseWindowBetweenTasks,
+      respectProxy: true,
+    })
+
+    // 로그인 처리 (launch 직후)
+    if (postJob.loginId && postJob.loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+    }
+
+    // 프록시 정보 로깅
+    if (proxyInfo) {
+      const proxyStr = proxyInfo.id
+        ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
+        : `${proxyInfo.ip}:${proxyInfo.port}`
+      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+    }
+
+    // 실제 외부 IP 로깅
+    await this.logExternalIp(jobId, page)
+
+    return { browser, context, page, proxyInfo }
+  }
+
+  /**
+   * 브라우저 재사용 모드 처리
+   */
+  public async handleBrowserReuseMode(
+    jobId: string,
+    settings: Settings,
+    postJob: any,
+    browserId: string,
+  ): Promise<{ context: BrowserContext; page: Page }> {
+    const { context, page } = await this.launch({
+      browserId,
+      headless: !settings.showBrowserWindow,
+      reuseExisting: true,
+      respectProxy: false,
+    })
+
+    // 로그인 처리 (launch 직후)
+    if (postJob.loginId && postJob.loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+    }
+
+    // 실제 외부 IP 로깅
+    await this.logExternalIp(jobId, page)
+
+    return { context, page }
+  }
+
+  /**
+   * 브라우저 신규 생성 모드 처리
+   */
+  public async handleBrowserNewMode(
+    jobId: string,
+    settings: Settings,
+    postJob: any,
+    browserId: string,
+  ): Promise<{ context: BrowserContext; page: Page }> {
+    const { context, page } = await this.launch({
+      browserId,
+      headless: !settings.showBrowserWindow,
+      reuseExisting: false,
+      respectProxy: false,
+    })
+
+    // 로그인 처리 (launch 직후)
+    if (postJob.loginId && postJob.loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+    }
+
+    // 실제 외부 IP 로깅
+    await this.logExternalIp(jobId, page)
+
+    return { context, page }
+  }
+
+  /**
+   * 외부 IP 로깅
+   */
+  public async logExternalIp(jobId: string, target: Page): Promise<void> {
+    try {
+      const externalIp = await getExternalIp(target)
+      await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+    } catch (e) {
+      await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  /**
+   * 작업 간 딜레이 적용
+   */
+  public async applyTaskDelay(jobId: string, settings: Settings): Promise<void> {
+    if (settings?.taskDelay > 0) {
+      await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
+      await sleep(settings.taskDelay * 1000)
+    }
+  }
+
+  /**
+   * 권한 확인
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+    const licenseCache = settings.licenseCache
+    assertPermission(licenseCache, permission)
   }
 }
