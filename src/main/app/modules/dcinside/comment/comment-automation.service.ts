@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Page, Browser } from 'playwright'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
+import { retry } from '@main/app/utils/retry'
 
 @Injectable()
 export class CommentAutomationService {
@@ -42,7 +43,7 @@ export class CommentAutomationService {
 
           // 작업 간격 대기
           if (commentJob.taskDelay > 0) {
-            await this.sleep(commentJob.taskDelay * 1000)
+            await this._sleep(commentJob.taskDelay * 1000)
           }
         } catch (error) {
           this.logger.error(`Failed to comment on post ${postUrl}: ${error.message}`)
@@ -97,104 +98,154 @@ export class CommentAutomationService {
     const page = await browser.newPage()
 
     try {
-      // User-Agent 설정
-      await page.setExtraHTTPHeaders({
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      })
-
-      // IP 변경이 필요한 경우 여기서 처리
-      // TODO: IP 변경 로직 구현
-      this.logger.log('IP change requested but not implemented yet')
-
-      // 게시물 페이지로 이동
-      await page.goto(postUrl, { waitUntil: 'networkidle' })
-
-      // 댓글 작성 폼 찾기
-      const commentForm = page.locator('.cmt_write_box')
-      if ((await commentForm.count()) === 0) {
-        // 댓글 쓰기가 불가능한 게시판인지 확인
-        const commentDisabledMessage = page.locator('.comment_disabled, .cmt_disabled, .no_comment')
-        if ((await commentDisabledMessage.count()) > 0) {
-          throw new Error('댓글쓰기가 불가능한 게시판입니다')
-        }
-
-        // 로그인이 필요한 경우인지 확인
-        const loginRequiredMessage = page.locator('.login_required, .need_login')
-        if ((await loginRequiredMessage.count()) > 0) {
-          throw new Error('댓글 작성에 로그인이 필요합니다')
-        }
-
-        throw new Error('댓글 작성 폼을 찾을 수 없습니다')
-      }
-
-      // 게시물 번호 추출
-      const postNo = this.extractPostNo(postUrl)
-      if (!postNo) {
-        throw new Error('게시물 번호를 찾을 수 없습니다')
-      }
-
-      // 닉네임 입력 처리
-      await this.handleNicknameInput(page, postNo, nickname)
-
-      // 비밀번호 입력
-      const passwordInput = page.locator('#password_' + postNo)
-      if ((await passwordInput.count()) > 0) {
-        await passwordInput.fill(password)
-      }
-
-      // 댓글 내용 검증
-      if (!comment || comment.trim() === '') {
-        throw new Error('내용을 입력하세요.')
-      }
-
-      // 댓글 내용 입력
-      const commentTextarea = page.locator('#memo_' + postNo)
-      if ((await commentTextarea.count()) > 0) {
-        await commentTextarea.fill(comment)
-      } else {
-        throw new Error('댓글 입력 필드를 찾을 수 없습니다')
-      }
-
-      // 캡차 확인
-      const captchaResult = await this.handleCaptcha(page)
-      if (!captchaResult.success) {
-        throw new Error(`자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`)
-      }
-
-      // 댓글 등록 버튼 클릭
-      const submitButton = page.locator(`button[data-no="${postNo}"].repley_add`)
-      if ((await submitButton.count()) > 0) {
-        // 댓글 등록 전에 dialog 이벤트 리스너 등록
-        let alertMessage = ''
-        const dialogHandler = async (dialog: any) => {
-          alertMessage = dialog.message()
-          this.logger.log(`Alert detected: ${alertMessage}`)
-          await dialog.accept()
-        }
-        page.on('dialog', dialogHandler)
-
-        try {
-          await submitButton.click()
-          // 댓글 등록 후 성공/실패 메시지 확인
-          await this.checkCommentSubmissionResult(page, alertMessage)
-          this.logger.log(`Comment posted successfully on: ${postUrl}`)
-        } finally {
-          // 이벤트 리스너 정리
-          page.removeAllListeners('dialog')
-        }
-      } else {
-        throw new Error('댓글 등록 버튼을 찾을 수 없습니다')
-      }
+      await this._setupPage(page)
+      await this._navigateToPost(page, postUrl)
+      await this._validateCommentForm(page)
+      const postNo = await this._extractPostNo(postUrl)
+      await this._fillCommentForm(page, postNo, comment, nickname, password)
+      await this._submitCommentWithRetry(page, postNo, postUrl)
     } finally {
       await page.close()
     }
   }
 
   /**
+   * 페이지 설정
+   */
+  private async _setupPage(page: Page): Promise<void> {
+    // User-Agent 설정
+    await page.setExtraHTTPHeaders({
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    })
+
+    // IP 변경이 필요한 경우 여기서 처리
+    // TODO: IP 변경 로직 구현
+    this.logger.log('IP change requested but not implemented yet')
+  }
+
+  /**
+   * 게시물 페이지로 이동
+   */
+  private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
+    await page.goto(postUrl, { waitUntil: 'networkidle' })
+  }
+
+  /**
+   * 댓글 작성 폼 검증
+   */
+  private async _validateCommentForm(page: Page): Promise<void> {
+    const commentForm = page.locator('.cmt_write_box')
+    if ((await commentForm.count()) === 0) {
+      // 댓글 쓰기가 불가능한 게시판인지 확인
+      const commentDisabledMessage = page.locator('.comment_disabled, .cmt_disabled, .no_comment')
+      if ((await commentDisabledMessage.count()) > 0) {
+        throw new Error('댓글쓰기가 불가능한 게시판입니다')
+      }
+
+      // 로그인이 필요한 경우인지 확인
+      const loginRequiredMessage = page.locator('.login_required, .need_login')
+      if ((await loginRequiredMessage.count()) > 0) {
+        throw new Error('댓글 작성에 로그인이 필요합니다')
+      }
+
+      throw new Error('댓글 작성 폼을 찾을 수 없습니다')
+    }
+  }
+
+  /**
+   * 게시물 번호 추출
+   */
+  private async _extractPostNo(postUrl: string): Promise<string> {
+    const match = postUrl.match(/no=(\d+)/)
+    const postNo = match ? match[1] : ''
+
+    if (!postNo) {
+      throw new Error('게시물 번호를 찾을 수 없습니다')
+    }
+    return postNo
+  }
+
+  /**
+   * 댓글 폼 작성
+   */
+  private async _fillCommentForm(
+    page: Page,
+    postNo: string,
+    comment: string,
+    nickname: string,
+    password: string,
+  ): Promise<void> {
+    // 댓글 내용 검증
+    if (!comment || comment.trim() === '') {
+      throw new Error('내용을 입력하세요.')
+    }
+
+    // 닉네임 입력 처리
+    await this._handleNicknameInput(page, postNo, nickname)
+
+    // 비밀번호 입력
+    const passwordInput = page.locator('#password_' + postNo)
+    if ((await passwordInput.count()) > 0) {
+      await passwordInput.fill(password)
+    }
+
+    // 댓글 내용 입력
+    const commentTextarea = page.locator('#memo_' + postNo)
+    if ((await commentTextarea.count()) > 0) {
+      await commentTextarea.fill(comment)
+    } else {
+      throw new Error('댓글 입력 필드를 찾을 수 없습니다')
+    }
+  }
+
+  /**
+   * 댓글 등록 (재시도 포함)
+   */
+  private async _submitCommentWithRetry(page: Page, postNo: string, postUrl: string): Promise<void> {
+    await retry(
+      async () => {
+        // 캡차 확인
+        const captchaResult = await this._handleCaptcha(page)
+        if (!captchaResult.success) {
+          throw new Error(`자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`)
+        }
+
+        // 댓글 등록 버튼 클릭
+        const submitButton = page.locator(`button[data-no="${postNo}"].repley_add`)
+        if ((await submitButton.count()) > 0) {
+          // 댓글 등록 전에 dialog 이벤트 리스너 등록
+          let alertMessage = ''
+          const dialogHandler = async (dialog: any) => {
+            alertMessage = dialog.message()
+            this.logger.log(`Alert detected: ${alertMessage}`)
+            await dialog.accept()
+          }
+          page.on('dialog', dialogHandler)
+
+          try {
+            await submitButton.click()
+            // 댓글 등록 후 성공/실패 메시지 확인
+            await this._checkCommentSubmissionResult(page, alertMessage)
+            this.logger.log(`Comment posted successfully on: ${postUrl}`)
+          } finally {
+            // 이벤트 리스너 정리
+            page.removeAllListeners('dialog')
+          }
+        } else {
+          throw new Error('댓글 등록 버튼을 찾을 수 없습니다')
+        }
+      },
+      2000, // 2초 간격
+      3, // 최대 3회 재시도
+      'linear', // 선형 백오프
+    )
+  }
+
+  /**
    * 캡차 처리
    */
-  private async handleCaptcha(page: Page): Promise<{ success: boolean; error?: string }> {
+  private async _handleCaptcha(page: Page): Promise<{ success: boolean; error?: string }> {
     try {
       // 댓글용 캡차 감지 (id가 kcaptcha_로 시작하는 요소 확인)
       const captchaElement = page.locator('.cmt_write_box [id^="kcaptcha_"]')
@@ -232,7 +283,7 @@ export class CommentAutomationService {
   /**
    * 닉네임 입력 처리 (갤닉네임과 사용자 닉네임 구분)
    */
-  private async handleNicknameInput(page: Page, postNo: string, nickname: string): Promise<void> {
+  private async _handleNicknameInput(page: Page, postNo: string, nickname: string): Promise<void> {
     try {
       // 갤닉네임이 있는지 확인
       const gallNickname = await page.$(`#gall_nick_name_${postNo}`)
@@ -281,18 +332,11 @@ export class CommentAutomationService {
       // 닉네임 입력 실패는 치명적이지 않으므로 계속 진행
     }
   }
-  /**
-   * 게시물 번호 추출
-   */
-  private extractPostNo(url: string): string {
-    const match = url.match(/no=(\d+)/)
-    return match ? match[1] : ''
-  }
 
   /**
    * 댓글 등록 결과 확인
    */
-  private async checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
+  private async _checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
     // 잠시 대기하여 alert 메시지 확인
     await page.waitForTimeout(2000)
 
@@ -344,7 +388,7 @@ export class CommentAutomationService {
   /**
    * 지연 함수
    */
-  private sleep(ms: number): Promise<void> {
+  private _sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
