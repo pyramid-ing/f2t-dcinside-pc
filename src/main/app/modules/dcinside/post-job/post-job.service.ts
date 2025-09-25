@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
-import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
+import { DcinsidePostingService } from '@main/app/modules/dcinside/posting/dcinside-posting.service'
 import { BrowserContext, Page } from 'playwright'
 import { Job, PostJob } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'

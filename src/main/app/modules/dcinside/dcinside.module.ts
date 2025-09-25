@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common'
 import { RouterModule } from '@nestjs/core'
-import { DcinsideApiModule } from './api/api.module'
 import { DcinsideWorkflowModule } from './workflow/workflow.module'
 import { JobModule } from './job/job.module'
-import { CommentModule } from './comment/comment.module'
+import { DcinsideCommentModule } from 'src/main/app/modules/dcinside/comment/dcinsideCommentModule'
+import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinside-posting.module'
 
 @Module({
   imports: [
@@ -11,16 +11,16 @@ import { CommentModule } from './comment/comment.module'
       {
         path: 'dcinside',
         children: [
-          { path: 'api', module: DcinsideApiModule },
+          { path: 'posting', module: DcinsidePostingModule },
           { path: 'workflow', module: DcinsideWorkflowModule },
-          { path: 'comment', module: CommentModule },
+          { path: 'comment', module: DcinsideCommentModule },
         ],
       },
     ]),
-    DcinsideApiModule,
+    DcinsidePostingModule,
     DcinsideWorkflowModule,
     JobModule,
-    CommentModule,
+    DcinsideCommentModule,
   ],
 })
 export class DcinsideModule {}

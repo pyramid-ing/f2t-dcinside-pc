@@ -1,19 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Page, Browser } from 'playwright'
-import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
+import { DcinsideBaseService } from '@main/app/modules/dcinside/base/dcinside-base.service'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { CookieService } from '@main/app/modules/util/cookie.service'
+import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
-import { retry } from '@main/app/utils/retry'
+import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 
 @Injectable()
-export class CommentAutomationService {
-  private readonly logger = new Logger(CommentAutomationService.name)
-
+export class DcinsideCommentAutomationService extends DcinsideBaseService {
   constructor(
+    settingsService: SettingsService,
+    cookieService: CookieService,
+    twoCaptchaService: TwoCaptchaService,
+    dcCaptchaSolverService: DcCaptchaSolverService,
+    browserManagerService: BrowserManagerService,
     private prisma: PrismaService,
-    private dcCaptchaSolverService: DcCaptchaSolverService,
-    private postingService: DcinsidePostingService,
-  ) {}
+  ) {
+    super(settingsService, cookieService, twoCaptchaService, dcCaptchaSolverService, browserManagerService)
+  }
 
   /**
    * 댓글 자동화 작업 실행
@@ -55,7 +61,7 @@ export class CommentAutomationService {
 
           // 작업 간격 대기
           if (commentJob.taskDelay > 0) {
-            await this._sleep(commentJob.taskDelay * 1000)
+            await this.sleep(commentJob.taskDelay * 1000)
           }
         } catch (error) {
           this.logger.error(`Failed to comment on post ${postUrl}: ${error.message}`)
@@ -118,7 +124,7 @@ export class CommentAutomationService {
       if (loginId && loginPassword) {
         this.logger.log(`댓글 작업 로그인 시도: ${loginId}`)
         const context = page.context()
-        await this.postingService.handleBrowserLogin(context, page, loginId, loginPassword)
+        await this.handleBrowserLogin(context, page, loginId, loginPassword)
         this.logger.log('댓글 작업 로그인 성공')
       } else {
         this.logger.log('댓글 작업 비로그인 모드로 진행')
@@ -126,7 +132,7 @@ export class CommentAutomationService {
 
       await this._navigateToPost(page, postUrl)
       // 비정상(삭제/존재하지 않음) 페이지 감지 시 현재 게시물은 건너뛰기
-      const skipped = await this._checkAbnormalPage(page)
+      const skipped = await this.checkAbnormalPage(page)
       if (skipped) {
         this.logger.warn(`삭제되었거나 존재하지 않는 게시물로 판단되어 건너뜁니다: ${postUrl}`)
         return
@@ -160,46 +166,6 @@ export class CommentAutomationService {
    */
   private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
     await page.goto(postUrl, { waitUntil: 'networkidle' })
-  }
-
-  /**
-   * 비정상(삭제/존재하지 않음) 페이지 감지
-   * true를 반환하면 해당 게시물 처리를 건너뛴다.
-   */
-  private async _checkAbnormalPage(page: Page): Promise<boolean> {
-    const abnormalInfo = await page.evaluate(() => {
-      const container = document.querySelector('.box_infotxt.delet') as HTMLElement | null
-      if (!container) return null
-
-      const texts: string[] = []
-      const strong = container.querySelector('strong') as HTMLElement | null
-      if (strong?.textContent) texts.push(strong.textContent.trim())
-
-      const paragraphs = Array.from(container.querySelectorAll('p')) as HTMLElement[]
-      for (const p of paragraphs) {
-        if (p.textContent) texts.push(p.textContent.trim())
-      }
-
-      const combined = texts.join(' ')
-      return { combined, texts }
-    })
-
-    if (!abnormalInfo) return false
-
-    const combined = abnormalInfo.combined || ''
-
-    const deletionPatterns = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
-    const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다']
-
-    const deletionDetected = deletionPatterns.some(p => combined.includes(p))
-    const redirectDetected = redirectHints.some(p => combined.includes(p))
-
-    if (deletionDetected || redirectDetected) {
-      this.logger.warn(`비정상 페이지 감지: ${combined}`)
-      return true
-    }
-
-    return false
   }
 
   /**
@@ -278,7 +244,7 @@ export class CommentAutomationService {
    * 댓글 등록 (재시도 포함)
    */
   private async _submitCommentWithRetry(page: Page, postNo: string, postUrl: string): Promise<void> {
-    await retry(
+    await this.retry(
       async () => {
         // 캡차 확인
         const captchaResult = await this._handleCaptcha(page)
@@ -329,21 +295,8 @@ export class CommentAutomationService {
       if (captchaCount > 0) {
         this.logger.log('댓글용 문자 캡차 감지됨, 해결 시작')
 
-        // 캡차 이미지 추출 (댓글용 동적 selector)
-        const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(
-          page,
-          '.cmt_write_box [id^="kcaptcha_"]',
-        )
-
-        // 캡차 해결
-        const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
-
-        // 캡차 입력 필드에 답안 입력 (id가 code_로 시작하는 요소)
-        const captchaInput = page.locator('.cmt_write_box [id^="code_"]')
-        if ((await captchaInput.count()) > 0) {
-          await captchaInput.fill(answer)
-          this.logger.log(`댓글용 캡차 답안 입력 완료: ${answer}`)
-        }
+        // 부모 클래스의 solveDcCaptcha 메서드 사용
+        await this.solveDcCaptcha(page, '.cmt_write_box [id^="kcaptcha_"]', '.cmt_write_box [id^="code_"]')
       } else {
         this.logger.log('댓글용 캡차가 감지되지 않음')
       }
@@ -375,7 +328,7 @@ export class CommentAutomationService {
           const deleteButton = await page.$(`#btn_gall_nick_name_x_${postNo}`)
           if (deleteButton) {
             await deleteButton.click()
-            await page.waitForTimeout(500)
+            await this.sleep(500)
             this.logger.log('X button clicked successfully')
           } else {
             this.logger.warn('X button not found')
@@ -386,7 +339,7 @@ export class CommentAutomationService {
       }
 
       // 사용자 닉네임 입력 (X 버튼 클릭 후 잠시 대기)
-      await page.waitForTimeout(300)
+      await this.sleep(300)
 
       const userNicknameInput = page.locator(`#name_${postNo}`)
       if ((await userNicknameInput.count()) > 0) {
@@ -413,7 +366,7 @@ export class CommentAutomationService {
    */
   private async _checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
     // 잠시 대기하여 alert 메시지 확인
-    await page.waitForTimeout(2000)
+    await this.sleep(2000)
 
     // 댓글 내용 없음 체크
     if (alertMessage.includes('내용을 입력하세요')) {
@@ -458,12 +411,5 @@ export class CommentAutomationService {
     }
 
     this.logger.log('댓글 등록 완료 (에러 메시지 없음)')
-  }
-
-  /**
-   * 지연 함수
-   */
-  private _sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }

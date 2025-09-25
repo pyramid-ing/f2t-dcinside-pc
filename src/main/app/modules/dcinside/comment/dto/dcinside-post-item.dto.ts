@@ -1,4 +1,4 @@
-export class PostItemDto {
+export class DcinsidePostItemDto {
   id: string
   title: string
   url: string
@@ -7,7 +7,7 @@ export class PostItemDto {
 }
 
 export class PostSearchResponseDto {
-  posts: PostItemDto[]
+  posts: DcinsidePostItemDto[]
   totalCount: number
   currentPage: number
   hasNextPage: boolean

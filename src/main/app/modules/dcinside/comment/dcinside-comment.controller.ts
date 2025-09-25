@@ -1,18 +1,21 @@
 import { Controller, Post, Get, Body, Param, Patch, ValidationPipe } from '@nestjs/common'
-import { CommentService } from './comment.service'
-import { CommentSearchDto } from './dto/comment-search.dto'
-import { CreateCommentJobDto, CommentJobResponseDto } from './dto/comment-job.dto'
-import { PostSearchResponseDto } from './dto/post-item.dto'
+import { DcinsideCommentService } from 'src/main/app/modules/dcinside/comment/dcinside-comment.service'
+import { DcinsideCommentSearchDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
+import {
+  CreateCommentJobDto,
+  CommentJobResponseDto,
+} from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-job.dto'
+import { PostSearchResponseDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 
 @Controller()
-export class CommentController {
-  constructor(private readonly commentService: CommentService) {}
+export class DcinsideCommentController {
+  constructor(private readonly commentService: DcinsideCommentService) {}
 
   /**
    * 게시물 검색
    */
   @Post('search')
-  async searchPosts(@Body(ValidationPipe) searchDto: CommentSearchDto): Promise<PostSearchResponseDto> {
+  async searchPosts(@Body(ValidationPipe) searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     return this.commentService.searchPosts(searchDto)
   }
 

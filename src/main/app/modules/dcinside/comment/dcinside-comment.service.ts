@@ -1,25 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { CommentQueueService } from './comment-queue.service'
-import { CommentSearchDto, SortType } from './dto/comment-search.dto'
-import { CreateCommentJobDto, CommentJobResponseDto } from './dto/comment-job.dto'
-import { PostItemDto, PostSearchResponseDto } from './dto/post-item.dto'
+import { DcinsideCommentQueueService } from 'src/main/app/modules/dcinside/comment/dcinside-comment-queue.service'
+import {
+  DcinsideCommentSearchDto,
+  SortType,
+} from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
+import {
+  CreateCommentJobDto,
+  CommentJobResponseDto,
+} from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-job.dto'
+import {
+  DcinsidePostItemDto,
+  PostSearchResponseDto,
+} from 'src/main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 import * as cheerio from 'cheerio'
 import axios from 'axios'
 
 @Injectable()
-export class CommentService {
-  private readonly logger = new Logger(CommentService.name)
+export class DcinsideCommentService {
+  private readonly logger = new Logger(DcinsideCommentService.name)
 
   constructor(
     private prisma: PrismaService,
-    private commentQueueService: CommentQueueService,
+    private commentQueueService: DcinsideCommentQueueService,
   ) {}
 
   /**
    * 디시인사이드 게시물 검색
    */
-  async searchPosts(searchDto: CommentSearchDto): Promise<PostSearchResponseDto> {
+  async searchPosts(searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     try {
       const { keyword, sortType = SortType.NEW, page = 1 } = searchDto
 
@@ -49,7 +58,7 @@ export class CommentService {
       })
 
       const $ = cheerio.load(response.data)
-      const posts: PostItemDto[] = []
+      const posts: DcinsidePostItemDto[] = []
 
       // 게시물 목록 파싱
       $('.sch_result_list li').each((index, element) => {

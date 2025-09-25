@@ -5,7 +5,7 @@ export enum SortType {
   ACCURACY = 'accuracy',
 }
 
-export class CommentSearchDto {
+export class DcinsideCommentSearchDto {
   @IsString()
   keyword: string
 

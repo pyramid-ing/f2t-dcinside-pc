@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { SettingsModule } from 'src/main/app/modules/settings/settings.module'
-import { DcinsidePostingService } from './dcinside-posting.service'
+import { DcinsidePostingService } from '@main/app/modules/dcinside/posting/dcinside-posting.service'
 import { JobLogsModule } from 'src/main/app/modules/dcinside/job-logs/job-logs.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
 import { DcCaptchaSolverService } from '../util/dc-captcha-solver.service'
@@ -11,4 +11,4 @@ import { DcCaptchaSolverService } from '../util/dc-captcha-solver.service'
   providers: [DcinsidePostingService, DcCaptchaSolverService],
   exports: [DcinsidePostingService, JobLogsModule, DcCaptchaSolverService],
 })
-export class DcinsideApiModule {}
+export class DcinsidePostingModule {}

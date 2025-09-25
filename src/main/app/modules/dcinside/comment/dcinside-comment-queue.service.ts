@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { CommentAutomationService } from './comment-automation.service'
+import { DcinsideCommentAutomationService } from 'src/main/app/modules/dcinside/comment/dcinside-comment-automation.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 
 @Injectable()
-export class CommentQueueService {
-  private readonly logger = new Logger(CommentQueueService.name)
+export class DcinsideCommentQueueService {
+  private readonly logger = new Logger(DcinsideCommentQueueService.name)
   private processingJobs = new Set<string>()
 
   constructor(
     private prisma: PrismaService,
-    private commentAutomationService: CommentAutomationService,
+    private commentAutomationService: DcinsideCommentAutomationService,
     private browserManagerService: BrowserManagerService,
   ) {}
 

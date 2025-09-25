@@ -5,7 +5,7 @@ import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { APP_FILTER } from '@nestjs/core'
 import { ScheduleModule } from '@nestjs/schedule'
-import { app, BrowserWindow } from 'electron'
+import * as electron from 'electron'
 import { GlobalExceptionFilter } from '../filters/global-exception.filter'
 import customConfig from './config/custom-config'
 import { SettingsModule } from './modules/settings/settings.module'
@@ -18,8 +18,8 @@ import { AuthModule } from '@main/app/modules/auth/auth.module'
   imports: [
     ElectronModule.registerAsync({
       useFactory: async () => {
-        const isDev = !app.isPackaged
-        const win = new BrowserWindow({
+        const isDev = !electron.app.isPackaged
+        const win = new electron.BrowserWindow({
           width: 1024,
           height: 768,
           autoHideMenuBar: true,
@@ -33,7 +33,9 @@ import { AuthModule } from '@main/app/modules/auth/auth.module'
           win.destroy()
         })
 
-        const URL = isDev ? process.env.DS_RENDERER_URL : `file://${join(app.getAppPath(), 'dist/render/index.html')}`
+        const URL = isDev
+          ? process.env.DS_RENDERER_URL
+          : `file://${join(electron.app.getAppPath(), 'dist/render/index.html')}`
 
         win.loadURL(URL)
 
