@@ -167,9 +167,12 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       await this._validateCommentForm(page)
       const postNo = await this._extractPostNo(postUrl)
 
-      // 댓글 폼 작성 (개별 함수로 분리)
-      await this._inputNickname(page, postNo, nickname)
-      await this._inputPassword(page, postNo, password)
+      // 비회원일 때만 닉네임과 비밀번호 입력
+      if (!isMember) {
+        await this._inputNickname(page, postNo, nickname)
+        await this._inputPassword(page, postNo, password)
+      }
+
       await this._inputComment(page, postNo, comment)
 
       await this._submitCommentWithRetry(page, postNo, postUrl)
