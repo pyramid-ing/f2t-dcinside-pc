@@ -65,6 +65,15 @@ async function moveCursorToPosition(page: any, position: '상단' | '하단') {
 
 @Injectable()
 export class DcinsidePostingService extends DcinsideBaseService {
+  // 브라우저 ID 상수
+  private static readonly BROWSER_IDS = {
+    DCINSIDE_REUSE: 'dcinside',
+    POST_JOB_NEW: (jobId: string) => `post-job-new-${jobId}`,
+    DELETE_JOB_NEW: (jobId: string) => `delete-job-new-${jobId}`,
+    PROXY: 'dcinside-posting-proxy',
+    FALLBACK: 'dcinside-posting-fallback',
+  } as const
+
   constructor(
     settingsService: SettingsService,
     cookieService: CookieService,
@@ -106,8 +115,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
         await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount}/${maxRetries}`)
 
         // 통합된 삭제 처리 (브라우저 모드 + IP 모드 + 로그인 포함)
-        const browserId = `delete-job-new-${jobId}`
-        await this.deleteArticle(jobId, post, browserId)
+        await this.deleteArticle(jobId, post)
 
         await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount} 성공`)
       },
@@ -120,11 +128,11 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 통합된 포스팅 처리 (순차적 함수 호출로 가독성 향상)
    */
-  public async postArticle(jobId: string, postJob: any, browserId: string): Promise<{ url: string }> {
+  public async postArticle(jobId: string, postJob: any): Promise<{ url: string }> {
     const settings = await this.settingsService.getSettings()
 
     // 1. 페이지 켜기 (브라우저 생성)
-    const { context, page } = await this._launchBrowser(jobId, settings, browserId)
+    const { context, page, browserId } = await this._launchBrowser(jobId, settings, 'post')
 
     try {
       // 2. IP 변경 처리
@@ -220,11 +228,11 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 통합된 삭제 처리 (순차적 함수 호출로 가독성 향상)
    */
-  public async deleteArticle(jobId: string, postJob: any, browserId: string): Promise<void> {
+  public async deleteArticle(jobId: string, postJob: any): Promise<void> {
     const settings = await this.settingsService.getSettings()
 
     // 1. 페이지 켜기 (브라우저 생성)
-    const { context, page } = await this._launchBrowser(jobId, settings, browserId)
+    const { context, page, browserId } = await this._launchBrowser(jobId, settings, 'delete')
 
     try {
       // 2. IP 변경 처리
@@ -272,23 +280,30 @@ export class DcinsidePostingService extends DcinsideBaseService {
   private async _launchBrowser(
     jobId: string,
     settings: Settings,
-    browserId: string,
-  ): Promise<{ context: BrowserContext; page: Page }> {
+    operationType: 'post' | 'delete',
+  ): Promise<{ context: BrowserContext; page: Page; browserId: string }> {
+    // 브라우저 ID 생성 (재사용 모드에 따라 결정)
+    const browserId = settings.reuseWindowBetweenTasks
+      ? DcinsidePostingService.BROWSER_IDS.DCINSIDE_REUSE
+      : operationType === 'post'
+        ? DcinsidePostingService.BROWSER_IDS.POST_JOB_NEW(jobId)
+        : DcinsidePostingService.BROWSER_IDS.DELETE_JOB_NEW(jobId)
+
     // IP 모드에 따른 브라우저 실행
     switch (settings?.ipMode) {
       case IpMode.PROXY:
         const { context, page } = await this.handleProxyMode(jobId, settings, browserId)
-        return { context, page }
+        return { context, page, browserId }
 
       case IpMode.TETHERING:
       case IpMode.NONE:
       default:
         if (settings.reuseWindowBetweenTasks) {
           const { context, page } = await this.handleBrowserReuseMode(jobId, settings, browserId)
-          return { context, page }
+          return { context, page, browserId }
         } else {
           const { context, page } = await this.handleBrowserNewMode(jobId, settings, browserId)
-          return { context, page }
+          return { context, page, browserId }
         }
     }
   }

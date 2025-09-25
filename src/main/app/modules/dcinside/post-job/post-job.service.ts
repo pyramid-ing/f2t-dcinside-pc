@@ -16,14 +16,6 @@ import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation
 export class PostJobService implements JobProcessor {
   private readonly logger = new Logger(PostJobService.name)
 
-  // 브라우저 ID 상수
-  private static readonly BROWSER_IDS = {
-    DCINSIDE_REUSE: 'dcinside',
-    POST_JOB_NEW: (jobId: string) => `post-job-new-${jobId}`,
-    PROXY: 'dcinside-posting-proxy',
-    FALLBACK: 'dcinside-posting-fallback',
-  } as const
-
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jobLogsService: JobLogsService,
@@ -168,11 +160,7 @@ export class PostJobService implements JobProcessor {
     })
 
     // 통합된 포스팅 처리 (브라우저 모드 + IP 모드 + 로그인 포함)
-    const result = await this.postingService.postArticle(
-      jobId,
-      job.postJob,
-      PostJobService.BROWSER_IDS.POST_JOB_NEW(jobId),
-    )
+    const result = await this.postingService.postArticle(jobId, job.postJob)
 
     await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
 
