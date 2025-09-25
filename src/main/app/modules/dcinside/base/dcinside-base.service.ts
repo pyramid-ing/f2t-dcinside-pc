@@ -489,7 +489,6 @@ export abstract class DcinsideBaseService {
   public async handleProxyMode(
     jobId: string,
     settings: Settings,
-    postJob: any,
     browserId: string,
   ): Promise<{ browser: any; context: BrowserContext; page: Page; proxyInfo: any }> {
     const { browser, context, page, proxyInfo } = await this.launch({
@@ -498,15 +497,6 @@ export abstract class DcinsideBaseService {
       reuseExisting: settings.reuseWindowBetweenTasks,
       respectProxy: true,
     })
-
-    // 로그인 처리 (launch 직후)
-    if (postJob.loginId && postJob.loginPassword) {
-      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
-      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
-    } else {
-      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
-    }
 
     // 프록시 정보 로깅
     if (proxyInfo) {
@@ -530,7 +520,6 @@ export abstract class DcinsideBaseService {
   public async handleBrowserReuseMode(
     jobId: string,
     settings: Settings,
-    postJob: any,
     browserId: string,
   ): Promise<{ context: BrowserContext; page: Page }> {
     const { context, page } = await this.launch({
@@ -539,15 +528,6 @@ export abstract class DcinsideBaseService {
       reuseExisting: true,
       respectProxy: false,
     })
-
-    // 로그인 처리 (launch 직후)
-    if (postJob.loginId && postJob.loginPassword) {
-      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
-      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
-    } else {
-      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
-    }
 
     // 실제 외부 IP 로깅
     await this.logExternalIp(jobId, page)
@@ -561,7 +541,6 @@ export abstract class DcinsideBaseService {
   public async handleBrowserNewMode(
     jobId: string,
     settings: Settings,
-    postJob: any,
     browserId: string,
   ): Promise<{ context: BrowserContext; page: Page }> {
     const { context, page } = await this.launch({
@@ -570,15 +549,6 @@ export abstract class DcinsideBaseService {
       reuseExisting: false,
       respectProxy: false,
     })
-
-    // 로그인 처리 (launch 직후)
-    if (postJob.loginId && postJob.loginPassword) {
-      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
-      await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
-    } else {
-      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
-    }
 
     // 실제 외부 IP 로깅
     await this.logExternalIp(jobId, page)
