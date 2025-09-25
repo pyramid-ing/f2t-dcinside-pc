@@ -20,11 +20,14 @@ export interface CommentJob {
   keyword: string
   comment: string
   postUrls: string[]
-  nickname: string
-  password: string
+  nickname: string | null
+  password: string | null
   isRunning: boolean
   createdAt: string
   taskDelay: number
+  galleryUrl?: string | null
+  loginId?: string | null
+  loginPassword?: string | null
 }
 
 export interface CommentSearchRequest {
@@ -40,6 +43,9 @@ export interface CreateCommentJobRequest {
   nickname?: string
   password?: string
   taskDelay?: number
+  galleryUrl?: string
+  loginId?: string
+  loginPassword?: string
 }
 
 export const commentApi = {

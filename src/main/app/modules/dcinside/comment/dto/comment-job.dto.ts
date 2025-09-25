@@ -27,6 +27,18 @@ export class CreateCommentJobDto {
   @Min(1)
   @Max(60)
   taskDelay?: number
+
+  @IsOptional()
+  @IsString()
+  galleryUrl?: string
+
+  @IsOptional()
+  @IsString()
+  loginId?: string
+
+  @IsOptional()
+  @IsString()
+  loginPassword?: string
 }
 
 export class CommentJobResponseDto {
@@ -34,9 +46,12 @@ export class CommentJobResponseDto {
   keyword: string
   comment: string
   postUrls: string[]
-  nickname: string
-  password: string
+  nickname: string | null
+  password: string | null
   isRunning: boolean
   createdAt: Date
   taskDelay: number
+  galleryUrl?: string | null
+  loginId?: string | null
+  loginPassword?: string | null
 }

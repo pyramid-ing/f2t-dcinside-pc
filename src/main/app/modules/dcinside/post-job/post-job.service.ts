@@ -237,6 +237,15 @@ export class PostJobService implements JobProcessor {
     })
 
     try {
+      // 로그인 처리 (launch 직후)
+      if (postJob.loginId && postJob.loginPassword) {
+        await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+        await this.postingService.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+        await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+      }
+
       // 프록시 정보 로깅
       if (proxyInfo) {
         const proxyStr = proxyInfo.id
@@ -278,6 +287,15 @@ export class PostJobService implements JobProcessor {
       respectProxy: false,
     })
 
+    // 로그인 처리 (launch 직후)
+    if (postJob.loginId && postJob.loginPassword) {
+      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.postingService.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+    } else {
+      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+    }
+
     // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
     await this.logExternalIp(jobId, page)
 
@@ -302,6 +320,15 @@ export class PostJobService implements JobProcessor {
       })
       context = launched.context
       page = launched.page
+
+      // 로그인 처리 (launch 직후)
+      if (postJob.loginId && postJob.loginPassword) {
+        await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+        await this.postingService.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
+        await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      } else {
+        await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+      }
 
       // 실제 외부 IP 로깅: 동일 페이지에서 이동하여 조회
       await this.logExternalIp(jobId, page)

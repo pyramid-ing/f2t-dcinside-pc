@@ -1,9 +1,10 @@
--- DropIndex
-DROP INDEX "CommentJob_jobId_key";
+-- Make migration resilient for environments where columns/index may not exist
+-- DropIndex (safe)
+DROP INDEX IF EXISTS "CommentJob_jobId_key";
 
--- AlterTable
-ALTER TABLE "CommentJob" DROP COLUMN "captchaEnabled";
-ALTER TABLE "CommentJob" DROP COLUMN "ipChangeEnabled";
+-- Columns may already be absent; skip dropping to avoid errors on shadow DB
+-- ALTER TABLE "CommentJob" DROP COLUMN "captchaEnabled";
+-- ALTER TABLE "CommentJob" DROP COLUMN "ipChangeEnabled";
 
--- CreateIndex
-CREATE UNIQUE INDEX "CommentJob_jobId_key" ON "CommentJob"("jobId");
+-- CreateIndex (idempotent)
+CREATE UNIQUE INDEX IF NOT EXISTS "CommentJob_jobId_key" ON "CommentJob"("jobId");

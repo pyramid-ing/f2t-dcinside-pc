@@ -42,8 +42,11 @@ const CommentManagement: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false)
   const [selectedPosts, setSelectedPosts] = useState<string[]>([])
   const [taskDelay, setTaskDelay] = useState(3)
-  const [nickname, setNickname] = useState('부갤러')
-  const [password, setPassword] = useState('1234')
+  const [nickname, setNickname] = useState<string>('')
+  const [password, setPassword] = useState<string>('')
+  const [loginId, setLoginId] = useState<string>('')
+  const [loginPassword, setLoginPassword] = useState<string>('')
+  const [galleryUrl, setGalleryUrl] = useState<string>('')
 
   // 컴포넌트 마운트 시 댓글 작업 목록 로드
   useEffect(() => {
@@ -91,9 +94,12 @@ const CommentManagement: React.FC = () => {
         keyword: searchForm.getFieldValue('keyword') || '',
         comment: values.comment,
         postUrls: selectedPostUrls,
-        nickname,
-        password,
+        nickname: nickname || undefined,
+        password: password || undefined,
         taskDelay,
+        galleryUrl: galleryUrl || undefined,
+        loginId: loginId || undefined,
+        loginPassword: loginPassword || undefined,
       })
 
       setCommentJobs(prev => [newJob, ...prev])
@@ -278,6 +284,14 @@ const CommentManagement: React.FC = () => {
         <Row gutter={16}>
           <Col span={24}>
             <Form form={commentForm} onFinish={handleStartCommentJob}>
+              <Form.Item label="갤러리 URL">
+                <Input
+                  value={galleryUrl}
+                  onChange={e => setGalleryUrl(e.target.value)}
+                  placeholder="예: https://gall.dcinside.com/mgallery/board/lists?id=..."
+                />
+              </Form.Item>
+
               <Form.Item
                 name="comment"
                 rules={[{ required: true, message: '댓글 내용을 입력해주세요' }]}
@@ -301,6 +315,18 @@ const CommentManagement: React.FC = () => {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="비밀번호를 입력하세요"
                   maxLength={20}
+                />
+              </Form.Item>
+
+              <Form.Item label="로그인 ID">
+                <Input value={loginId} onChange={e => setLoginId(e.target.value)} placeholder="로그인 ID (선택)" />
+              </Form.Item>
+
+              <Form.Item label="로그인 비밀번호">
+                <Input.Password
+                  value={loginPassword}
+                  onChange={e => setLoginPassword(e.target.value)}
+                  placeholder="로그인 비밀번호 (선택)"
                 />
               </Form.Item>
 

@@ -119,8 +119,11 @@ export class CommentService {
           keyword: createDto.keyword,
           comment: createDto.comment,
           postUrls: JSON.stringify(createDto.postUrls),
-          nickname: createDto.nickname ?? '부갤러',
-          password: createDto.password ?? '1234',
+          nickname: createDto.nickname ?? null,
+          password: createDto.password ?? null,
+          galleryUrl: createDto.galleryUrl ?? null,
+          loginId: createDto.loginId ?? null,
+          loginPassword: createDto.loginPassword ?? null,
           taskDelay: createDto.taskDelay ?? 3,
           jobId: job.id,
         },
@@ -143,6 +146,9 @@ export class CommentService {
         isRunning: job.status === 'pending', // 초기에는 pending 상태
         createdAt: commentJob.createdAt,
         taskDelay: commentJob.taskDelay,
+        galleryUrl: commentJob.galleryUrl,
+        loginId: commentJob.loginId,
+        loginPassword: commentJob.loginPassword,
       }
     } catch (error) {
       this.logger.error(`Failed to create comment job: ${error.message}`, error.stack)

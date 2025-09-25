@@ -37,7 +37,7 @@ model Job {
 
   // 블로그 작업 관련 데이터
   postJob PostJob?
-  
+
   // 댓글 작업 관련 데이터
   commentJob CommentJob?
 }
@@ -59,19 +59,19 @@ model JobLog {
 model PostJob {
   id String @id @default(uuid())
 
-  galleryUrl    String
-  title         String
-  contentHtml   String
-  password      String?
-  nickname      String?
-  headtext      String?
-  imagePaths    String? // JSON stringified array
-  loginId       String?
-  loginPassword String?
-  imagePosition String? // '상단' 또는 '하단'
-  resultUrl     String? // 결과 URL
-  deleteAt      DateTime?
-  deletedAt     DateTime?
+  galleryUrl        String
+  title             String
+  contentHtml       String
+  password          String?
+  nickname          String?
+  headtext          String?
+  imagePaths        String? // JSON stringified array
+  loginId           String?
+  loginPassword     String?
+  imagePosition     String? // '상단' 또는 '하단'
+  resultUrl         String? // 결과 URL
+  deleteAt          DateTime?
+  deletedAt         DateTime?
   autoDeleteMinutes Int? // 등록후자동삭제(분)
 
   createdAt DateTime @default(now())
@@ -84,12 +84,15 @@ model PostJob {
 model CommentJob {
   id String @id @default(uuid())
 
-  keyword         String
-  comment         String
-  postUrls        String // JSON stringified array
-  nickname        String @default("부갤러")
-  password        String @default("1234")
-  taskDelay       Int    @default(3) // 작업 간격(초)
+  keyword   String
+  comment   String
+  postUrls  String // JSON stringified array
+  nickname  String?
+  password  String?
+  galleryUrl String?
+  loginId    String?
+  loginPassword String?
+  taskDelay Int     @default(3) // 작업 간격(초)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

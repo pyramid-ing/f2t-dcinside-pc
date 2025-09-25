@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Page, Browser } from 'playwright'
+import { DcinsidePostingService } from '@main/app/modules/dcinside/api/dcinside-posting.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { retry } from '@main/app/utils/retry'
 
@@ -11,6 +12,7 @@ export class CommentAutomationService {
   constructor(
     private prisma: PrismaService,
     private dcCaptchaSolverService: DcCaptchaSolverService,
+    private postingService: DcinsidePostingService,
   ) {}
 
   /**
@@ -36,10 +38,20 @@ export class CommentAutomationService {
       })
 
       const postUrls = JSON.parse(commentJob.postUrls)
+      const useLogin = !!(commentJob.loginId && commentJob.loginId.trim() !== '')
 
       for (const postUrl of postUrls) {
         try {
-          await this.commentOnPost(browser, postUrl, commentJob.comment, commentJob.nickname, commentJob.password)
+          // 로그인 모드면 닉네임/비밀번호 입력을 생략하고, 추후 로그인 로직을 사용할 수 있도록 분기
+          await this.commentOnPost(
+            browser,
+            postUrl,
+            commentJob.comment,
+            useLogin ? null : (commentJob.nickname as any),
+            useLogin ? null : (commentJob.password as any),
+            useLogin ? (commentJob.loginId as any) : null,
+            useLogin ? (commentJob.loginPassword as any) : null,
+          )
 
           // 작업 간격 대기
           if (commentJob.taskDelay > 0) {
@@ -92,13 +104,26 @@ export class CommentAutomationService {
     browser: Browser,
     postUrl: string,
     comment: string,
-    nickname: string,
-    password: string,
+    nickname: string | null,
+    password: string | null,
+    loginId: string | null,
+    loginPassword: string | null,
   ): Promise<void> {
     const page = await browser.newPage()
 
     try {
       await this._setupPage(page)
+
+      // 로그인 처리: 페이지 생성 직후 즉시 수행
+      if (loginId && loginPassword) {
+        this.logger.log(`댓글 작업 로그인 시도: ${loginId}`)
+        const context = page.context()
+        await this.postingService.handleBrowserLogin(context, page, loginId, loginPassword)
+        this.logger.log('댓글 작업 로그인 성공')
+      } else {
+        this.logger.log('댓글 작업 비로그인 모드로 진행')
+      }
+
       await this._navigateToPost(page, postUrl)
       // 비정상(삭제/존재하지 않음) 페이지 감지 시 현재 게시물은 건너뛰기
       const skipped = await this._checkAbnormalPage(page)
@@ -219,8 +244,8 @@ export class CommentAutomationService {
     page: Page,
     postNo: string,
     comment: string,
-    nickname: string,
-    password: string,
+    nickname: string | null,
+    password: string | null,
   ): Promise<void> {
     // 댓글 내용 검증
     if (!comment || comment.trim() === '') {
@@ -228,12 +253,16 @@ export class CommentAutomationService {
     }
 
     // 닉네임 입력 처리
-    await this._handleNicknameInput(page, postNo, nickname)
+    if (nickname && nickname.trim() !== '') {
+      await this._handleNicknameInput(page, postNo, nickname)
+    }
 
     // 비밀번호 입력
-    const passwordInput = page.locator('#password_' + postNo)
-    if ((await passwordInput.count()) > 0) {
-      await passwordInput.fill(password)
+    if (password && password.trim() !== '') {
+      const passwordInput = page.locator('#password_' + postNo)
+      if ((await passwordInput.count()) > 0) {
+        await passwordInput.fill(password)
+      }
     }
 
     // 댓글 내용 입력
