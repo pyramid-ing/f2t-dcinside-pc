@@ -19,6 +19,8 @@ import { CookieService } from '@main/app/modules/util/cookie.service'
 import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
+import { sleep } from '@main/app/utils/sleep'
+import { retry } from '@main/app/utils/retry'
 
 type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
 
@@ -90,7 +92,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     )
 
     let attemptCount = 0
-    await this.retry(
+    await retry(
       async () => {
         attemptCount++
         await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount}/${maxRetries}`)
@@ -192,22 +194,22 @@ export class DcinsidePostingService extends DcinsideBaseService {
     // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
     await this._navigateToWritePage(page, galleryInfo)
     await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
-    await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
     // 3. 입력폼 채우기
     await this._inputTitle(page, parsedPostJob.title)
     await this.jobLogsService.createJobLog(jobId, `제목 입력 완료: "${parsedPostJob.title}"`)
-    await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
     if (parsedPostJob.headtext) {
       await this._selectHeadtext(page, parsedPostJob.headtext)
       await this.jobLogsService.createJobLog(jobId, `말머리 선택 완료: "${parsedPostJob.headtext}"`)
-      await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
     }
 
     await this._inputContent(page, parsedPostJob.contentHtml)
     await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
-    await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
     // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
     if (parsedPostJob.imagePaths && parsedPostJob.imagePaths.length > 0) {
@@ -215,18 +217,18 @@ export class DcinsidePostingService extends DcinsideBaseService {
       await this._uploadImages(page, browserContext, parsedPostJob.imagePaths, parsedPostJob.imagePosition)
       await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
     }
-    await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+    await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
     if (!isMember && parsedPostJob.nickname) {
       await this._inputNickname(page, parsedPostJob.nickname)
       await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
-      await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
     }
 
     if (!isMember && parsedPostJob.password) {
       await this._inputPassword(page, parsedPostJob.password)
       await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
-      await this.sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
+      await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
     }
 
     // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
@@ -251,7 +253,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     await this.jobLogsService.createJobLog(jobId, `글 페이지 이동: ${post.resultUrl}`)
 
     await page.goto(post.resultUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
-    await this.sleep(2000)
+    await sleep(2000)
 
     await this.jobLogsService.createJobLog(jobId, '글 페이지 이동 완료')
   }
@@ -265,7 +267,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       await this.jobLogsService.createJobLog(jobId, '삭제 버튼 발견, 클릭 시도')
 
       await page.click('button.btn_grey.cancle')
-      await this.sleep(2000)
+      await sleep(2000)
 
       await this.jobLogsService.createJobLog(jobId, '삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
     } catch (error) {
@@ -288,7 +290,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
       await page.waitForSelector('#password', { timeout: 60_000 })
       await page.fill('#password', post.password)
-      await this.sleep(1000)
+      await sleep(1000)
 
       await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
     }
@@ -308,7 +310,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           alertMessage = msg
         }
 
-        await this.sleep(1000)
+        await sleep(1000)
         await dialog.accept()
       } catch (_) {}
     }
@@ -322,7 +324,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
       const start = Date.now()
       while (!alertMessage && Date.now() - start < 30_000) {
-        await this.sleep(200)
+        await sleep(200)
       }
 
       await this.jobLogsService.createJobLog(jobId, `삭제 처리 완료, 알림 메시지: ${alertMessage}`)
@@ -373,7 +375,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
   private async _selectHeadtext(page: Page, headtext: string): Promise<void> {
     try {
       await page.waitForSelector('.write_subject .subject_list li', { timeout: 60_000 })
-      await this.sleep(500)
+      await sleep(500)
       // 말머리 리스트에서 일치하는 항목 찾아서 클릭
       const found = await page.evaluate(headtext => {
         const items = Array.from(document.querySelectorAll('.write_subject .subject_list li'))
@@ -386,7 +388,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
         }
         return false
       }, headtext)
-      await this.sleep(500)
+      await sleep(500)
 
       if (!found) {
         this.logger.warn(`말머리 "${headtext}"를 찾을 수 없습니다.`)
@@ -396,7 +398,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       }
 
       this.logger.log(`말머리 "${headtext}" 선택 완료`)
-      await this.sleep(1000)
+      await sleep(1000)
     } catch (error: any) {
       if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
         const msg = `말머리 목록을 60초 내에 불러오지 못했습니다. (타임아웃)`
@@ -431,7 +433,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }, contentHtml)
 
     // HTML 모드 다시 해제 (일반 에디터로 전환하여 내용 확인)
-    await this.sleep(500)
+    await sleep(500)
     const htmlChecked2 = await page.locator('#chk_html').isChecked()
     if (htmlChecked2) {
       await page.click('#chk_html')
@@ -547,7 +549,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
         const loadingBox = await popup.$('.loding_box')
         if (loadingBox) {
           this.logger.log('이미지 업로드 진행 중...')
-          await this.sleep(2000)
+          await sleep(2000)
           continue
         }
 
@@ -568,27 +570,27 @@ export class DcinsidePostingService extends DcinsideBaseService {
           }
         }
 
-        await this.sleep(1000)
+        await sleep(1000)
       } catch (error) {
         this.logger.warn(`업로드 상태 확인 중 오류: ${error.message}`)
-        await this.sleep(1000)
+        await sleep(1000)
       }
     }
 
     // 추가 안정화 대기
-    await this.sleep(2000)
+    await sleep(2000)
   }
 
   private async _clickApplyButtonSafely(popup: Page): Promise<void> {
     this.logger.log('적용 버튼 클릭 시도...')
 
-    await this.retry(
+    await retry(
       async () => {
         // 적용 버튼 존재 확인
         await popup.waitForSelector('.btn_apply', { timeout: 60_000 })
         await popup.click('.btn_apply')
         // 클릭 후 팝업 닫힘 확인 (1초 대기)
-        await this.sleep(1000)
+        await sleep(1000)
         if (popup.isClosed()) {
           this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
           return true
@@ -609,7 +611,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       this.logger.log(`갤닉 X 버튼 존재 여부: ${hasXButton}`)
       if (hasXButton) {
         await xBtnLocator.click()
-        await this.sleep(500)
+        await sleep(500)
       }
     } catch (_) {
       // X 버튼이 없거나 클릭 실패 시 무시하고 계속 진행
@@ -769,7 +771,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
               })
             } catch {}
 
-            await this.sleep(1000)
+            await sleep(1000)
             continue // while – 다시 등록 버튼 클릭 시도
           } else {
             // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
@@ -862,7 +864,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
   }
 
   private async _navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
-    const success = await this.retry(
+    const success = await retry(
       async () => {
         const listUrl = this._buildGalleryUrl(galleryInfo)
         this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
@@ -888,7 +890,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           throw error
         }
         await page.click('a.btn_write.txt')
-        await this.sleep(4000)
+        await sleep(4000)
         // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
         if (currentUrl.includes('/write')) {

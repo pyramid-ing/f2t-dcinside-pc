@@ -7,6 +7,8 @@ import { CookieService } from '@main/app/modules/util/cookie.service'
 import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
+import { sleep } from '@main/app/utils/sleep'
+import { retry } from '@main/app/utils/retry'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -61,7 +63,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
 
           // 작업 간격 대기
           if (commentJob.taskDelay > 0) {
-            await this.sleep(commentJob.taskDelay * 1000)
+            await sleep(commentJob.taskDelay * 1000)
           }
         } catch (error) {
           this.logger.error(`Failed to comment on post ${postUrl}: ${error.message}`)
@@ -244,7 +246,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 댓글 등록 (재시도 포함)
    */
   private async _submitCommentWithRetry(page: Page, postNo: string, postUrl: string): Promise<void> {
-    await this.retry(
+    await retry(
       async () => {
         // 캡차 확인
         const captchaResult = await this._handleCaptcha(page)
@@ -328,7 +330,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           const deleteButton = await page.$(`#btn_gall_nick_name_x_${postNo}`)
           if (deleteButton) {
             await deleteButton.click()
-            await this.sleep(500)
+            await sleep(500)
             this.logger.log('X button clicked successfully')
           } else {
             this.logger.warn('X button not found')
@@ -339,7 +341,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       }
 
       // 사용자 닉네임 입력 (X 버튼 클릭 후 잠시 대기)
-      await this.sleep(300)
+      await sleep(300)
 
       const userNicknameInput = page.locator(`#name_${postNo}`)
       if ((await userNicknameInput.count()) > 0) {
@@ -366,7 +368,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    */
   private async _checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
     // 잠시 대기하여 alert 메시지 확인
-    await this.sleep(2000)
+    await sleep(2000)
 
     // 댓글 내용 없음 체크
     if (alertMessage.includes('내용을 입력하세요')) {

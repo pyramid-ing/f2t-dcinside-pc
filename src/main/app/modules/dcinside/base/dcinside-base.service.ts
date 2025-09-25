@@ -8,7 +8,6 @@ import { IpMode } from '@main/app/modules/settings/settings.types'
 import { BrowserContext, Page } from 'playwright'
 import UserAgent from 'user-agents'
 import { sleep } from '@main/app/utils/sleep'
-import { retry } from '@main/app/utils/retry'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
@@ -444,24 +443,5 @@ export abstract class DcinsideBaseService {
       // 팝업이 나타나지 않으면 null 반환 (정상 상황)
       return null
     }
-  }
-
-  /**
-   * 공통 유틸리티: sleep
-   */
-  protected async sleep(ms: number): Promise<void> {
-    return sleep(ms)
-  }
-
-  /**
-   * 공통 유틸리티: retry
-   */
-  protected async retry<T>(
-    fn: () => Promise<T>,
-    interval: number,
-    maxRetries: number,
-    backoffType: 'linear' | 'exponential' = 'linear',
-  ): Promise<T> {
-    return retry(fn, interval, maxRetries, backoffType)
   }
 }
