@@ -15,6 +15,8 @@ import {
 } from 'src/main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 import * as cheerio from 'cheerio'
 import axios from 'axios'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
 export class DcinsideCommentService {
@@ -101,7 +103,10 @@ export class DcinsideCommentService {
       }
     } catch (error) {
       this.logger.error(`Failed to search posts: ${error.message}`, error.stack)
-      throw new Error('게시물 검색에 실패했습니다.')
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '게시물 검색에 실패했습니다.',
+        originalError: error.message,
+      })
     }
   }
 
@@ -161,7 +166,10 @@ export class DcinsideCommentService {
       }
     } catch (error) {
       this.logger.error(`Failed to create comment job: ${error.message}`, error.stack)
-      throw new Error('댓글 작업 생성에 실패했습니다.')
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 작업 생성에 실패했습니다.',
+        originalError: error.message,
+      })
     }
   }
 
@@ -192,7 +200,10 @@ export class DcinsideCommentService {
       }))
     } catch (error) {
       this.logger.error(`Failed to get comment jobs: ${error.message}`, error.stack)
-      throw new Error('댓글 작업 목록 조회에 실패했습니다.')
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 작업 목록 조회에 실패했습니다.',
+        originalError: error.message,
+      })
     }
   }
 
@@ -212,7 +223,10 @@ export class DcinsideCommentService {
       this.logger.log(`Updated comment job ${jobId} status to ${status}`)
     } catch (error) {
       this.logger.error(`Failed to update comment job status: ${error.message}`, error.stack)
-      throw new Error('댓글 작업 상태 업데이트에 실패했습니다.')
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 작업 상태 업데이트에 실패했습니다.',
+        originalError: error.message,
+      })
     }
   }
 }

@@ -13,6 +13,8 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
 import { JobStatus } from '@main/app/modules/dcinside/job/job.types'
+import { DcinsideCommentException } from '@main/common/errors/dcinside-comment.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -123,6 +125,13 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           status: 'failed',
           errorMsg: error.message,
         },
+      })
+
+      // DcinsideCommentException으로 래핑하여 재throw
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 작업 실행에 실패했습니다.',
+        originalError: error.message,
+        jobId,
       })
     }
   }
@@ -276,16 +285,22 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       // 댓글 쓰기가 불가능한 게시판인지 확인
       const commentDisabledMessage = page.locator('.comment_disabled, .cmt_disabled, .no_comment')
       if ((await commentDisabledMessage.count()) > 0) {
-        throw new Error('댓글쓰기가 불가능한 게시판입니다')
+        throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+          message: '댓글쓰기가 불가능한 게시판입니다',
+        })
       }
 
       // 로그인이 필요한 경우인지 확인
       const loginRequiredMessage = page.locator('.login_required, .need_login')
       if ((await loginRequiredMessage.count()) > 0) {
-        throw new Error('댓글 작성에 로그인이 필요합니다')
+        throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+          message: '댓글 작성에 로그인이 필요합니다',
+        })
       }
 
-      throw new Error('댓글 작성 폼을 찾을 수 없습니다')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 작성 폼을 찾을 수 없습니다',
+      })
     }
   }
 
@@ -297,7 +312,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     const postNo = match ? match[1] : ''
 
     if (!postNo) {
-      throw new Error('게시물 번호를 찾을 수 없습니다')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '게시물 번호를 찾을 수 없습니다',
+        postUrl,
+      })
     }
     return postNo
   }
@@ -377,7 +395,9 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   private async _inputComment(page: Page, postNo: string, comment: string): Promise<void> {
     // 댓글 내용 검증
     if (!comment || comment.trim() === '') {
-      throw new Error('내용을 입력하세요.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '내용을 입력하세요.',
+      })
     }
 
     // 댓글 내용 입력
@@ -385,7 +405,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     if ((await commentTextarea.count()) > 0) {
       await commentTextarea.fill(comment)
     } else {
-      throw new Error('댓글 입력 필드를 찾을 수 없습니다')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글 입력 필드를 찾을 수 없습니다',
+        postNo,
+      })
     }
   }
 
@@ -398,7 +421,9 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         // 캡차 확인
         const captchaResult = await this._handleCaptcha(page)
         if (!captchaResult.success) {
-          throw new Error(`자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`)
+          throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+            message: `자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`,
+          })
         }
 
         // 댓글 등록 버튼 클릭
@@ -423,7 +448,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
             page.removeAllListeners('dialog')
           }
         } else {
-          throw new Error('댓글 등록 버튼을 찾을 수 없습니다')
+          throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+            message: '댓글 등록 버튼을 찾을 수 없습니다',
+            postNo,
+          })
         }
       },
       2000, // 2초 간격
@@ -466,30 +494,43 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
 
     // 댓글 내용 없음 체크
     if (alertMessage.includes('내용을 입력하세요')) {
-      throw new Error('내용을 입력하세요.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '내용을 입력하세요.',
+      })
     }
 
     // 캡차 실패 체크
     if (alertMessage.includes('자동입력 방지코드가 일치하지 않습니다')) {
-      throw new Error('자동입력 방지코드가 일치하지 않습니다.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '자동입력 방지코드가 일치하지 않습니다.',
+      })
     }
 
     // 기타 에러 메시지들
     if (alertMessage.includes('댓글을 입력')) {
-      throw new Error('댓글을 입력해주세요.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '댓글을 입력해주세요.',
+      })
     }
 
     if (alertMessage.includes('비밀번호를 입력')) {
-      throw new Error('비밀번호를 입력해주세요.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '비밀번호를 입력해주세요.',
+      })
     }
 
     if (alertMessage.includes('닉네임을 입력')) {
-      throw new Error('닉네임을 입력해주세요.')
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '닉네임을 입력해주세요.',
+      })
     }
 
     // alert 메시지가 있었다면 에러로 처리
     if (alertMessage) {
-      throw new Error(`댓글 등록 실패: ${alertMessage}`)
+      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: `댓글 등록 실패: ${alertMessage}`,
+        alertMessage,
+      })
     }
 
     this.logger.log('댓글 등록 완료 (에러 메시지 없음)')

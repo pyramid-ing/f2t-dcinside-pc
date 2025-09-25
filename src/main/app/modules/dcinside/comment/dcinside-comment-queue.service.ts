@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { DcinsideCommentAutomationService } from 'src/main/app/modules/dcinside/comment/dcinside-comment-automation.service'
-import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
+import { DcinsideCommentException } from '@main/common/errors/dcinside-comment.exception'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 
 @Injectable()
 export class DcinsideCommentQueueService {
@@ -11,7 +12,6 @@ export class DcinsideCommentQueueService {
   constructor(
     private prisma: PrismaService,
     private commentAutomationService: DcinsideCommentAutomationService,
-    private browserManagerService: BrowserManagerService,
   ) {}
 
   /**
@@ -40,6 +40,12 @@ export class DcinsideCommentQueueService {
       await this.commentAutomationService.executeCommentJob(jobId)
     } catch (error) {
       this.logger.error(`Failed to queue comment job ${jobId}: ${error.message}`, error.stack)
+
+      // DcinsideCommentException을 CustomHttpException으로 변환
+      if (error instanceof DcinsideCommentException) {
+        throw new CustomHttpException(error.errorCode, error.metadata)
+      }
+
       throw error
     }
   }
@@ -112,6 +118,12 @@ export class DcinsideCommentQueueService {
       await this.queueCommentJob(jobId)
     } catch (error) {
       this.logger.error(`Failed to restart comment job ${jobId}: ${error.message}`, error.stack)
+
+      // DcinsideCommentException을 CustomHttpException으로 변환
+      if (error instanceof DcinsideCommentException) {
+        throw new CustomHttpException(error.errorCode, error.metadata)
+      }
+
       throw error
     }
   }
