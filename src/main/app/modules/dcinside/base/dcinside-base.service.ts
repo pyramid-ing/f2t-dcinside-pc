@@ -8,26 +8,30 @@ import { IpMode } from '@main/app/modules/settings/settings.types'
 import { BrowserContext, Page } from 'playwright'
 import UserAgent from 'user-agents'
 import { sleep } from '@main/app/utils/sleep'
-import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 
 export function assertValidGalleryUrl(url: string): asserts url is string {
   const urlMatch = url.match(/[?&]id=([^&]+)/)
   if (!urlMatch) {
-    throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, { message: '갤러리 주소에서 id를 추출할 수 없습니다.' })
+    throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+      message: '갤러리 주소에서 id를 추출할 수 없습니다.',
+    })
   }
 }
 
 export function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
   if (!popupPage) {
-    throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, { message: '이미지 팝업 윈도우를 찾을 수 없습니다.' })
+    throw new DcinsideAutomationError(ErrorCode.IMAGE_UPLOAD_FAILED, {
+      message: '이미지 팝업 윈도우를 찾을 수 없습니다.',
+    })
   }
 }
 
 export function assertRetrySuccess(success: boolean, errorMessage: string): asserts success is true {
   if (!success) {
-    throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
+    throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
   }
 }
 
@@ -113,7 +117,7 @@ export abstract class DcinsideBaseService {
         } catch (error) {
           // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
           if (error instanceof ChromeNotInstalledError) {
-            throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, {
+            throw new DcinsideAutomationError(ErrorCode.CHROME_NOT_INSTALLED, {
               message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
             })
           }
@@ -146,7 +150,7 @@ export abstract class DcinsideBaseService {
     } catch (error) {
       // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
       if (error instanceof ChromeNotInstalledError) {
-        throw new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, {
+        throw new DcinsideAutomationError(ErrorCode.CHROME_NOT_INSTALLED, {
           message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
         })
       }
@@ -258,7 +262,7 @@ export abstract class DcinsideBaseService {
     if (!isLoggedIn) {
       // 로그인이 안되어 있으면 로그인 실행
       if (!loginPassword) {
-        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+        throw new DcinsideAutomationError(ErrorCode.AUTH_REQUIRED, {
           message: '로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.',
         })
       }
@@ -270,7 +274,9 @@ export abstract class DcinsideBaseService {
       })
 
       if (!loginResult.success) {
-        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, { message: `자동 로그인 실패: ${loginResult.message}` })
+        throw new DcinsideAutomationError(ErrorCode.AUTH_REQUIRED, {
+          message: `자동 로그인 실패: ${loginResult.message}`,
+        })
       }
 
       // 로그인 성공 후 새로운 쿠키 저장
@@ -290,7 +296,7 @@ export abstract class DcinsideBaseService {
     const twoCaptchaApiKey = settings.twoCaptchaApiKey
 
     if (!twoCaptchaApiKey) {
-      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+      throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
         message: '2captcha API 키가 설정되지 않았습니다.',
       })
     }
@@ -331,7 +337,7 @@ export abstract class DcinsideBaseService {
         this.logger.error(errorMessage)
       }
 
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
         message: errorMessage,
       })
     }
@@ -370,7 +376,7 @@ export abstract class DcinsideBaseService {
       }
     } catch (error) {
       this.logger.error(`캡챠 처리 실패: ${error.message}`)
-      throw new CustomHttpException(ErrorCode.CAPTCHA_FAILED, { message: error.message })
+      throw new DcinsideAutomationError(ErrorCode.CAPTCHA_FAILED, { message: error.message })
     }
   }
 
@@ -412,7 +418,7 @@ export abstract class DcinsideBaseService {
       }
 
       // 다른 비정상 상태는 에러로 처리
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: combined })
+      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: combined })
     }
 
     return false

@@ -4,7 +4,6 @@ import { DcinsidePostingService } from '@main/app/modules/dcinside/posting/dcins
 import { BrowserContext, Page } from 'playwright'
 import { Job, PostJob } from '@prisma/client'
 import { sleep } from '@main/app/utils/sleep'
-import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobStatus, JobType } from '@main/app/modules/dcinside/job/job.types'
@@ -16,6 +15,8 @@ import { assertPermission } from '@main/app/utils/permission.assert'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -119,8 +120,15 @@ export class PostJobService implements JobProcessor {
       this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
       await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
-      // 통합된 삭제 로직 호출
-      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
+      // 통합된 삭제 로직 호출 (DcinsideAutomationError -> CustomHttpException 변환)
+      try {
+        await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
+      } catch (e) {
+        if (e instanceof DcinsideAutomationError) {
+          throw new CustomHttpException(e.errorCode, e.metadata)
+        }
+        throw e
+      }
 
       // 삭제 성공 시 원본 작업의 deletedAt 업데이트
       await this.prismaService.postJob.update({
@@ -262,7 +270,15 @@ export class PostJobService implements JobProcessor {
       await this.applyTaskDelay(jobId, settings)
 
       // 페이지는 launch에서 공통 생성됨
-      await this.handlePostJob(jobId, context, page, postJob)
+      // 포스팅 처리 (DcinsideAutomationError -> CustomHttpException 변환)
+      try {
+        await this.handlePostJob(jobId, context, page, postJob)
+      } catch (e) {
+        if (e instanceof DcinsideAutomationError) {
+          throw new CustomHttpException(e.errorCode, e.metadata)
+        }
+        throw e
+      }
     } finally {
       // 새 창 모드일 때만 브라우저 종료
       if (!settings.reuseWindowBetweenTasks) {
@@ -301,7 +317,15 @@ export class PostJobService implements JobProcessor {
 
     await this.applyTaskDelay(jobId, settings)
 
-    await this.handlePostJob(jobId, context, page, postJob)
+    // 포스팅 처리 (DcinsideAutomationError -> CustomHttpException 변환)
+    try {
+      await this.handlePostJob(jobId, context, page, postJob)
+    } catch (e) {
+      if (e instanceof DcinsideAutomationError) {
+        throw new CustomHttpException(e.errorCode, e.metadata)
+      }
+      throw e
+    }
   }
 
   /**
