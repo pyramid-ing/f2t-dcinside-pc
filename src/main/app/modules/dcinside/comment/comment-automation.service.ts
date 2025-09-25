@@ -100,6 +100,12 @@ export class CommentAutomationService {
     try {
       await this._setupPage(page)
       await this._navigateToPost(page, postUrl)
+      // 비정상(삭제/존재하지 않음) 페이지 감지 시 현재 게시물은 건너뛰기
+      const skipped = await this._checkAbnormalPage(page)
+      if (skipped) {
+        this.logger.warn(`삭제되었거나 존재하지 않는 게시물로 판단되어 건너뜁니다: ${postUrl}`)
+        return
+      }
       await this._validateCommentForm(page)
       const postNo = await this._extractPostNo(postUrl)
       await this._fillCommentForm(page, postNo, comment, nickname, password)
@@ -129,6 +135,46 @@ export class CommentAutomationService {
    */
   private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
     await page.goto(postUrl, { waitUntil: 'networkidle' })
+  }
+
+  /**
+   * 비정상(삭제/존재하지 않음) 페이지 감지
+   * true를 반환하면 해당 게시물 처리를 건너뛴다.
+   */
+  private async _checkAbnormalPage(page: Page): Promise<boolean> {
+    const abnormalInfo = await page.evaluate(() => {
+      const container = document.querySelector('.box_infotxt.delet') as HTMLElement | null
+      if (!container) return null
+
+      const texts: string[] = []
+      const strong = container.querySelector('strong') as HTMLElement | null
+      if (strong?.textContent) texts.push(strong.textContent.trim())
+
+      const paragraphs = Array.from(container.querySelectorAll('p')) as HTMLElement[]
+      for (const p of paragraphs) {
+        if (p.textContent) texts.push(p.textContent.trim())
+      }
+
+      const combined = texts.join(' ')
+      return { combined, texts }
+    })
+
+    if (!abnormalInfo) return false
+
+    const combined = abnormalInfo.combined || ''
+
+    const deletionPatterns = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
+    const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다']
+
+    const deletionDetected = deletionPatterns.some(p => combined.includes(p))
+    const redirectDetected = redirectHints.some(p => combined.includes(p))
+
+    if (deletionDetected || redirectDetected) {
+      this.logger.warn(`비정상 페이지 감지: ${combined}`)
+      return true
+    }
+
+    return false
   }
 
   /**

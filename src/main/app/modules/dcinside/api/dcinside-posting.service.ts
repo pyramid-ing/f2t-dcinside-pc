@@ -522,19 +522,41 @@ export class DcinsidePostingService {
 
   // 2. 비정상 페이지 체크
   private async _checkAbnormalPage(page: Page, jobId: string): Promise<boolean> {
-    const abnormalText = await page.evaluate(() => {
-      const el = document.querySelector('.box_infotxt.delet strong') as HTMLElement | null
-      return el?.textContent?.trim() || null
+    const abnormalInfo = await page.evaluate(() => {
+      const container = document.querySelector('.box_infotxt.delet') as HTMLElement | null
+      if (!container) return null
+
+      const texts: string[] = []
+      const strong = container.querySelector('strong') as HTMLElement | null
+      if (strong?.textContent) texts.push(strong.textContent.trim())
+
+      const paragraphs = Array.from(container.querySelectorAll('p')) as HTMLElement[]
+      for (const p of paragraphs) {
+        if (p.textContent) texts.push(p.textContent.trim())
+      }
+
+      const combined = texts.join(' ')
+      return { combined, texts }
     })
 
-    if (abnormalText) {
-      // 이미 삭제된 게시물인 경우 성공으로 처리
-      if (abnormalText.includes('게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다')) {
-        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${abnormalText} (이미 삭제됨)`)
+    if (abnormalInfo) {
+      const combined = abnormalInfo.combined || ''
+
+      // 삭제/존재하지 않음 관련 패턴들 (한국어/영문 보조 문구 포함)
+      const deletionPatterns = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
+
+      const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다']
+
+      const deletionDetected = deletionPatterns.some(p => combined.includes(p))
+      const redirectDetected = redirectHints.some(p => combined.includes(p))
+
+      if (deletionDetected || redirectDetected) {
+        await this.jobLogsService.createJobLog(jobId, `삭제 완료: ${combined} (이미 삭제됨)`)
         return true
       }
+
       // 다른 비정상 상태는 에러로 처리
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: abnormalText })
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: combined })
     }
 
     return false
