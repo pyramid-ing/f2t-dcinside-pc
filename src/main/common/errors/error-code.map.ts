@@ -78,4 +78,7 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 500,
     message: () => 'Chrome 브라우저가 설치되어 있지 않습니다. Chrome을 설치한 후 다시 시도해주세요.',
   },
+
+  // 요청 관련
+  [ErrorCode.INVALID_REQUEST]: { status: 400, message: m => m?.message || '잘못된 요청입니다.' },
 }

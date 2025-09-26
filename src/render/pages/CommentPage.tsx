@@ -2,6 +2,7 @@ import { Card, Tabs } from 'antd'
 import React from 'react'
 import CommentJobTable from '@render/features/work-management/CommentJobTable'
 import CommentManagement from './CommentManagement'
+import CommentExtraction from './CommentExtraction'
 import styled from 'styled-components'
 
 const PageContainer = styled.div`
@@ -60,9 +61,14 @@ const CommentPage: React.FC = () => {
     <PageContainer>
       <ContentCard>
         <Tabs
-          defaultActiveKey="upload"
+          defaultActiveKey="extraction"
           size="large"
           items={[
+            {
+              key: 'extraction',
+              label: '주제추출',
+              children: <CommentExtraction />,
+            },
             {
               key: 'upload',
               label: '업로드',

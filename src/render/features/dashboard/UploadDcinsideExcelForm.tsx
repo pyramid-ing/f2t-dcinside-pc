@@ -1,8 +1,9 @@
-import { UploadOutlined } from '@ant-design/icons'
+import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { uploadDcinsideExcel } from '@render/api'
-import { Button, Card, Form, message, Popover, Table, Tag, Typography, Upload } from 'antd'
+import { Button, Card, Form, message, Popover, Table, Tag, Typography, Upload, Space, Dropdown } from 'antd'
 import React, { useState } from 'react'
 import styled from 'styled-components'
+import { generateAutoPostSampleNonMember, generateAutoPostSampleMember } from '../../utils/sampleExcelGenerator'
 
 const { Title, Text } = Typography
 
@@ -170,6 +171,35 @@ const UploadDcinsideExcelForm: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
   const [results, setResults] = useState<UploadResult[]>([])
 
+  // 샘플 엑셀 다운로드 핸들러
+  const handleSampleDownload = (type: 'nonMember' | 'member') => {
+    try {
+      if (type === 'nonMember') {
+        const fileName = generateAutoPostSampleNonMember()
+        message.success(`비회원 샘플 엑셀 파일이 다운로드되었습니다: ${fileName}`)
+      } else {
+        const fileName = generateAutoPostSampleMember()
+        message.success(`회원 샘플 엑셀 파일이 다운로드되었습니다: ${fileName}`)
+      }
+    } catch (error) {
+      message.error('샘플 엑셀 파일 다운로드에 실패했습니다.')
+      console.error('Sample download error:', error)
+    }
+  }
+
+  const sampleMenuItems = [
+    {
+      key: 'nonMember',
+      label: '비회원 샘플',
+      onClick: () => handleSampleDownload('nonMember'),
+    },
+    {
+      key: 'member',
+      label: '회원 샘플',
+      onClick: () => handleSampleDownload('member'),
+    },
+  ]
+
   const columns = [
     {
       title: '제목',
@@ -255,6 +285,29 @@ const UploadDcinsideExcelForm: React.FC = () => {
         <Title level={3} style={{ textAlign: 'center', marginBottom: '24px', color: '#1f2937' }}>
           📄 DC인사이드 게시글 업로드
         </Title>
+
+        {/* 샘플 엑셀 다운로드 섹션 */}
+        <Card style={{ marginBottom: '24px', textAlign: 'center' }}>
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Text strong style={{ fontSize: '16px', color: '#374151' }}>
+              📋 샘플 엑셀 파일 다운로드
+            </Text>
+            <Text type="secondary" style={{ fontSize: '14px' }}>
+              엑셀 파일 형식을 확인하고 샘플 데이터로 테스트해보세요
+            </Text>
+            <Space size="middle">
+              <Dropdown menu={{ items: sampleMenuItems }} placement="bottomCenter">
+                <Button type="primary" icon={<DownloadOutlined />} size="large">
+                  자동 글쓰기 샘플 다운로드
+                </Button>
+              </Dropdown>
+            </Space>
+            <Text type="secondary" style={{ fontSize: '12px' }}>
+              • 비회원: 닉네임 + 비밀번호 필수
+              <br />• 회원: 로그인ID + 로그인비밀번호 필수
+            </Text>
+          </Space>
+        </Card>
         <Form
           layout="vertical"
           onFinish={async () => {

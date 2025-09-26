@@ -4,6 +4,8 @@ export class DcinsidePostItemDto {
   url: string
   board: string
   date: string
+  summary?: string
+  galleryName?: string
 }
 
 export class PostSearchResponseDto {

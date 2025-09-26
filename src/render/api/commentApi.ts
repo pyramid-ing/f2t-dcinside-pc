@@ -6,6 +6,18 @@ export interface PostItem {
   url: string
   board: string
   date: string
+  summary?: string
+  galleryName?: string
+}
+
+export interface PostDetail {
+  id: string
+  title: string
+  url: string
+  board: string
+  date: string
+  summary?: string
+  galleryName?: string
 }
 
 export interface PostSearchResponse {
@@ -46,6 +58,21 @@ export interface CreateCommentJobRequest {
   loginPassword?: string
 }
 
+export interface CommentExcelData {
+  postUrl: string
+  comment: string
+  nickname?: string
+  password?: string
+  loginId?: string
+  loginPassword?: string
+  scheduledAt?: Date
+}
+
+export interface BulkCommentJobRequest {
+  keyword: string
+  commentJobs: CommentExcelData[]
+}
+
 export const commentApi = {
   /**
    * 게시물 검색
@@ -76,5 +103,13 @@ export const commentApi = {
    */
   async updateJobStatus(jobId: string, status: 'RUNNING' | 'STOPPED'): Promise<void> {
     await apiClient.patch(`/dcinside/comment/jobs/${jobId}/status`, { status })
+  },
+
+  /**
+   * 엑셀 파일로 댓글 작업 일괄 생성
+   */
+  async createBulkCommentJobs(request: BulkCommentJobRequest): Promise<CommentJob[]> {
+    const response = await apiClient.post('/dcinside/comment/jobs/bulk', request)
+    return response.data
   },
 }

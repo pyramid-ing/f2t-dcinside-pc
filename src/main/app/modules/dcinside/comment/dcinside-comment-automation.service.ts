@@ -146,12 +146,14 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         const $link = $item.find('a.tit_txt')
         const $sub = $item.find('.sub_txt')
         const $date = $item.find('.date_time')
+        const $summary = $item.find('.link_dsc_txt').first() // 첫 번째 link_dsc_txt 요소
 
         if ($link.length > 0) {
           const title = $link.text().trim()
           const url = $link.attr('href')
           const board = $sub.text().trim()
           const date = $date.text().trim()
+          const summary = $summary.text().trim()
 
           if (url && title) {
             posts.push({
@@ -160,6 +162,8 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
               url: url.startsWith('http') ? url : `https://gall.dcinside.com${url}`,
               board,
               date,
+              summary: summary || undefined,
+              galleryName: board,
             })
           }
         }

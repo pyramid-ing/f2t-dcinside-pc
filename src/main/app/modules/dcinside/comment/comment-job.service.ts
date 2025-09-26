@@ -7,6 +7,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { DcException, DcExceptionType } from '@main/common/errors/dc.exception'
 import { CommentJobResponseDto } from './dto/dcinside-comment-job.dto'
+import { BulkCommentJobCreateDto } from './dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from './dcinside-comment-automation.service'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
@@ -270,5 +271,41 @@ export class CommentJobService implements JobProcessor {
         },
       })
     }
+  }
+
+  /**
+   * 엑셀 파일로 댓글 작업 일괄 생성
+   */
+  async createBulkCommentJobs(bulkDto: BulkCommentJobCreateDto): Promise<CommentJobResponseDto[]> {
+    this.logger.log(`Creating bulk comment jobs: ${bulkDto.commentJobs.length} jobs`)
+
+    const createdJobs: CommentJobResponseDto[] = []
+
+    for (const commentJobData of bulkDto.commentJobs) {
+      try {
+        // 개별 댓글 작업 생성
+        const createDto = {
+          keyword: bulkDto.keyword,
+          comment: commentJobData.comment,
+          postUrls: [commentJobData.postUrl],
+          postTitles: ['엑셀에서 가져온 게시물'],
+          nickname: commentJobData.nickname,
+          password: commentJobData.password,
+          loginId: commentJobData.loginId,
+          loginPassword: commentJobData.loginPassword,
+        }
+
+        const jobs = await this.createJobWithCommentJob(createDto)
+        createdJobs.push(...jobs)
+
+        this.logger.log(`Created comment job for URL: ${commentJobData.postUrl}`)
+      } catch (error) {
+        this.logger.error(`Failed to create comment job for URL ${commentJobData.postUrl}: ${error.message}`)
+        // 개별 작업 실패 시에도 계속 진행
+      }
+    }
+
+    this.logger.log(`Bulk comment job creation completed: ${createdJobs.length} jobs created`)
+    return createdJobs
   }
 }

@@ -56,4 +56,7 @@ export enum ErrorCode {
 
   // ✅ 시스템 관련 (5000번대)
   CHROME_NOT_INSTALLED = 5001,
+
+  // ✅ 요청 관련 (6000번대)
+  INVALID_REQUEST = 6001,
 }

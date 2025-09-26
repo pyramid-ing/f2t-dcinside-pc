@@ -3,6 +3,7 @@ import { DcinsideCommentSearchDto } from 'src/main/app/modules/dcinside/comment/
 import { CreateCommentJobDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-job.dto'
 import { PostSearchResponseDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 import { CommentJobResponseDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-job.dto'
+import { BulkCommentJobCreateDto } from 'src/main/app/modules/dcinside/comment/dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from '@main/app/modules/dcinside/comment/dcinside-comment-automation.service'
 import { CommentJobService } from '@main/app/modules/dcinside/comment/comment-job.service'
 
@@ -47,5 +48,16 @@ export class DcinsideCommentController {
     @Body() body: { status: 'RUNNING' | 'STOPPED' },
   ): Promise<void> {
     return this.commentJobService.updateCommentJobStatus(jobId, body.status)
+  }
+
+  /**
+   * 엑셀 파일로 댓글 작업 일괄 생성
+   */
+  @Post('jobs/bulk')
+  async createBulkCommentJobs(
+    @Body(ValidationPipe) bulkDto: BulkCommentJobCreateDto,
+  ): Promise<CommentJobResponseDto[]> {
+    const jobs = await this.commentJobService.createBulkCommentJobs(bulkDto)
+    return this.commentJobService.getCommentJobs()
   }
 }
