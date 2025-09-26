@@ -58,6 +58,6 @@ export class DcinsideCommentController {
     @Body(ValidationPipe) bulkDto: BulkCommentJobCreateDto,
   ): Promise<CommentJobResponseDto[]> {
     const jobs = await this.commentJobService.createBulkCommentJobs(bulkDto)
-    return this.commentJobService.getCommentJobs()
+    return jobs
   }
 }
