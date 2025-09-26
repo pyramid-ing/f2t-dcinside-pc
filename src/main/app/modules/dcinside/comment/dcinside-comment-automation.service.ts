@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { Page, BrowserContext } from 'playwright'
 import { DcinsideBaseService } from '@main/app/modules/dcinside/base/dcinside-base.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
@@ -12,9 +11,16 @@ import { retry } from '@main/app/utils/retry'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
-import { JobStatus } from '@main/app/modules/dcinside/job/job.types'
 import { DcinsideCommentException } from '@main/common/errors/dcinside-comment.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { DcinsideCommentSearchDto, SortType } from '@main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
+import {
+  DcinsidePostItemDto,
+  PostSearchResponseDto,
+} from '@main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -34,7 +40,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     browserManagerService: BrowserManagerService,
     tetheringService: TetheringService,
     jobLogsService: JobLogsService,
-    private readonly prisma: PrismaService,
   ) {
     super(
       settingsService,
@@ -48,98 +53,9 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 댓글 자동화 작업 실행
-   */
-  async executeCommentJob(jobId: string): Promise<void> {
-    try {
-      const commentJob = await this.prisma.commentJob.findFirst({
-        where: { jobId },
-        include: { job: true },
-      })
-
-      if (!commentJob) {
-        throw new Error(`Comment job not found: ${jobId}`)
-      }
-
-      this.logger.log(`Starting comment job: ${jobId}`)
-
-      // 작업 상태를 processing으로 변경
-      await this.prisma.job.update({
-        where: { id: commentJob.jobId },
-        data: { status: JobStatus.PROCESSING },
-      })
-
-      const postUrls = JSON.parse(commentJob.postUrls)
-      const useLogin = !!(commentJob.loginId && commentJob.loginId.trim() !== '')
-
-      for (const postUrl of postUrls) {
-        try {
-          // 로그인 모드면 닉네임/비밀번호 입력을 생략하고, 추후 로그인 로직을 사용할 수 있도록 분기
-          await this.commentOnPost(
-            postUrl,
-            commentJob.comment,
-            useLogin ? null : (commentJob.nickname as any),
-            useLogin ? null : (commentJob.password as any),
-            useLogin ? (commentJob.loginId as any) : null,
-            useLogin ? (commentJob.loginPassword as any) : null,
-            jobId,
-          )
-
-          // 작업 간격 대기
-          if (commentJob.taskDelay > 0) {
-            await sleep(commentJob.taskDelay * 1000)
-          }
-        } catch (error) {
-          this.logger.error(`Failed to comment on post ${postUrl}: ${error.message}`)
-
-          // 특정 에러 타입에 따라 처리
-          if (error.message.includes('댓글쓰기가 불가능한 게시판')) {
-            this.logger.warn(`Skipping post due to disabled comments: ${postUrl}`)
-          } else if (error.message.includes('로그인이 필요')) {
-            this.logger.warn(`Skipping post due to login requirement: ${postUrl}`)
-          } else {
-            this.logger.error(`Unexpected error for post ${postUrl}: ${error.message}`)
-          }
-
-          // 개별 게시물 실패는 로그만 남기고 계속 진행
-        }
-      }
-
-      // 작업 완료
-      await this.prisma.job.update({
-        where: { id: commentJob.jobId },
-        data: {
-          status: 'completed',
-          completedAt: new Date(),
-        },
-      })
-
-      this.logger.log(`Comment job completed: ${jobId}, processed ${postUrls.length} posts`)
-    } catch (error) {
-      this.logger.error(`Comment job failed: ${error.message}`, error.stack)
-
-      // 작업 실패 처리
-      await this.prisma.job.update({
-        where: { id: jobId },
-        data: {
-          status: 'failed',
-          errorMsg: error.message,
-        },
-      })
-
-      // DcinsideCommentException으로 래핑하여 재throw
-      throw new DcinsideCommentException(ErrorCode.POST_SUBMIT_FAILED, {
-        message: '댓글 작업 실행에 실패했습니다.',
-        originalError: error.message,
-        jobId,
-      })
-    }
-  }
-
-  /**
    * 개별 게시물에 댓글 작성 (순차적 함수 호출로 가독성 향상)
    */
-  private async commentOnPost(
+  async commentOnPost(
     postUrl: string,
     comment: string,
     nickname: string | null,
@@ -190,6 +106,89 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       if (!settings.reuseWindowBetweenTasks) {
         await this._closeBrowser(jobId, browserId)
       }
+    }
+  }
+
+  /**
+   * 디시인사이드 게시물 검색
+   */
+  async searchPosts(searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
+    try {
+      const { keyword, sortType = SortType.NEW, page = 1 } = searchDto
+
+      // URL 구성
+      let searchUrl: string
+      if (sortType === SortType.NEW) {
+        searchUrl = `https://search.dcinside.com/post/q/${encodeURIComponent(keyword)}`
+      } else {
+        searchUrl = `https://search.dcinside.com/post/sort/accuracy/q/${encodeURIComponent(keyword)}`
+      }
+
+      if (page > 1) {
+        searchUrl += `/p/${page}`
+        if (sortType === SortType.ACCURACY) {
+          searchUrl += '/sort/accuracy'
+        }
+      }
+
+      this.logger.log(`Searching posts: ${searchUrl}`)
+
+      const response = await axios.get(searchUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+        timeout: 10000,
+      })
+
+      const $ = cheerio.load(response.data)
+      const posts: DcinsidePostItemDto[] = []
+
+      // 게시물 목록 파싱
+      $('.sch_result_list li').each((index, element) => {
+        const $item = $(element)
+        const $link = $item.find('a.tit_txt')
+        const $sub = $item.find('.sub_txt')
+        const $date = $item.find('.date_time')
+
+        if ($link.length > 0) {
+          const title = $link.text().trim()
+          const url = $link.attr('href')
+          const board = $sub.text().trim()
+          const date = $date.text().trim()
+
+          if (url && title) {
+            posts.push({
+              id: `${Date.now()}_${index}`,
+              title,
+              url: url.startsWith('http') ? url : `https://gall.dcinside.com${url}`,
+              board,
+              date,
+            })
+          }
+        }
+      })
+
+      // 다음 페이지 존재 여부 확인
+      const hasNextPage =
+        $('.paging a').filter(function () {
+          return $(this).text().trim() === '다음'
+        }).length > 0
+
+      this.logger.log(`Found ${posts.length} posts for keyword: ${keyword}`)
+
+      return {
+        posts,
+        totalCount: posts.length,
+        currentPage: page,
+        hasNextPage,
+      }
+    } catch (error) {
+      this.logger.error(`Failed to search posts: ${error.message}`, error.stack)
+      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+        message: '게시물 검색에 실패했습니다.',
+        originalError: error.message,
+      })
     }
   }
 
@@ -273,7 +272,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 게시물 페이지로 이동
    */
   private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
-    await page.goto(postUrl, { waitUntil: 'networkidle' })
+    await page.goto(postUrl, { waitUntil: 'domcontentloaded' })
   }
 
   /**

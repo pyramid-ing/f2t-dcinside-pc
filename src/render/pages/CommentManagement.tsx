@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Input, Button, Form, Typography, Row, Col, Table, Select, Space, message, InputNumber } from 'antd'
+import { Card, Input, Button, Form, Typography, Row, Col, Table, Select, Space, message } from 'antd'
 import { SearchOutlined, PlayCircleOutlined, StopOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import PageContainer from '../components/shared/PageContainer'
@@ -41,7 +41,6 @@ const CommentManagement: React.FC = () => {
   const [commentJobs, setCommentJobs] = useState<CommentJob[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [selectedPosts, setSelectedPosts] = useState<string[]>([])
-  const [taskDelay, setTaskDelay] = useState(3)
   const [nickname, setNickname] = useState<string>('')
   const [password, setPassword] = useState<string>('')
   const [loginId, setLoginId] = useState<string>('')
@@ -88,25 +87,33 @@ const CommentManagement: React.FC = () => {
     }
 
     try {
+      // 선택된 게시물들의 URL 가져오기
       const selectedPostUrls = posts.filter(post => selectedPosts.includes(post.id)).map(post => post.url)
 
-      const newJob = await commentApi.createCommentJob({
-        keyword: searchForm.getFieldValue('keyword') || '',
+      // 각 게시물에 대해 개별 댓글 작업 생성
+      const jobs = await commentApi.createCommentJob({
+        keyword: searchForm.getFieldValue('keyword') || '검색된 게시물',
         comment: values.comment,
         postUrls: selectedPostUrls,
         nickname: nickname || undefined,
         password: password || undefined,
-        taskDelay,
         galleryUrl: galleryUrl || undefined,
         loginId: loginId || undefined,
         loginPassword: loginPassword || undefined,
       })
 
-      setCommentJobs(prev => [newJob, ...prev])
-      message.success('댓글 작업이 시작되었습니다.')
+      message.success(`${jobs.length}개의 댓글 작업이 생성되었습니다.`)
+
+      // 댓글 작업 목록 새로고침
+      const updatedJobs = await commentApi.getCommentJobs()
+      setCommentJobs(updatedJobs)
+
+      // 선택된 게시물 초기화
+      setSelectedPosts([])
+      commentForm.resetFields()
     } catch (error) {
-      message.error('댓글 작업 시작에 실패했습니다.')
-      console.error('Comment job error:', error)
+      message.error('댓글 작업 생성에 실패했습니다.')
+      console.error('Create comment job error:', error)
     }
   }
 
@@ -115,7 +122,7 @@ const CommentManagement: React.FC = () => {
     try {
       await commentApi.updateJobStatus(jobId, 'STOPPED')
       setCommentJobs(prev => prev.map(job => (job.id === jobId ? { ...job, isRunning: false } : job)))
-      message.info('댓글 작업이 중지되었습니다.')
+      message.success('댓글 작업이 중지되었습니다.')
     } catch (error) {
       message.error('댓글 작업 중지에 실패했습니다.')
       console.error('Stop job error:', error)
@@ -204,6 +211,29 @@ const CommentManagement: React.FC = () => {
       ellipsis: true,
     },
     {
+      title: '대상 게시물',
+      dataIndex: 'postUrl',
+      key: 'postUrl',
+      render: (postUrl: string) => (
+        <a
+          href="#"
+          onClick={e => {
+            e.preventDefault()
+            window.electronAPI?.openExternal(postUrl)
+          }}
+          style={{ cursor: 'pointer', fontSize: '12px' }}
+        >
+          게시물 보기
+        </a>
+      ),
+    },
+    {
+      title: '닉네임',
+      dataIndex: 'nickname',
+      key: 'nickname',
+      render: (nickname: string) => nickname || '-',
+    },
+    {
       title: '상태',
       dataIndex: 'isRunning',
       key: 'isRunning',
@@ -215,6 +245,7 @@ const CommentManagement: React.FC = () => {
       title: '시작시간',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      render: (date: string) => new Date(date).toLocaleString('ko-KR'),
     },
     {
       title: '작업',
@@ -327,16 +358,6 @@ const CommentManagement: React.FC = () => {
                   value={loginPassword}
                   onChange={e => setLoginPassword(e.target.value)}
                   placeholder="로그인 비밀번호 (선택)"
-                />
-              </Form.Item>
-
-              <Form.Item label="작업 간격 (초)">
-                <InputNumber
-                  min={1}
-                  max={60}
-                  value={taskDelay}
-                  onChange={value => setTaskDelay(value || 3)}
-                  style={{ width: '100%' }}
                 />
               </Form.Item>
 

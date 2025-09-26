@@ -1,10 +1,12 @@
 export const JOB_TYPE = {
   POST: 'post',
+  COMMENT: 'comment',
 } as const
 
 export const JOB_TYPE_OPTIONS = [
   { value: '', label: '전체' },
   { value: JOB_TYPE.POST, label: '포스팅' },
+  { value: JOB_TYPE.COMMENT, label: '댓글' },
 ]
 
 export const JOB_STATUS = {
@@ -87,6 +89,11 @@ export interface PostJob extends BaseJob {
   postJob: PostJobDetail
 }
 
+export interface CommentJob extends BaseJob {
+  type: typeof JOB_TYPE.COMMENT
+  commentJob: CommentJobDetail
+}
+
 export interface PostJobDetail {
   id: string
 
@@ -109,7 +116,23 @@ export interface PostJobDetail {
   updatedAt?: Date
 }
 
-export type Job = PostJob
+export interface CommentJobDetail {
+  id: string
+
+  keyword?: string
+  comment?: string
+  postUrl?: string
+  nickname?: string
+  password?: string
+  galleryUrl?: string
+  loginId?: string
+  loginPassword?: string
+
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+export type Job = PostJob | CommentJob
 
 export interface JobLog {
   id: string

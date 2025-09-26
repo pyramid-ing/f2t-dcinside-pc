@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsArray, Min, Max, IsNotEmpty } from 'class-validator'
+import { IsString, IsOptional, IsArray, IsNotEmpty } from 'class-validator'
 
 export class CreateCommentJobDto {
   @IsString()
@@ -23,12 +23,6 @@ export class CreateCommentJobDto {
   password?: string
 
   @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(60)
-  taskDelay?: number
-
-  @IsOptional()
   @IsString()
   galleryUrl?: string
 
@@ -45,12 +39,11 @@ export class CommentJobResponseDto {
   id: string
   keyword: string
   comment: string
-  postUrls: string[]
+  postUrl: string
   nickname: string | null
   password: string | null
   isRunning: boolean
   createdAt: Date
-  taskDelay: number
   galleryUrl?: string | null
   loginId?: string | null
   loginPassword?: string | null

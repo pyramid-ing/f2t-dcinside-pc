@@ -13,7 +13,7 @@ export class JobController {
   @Get()
   async getJobs(
     @Query('status') status?: JobStatus,
-    @Query('type') type: JobType = JobType.POST,
+    @Query('type') type?: JobType,
     @Query('search') search?: string,
     @Query('orderBy') orderBy: string = 'updatedAt',
     @Query('order') order: 'asc' | 'desc' = 'desc',
@@ -26,7 +26,7 @@ export class JobController {
   @Get('ids')
   async getJobIds(
     @Query('status') status?: JobStatus,
-    @Query('type') type: JobType = JobType.POST,
+    @Query('type') type?: JobType,
     @Query('search') search?: string,
     @Query('orderBy') orderBy: string = 'updatedAt',
     @Query('order') order: 'asc' | 'desc' = 'desc',

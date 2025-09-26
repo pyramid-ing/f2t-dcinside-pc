@@ -8,9 +8,18 @@ import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.modu
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinside-posting.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
+import { DcinsideCommentModule } from '@main/app/modules/dcinside/comment/dcinsideCommentModule'
 
 @Module({
-  imports: [CommonModule, PostJobModule, JobLogsModule, SettingsModule, DcinsidePostingModule, UtilModule],
+  imports: [
+    CommonModule,
+    PostJobModule,
+    JobLogsModule,
+    SettingsModule,
+    DcinsidePostingModule,
+    UtilModule,
+    DcinsideCommentModule,
+  ],
   providers: [JobQueueProcessor, JobService],
   controllers: [JobController],
   exports: [JobQueueProcessor, JobService],

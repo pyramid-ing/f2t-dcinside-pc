@@ -86,13 +86,12 @@ model CommentJob {
 
   keyword   String
   comment   String
-  postUrls  String // JSON stringified array
+  postUrl   String // 단일 포스트 URL
   nickname  String?
   password  String?
   galleryUrl String?
   loginId    String?
   loginPassword String?
-  taskDelay Int     @default(3) // 작업 간격(초)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

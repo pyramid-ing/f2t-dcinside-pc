@@ -40,6 +40,8 @@ import 'dayjs/locale/ko'
 import {
   JobLog,
   PostJob,
+  CommentJob,
+  Job,
   JOB_STATUS,
   JOB_STATUS_LABEL,
   JOB_STATUS_COLOR,
@@ -288,11 +290,51 @@ function extractGalleryId(url: string): string {
   }
 }
 
+// 작업 타입별 갤러리 정보 표시
+function getGalleryDisplay(job: Job): string {
+  if (job.type === JOB_TYPE.POST) {
+    return extractGalleryId((job as PostJob).postJob?.galleryUrl || '')
+  } else if (job.type === JOB_TYPE.COMMENT) {
+    const commentJob = job as CommentJob
+    return commentJob.commentJob?.galleryUrl ? extractGalleryId(commentJob.commentJob.galleryUrl) : '댓글'
+  }
+  return '-'
+}
+
+// 작업 타입별 제목 표시
+function getJobTitle(job: Job): string {
+  if (job.type === JOB_TYPE.POST) {
+    return (job as PostJob).postJob?.title || '-'
+  } else if (job.type === JOB_TYPE.COMMENT) {
+    const commentJob = job as CommentJob
+    return commentJob.commentJob?.keyword ? `[댓글] ${commentJob.commentJob.keyword}` : '[댓글]'
+  }
+  return '-'
+}
+
+// 작업 타입별 포스트 URL 표시 (댓글 작업용)
+function getPostUrl(job: Job): string | undefined {
+  if (job.type === JOB_TYPE.COMMENT) {
+    const commentJob = job as CommentJob
+    return commentJob.commentJob?.postUrl
+  }
+  return undefined
+}
+
+// 작업 타입별 결과 URL 표시
+function getJobResultUrl(job: Job): string | undefined {
+  if (job.type === JOB_TYPE.POST) {
+    return (job as PostJob).postJob?.resultUrl || job.resultUrl
+  }
+  // 댓글 작업은 결과 URL이 없음
+  return undefined
+}
+
 const JobTable: React.FC = () => {
-  const [data, setData] = useState<PostJob[]>([])
+  const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [typeFilter, setTypeFilter] = useState<JobType | ''>(JOB_TYPE.POST)
+  const [typeFilter, setTypeFilter] = useState<JobType | ''>('')
   const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -825,7 +867,7 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const handleStatusChange = async (job: PostJob, value: JobStatus) => {
+  const handleStatusChange = async (job: Job, value: JobStatus) => {
     if (value === job.status) return
     if (job.status === JOB_STATUS.PENDING && value === JOB_STATUS.REQUEST) {
       await pendingToRequest(job.id)
@@ -834,7 +876,7 @@ const JobTable: React.FC = () => {
     fetchJobs()
   }
 
-  const handleScheduledAtChange = async (job: PostJob, date: dayjs.Dayjs | null) => {
+  const handleScheduledAtChange = async (job: Job, date: dayjs.Dayjs | null) => {
     try {
       const scheduledAt = date ? date.toISOString() : null
       await updateJobScheduledAt(job.id, scheduledAt)
@@ -1030,7 +1072,16 @@ const JobTable: React.FC = () => {
               </span>
             ) : (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                ({data.filter(job => selection.includeIds.has(job.id) && !job.postJob?.deletedAt).length}개)
+                (
+                {
+                  data.filter(
+                    job =>
+                      selection.includeIds.has(job.id) &&
+                      job.type === JOB_TYPE.POST &&
+                      !(job as PostJob).postJob?.deletedAt,
+                  ).length
+                }
+                개)
               </span>
             )}
           </Button>
@@ -1042,7 +1093,16 @@ const JobTable: React.FC = () => {
               </span>
             ) : (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                ({data.filter(job => selection.includeIds.has(job.id) && !job.postJob?.deletedAt).length}개)
+                (
+                {
+                  data.filter(
+                    job =>
+                      selection.includeIds.has(job.id) &&
+                      job.type === JOB_TYPE.POST &&
+                      !(job as PostJob).postJob?.deletedAt,
+                  ).length
+                }
+                개)
               </span>
             )}
           </Button>
@@ -1070,7 +1130,7 @@ const JobTable: React.FC = () => {
         bordered
         style={{ background: '#fff' }}
         scroll={{ x: 'max-content' }}
-        rowClassName={(record: PostJob) => `row-${record.status}`}
+        rowClassName={(record: Job) => `row-${record.status}`}
         columns={[
           {
             title: (
@@ -1100,7 +1160,7 @@ const JobTable: React.FC = () => {
             dataIndex: 'checkbox',
             width: 100,
             align: 'center',
-            render: (_: any, record: PostJob) => (
+            render: (_: any, record: Job) => (
               <Checkbox checked={isChecked(record.id)} onChange={e => handleSelectJob(record.id, e.target.checked)} />
             ),
           },
@@ -1110,17 +1170,18 @@ const JobTable: React.FC = () => {
             width: 120,
             sorter: true,
             align: 'center',
-            render: (url: string, row: PostJob) => (
+            render: (url: string, row: Job) => (
               <span
                 style={{
                   fontFamily: 'monospace',
                   fontSize: '12px',
-                  background: '#f5f5f5',
+                  background: row.type === JOB_TYPE.COMMENT ? '#e6f7ff' : '#f5f5f5',
                   padding: '2px 6px',
                   borderRadius: '4px',
+                  color: row.type === JOB_TYPE.COMMENT ? '#1890ff' : 'inherit',
                 }}
               >
-                {extractGalleryId(row.postJob?.galleryUrl || (url as any) || '')}
+                {getGalleryDisplay(row)}
               </span>
             ),
           },
@@ -1130,11 +1191,14 @@ const JobTable: React.FC = () => {
             width: 300,
             sorter: true,
             ellipsis: { showTitle: false },
-            render: (text: string, row: PostJob) => {
-              const resultUrl = row.resultUrl || row.postJob?.resultUrl
+            render: (text: string, row: Job) => {
+              const resultUrl = getJobResultUrl(row)
+              const title = getJobTitle(row)
+              const postUrl = getPostUrl(row)
+
               return (
-                <span title={row.postJob?.title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  {row.postJob?.title || '-'}
+                <span title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  {title}
                   {resultUrl && (
                     <a
                       href={resultUrl}
@@ -1154,6 +1218,25 @@ const JobTable: React.FC = () => {
                       등록된 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
                     </a>
                   )}
+                  {postUrl && (
+                    <a
+                      href={postUrl}
+                      onClick={e => {
+                        e.preventDefault()
+                        window.electronAPI?.openExternal(postUrl)
+                      }}
+                      style={{
+                        color: '#52c41a',
+                        fontSize: '12px',
+                        marginLeft: 4,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                      }}
+                    >
+                      대상 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
+                    </a>
+                  )}
                 </span>
               )
             },
@@ -1162,8 +1245,8 @@ const JobTable: React.FC = () => {
             title: '결과',
             dataIndex: 'resultMsg',
             width: 350,
-            render: (v: string, row: PostJob) => {
-              const resultUrl = row.resultUrl || row.postJob?.resultUrl
+            render: (v: string, row: Job) => {
+              const resultUrl = getJobResultUrl(row)
               const latestLog = latestLogs[row.id]
               const displayMessage = latestLog ? latestLog.message : v || getDefaultMessage(row.status)
               const statusType = getStatusType(row.status)
@@ -1198,6 +1281,26 @@ const JobTable: React.FC = () => {
                       </a>
                     </div>
                   )}
+                  {row.type === JOB_TYPE.COMMENT && getPostUrl(row) && (
+                    <div className="result-url">
+                      <a
+                        href={getPostUrl(row)}
+                        onClick={e => {
+                          e.preventDefault()
+                          window.electronAPI?.openExternal(getPostUrl(row)!)
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: '#52c41a',
+                        }}
+                      >
+                        대상 글 보기 →
+                      </a>
+                    </div>
+                  )}
                 </PopoverContent>
               )
 
@@ -1223,6 +1326,18 @@ const JobTable: React.FC = () => {
                         등록된 글 보기 →
                       </a>
                     )}
+                    {row.type === JOB_TYPE.COMMENT && getPostUrl(row) && (
+                      <a
+                        href={getPostUrl(row)}
+                        onClick={e => {
+                          e.preventDefault()
+                          window.electronAPI?.openExternal(getPostUrl(row)!)
+                        }}
+                        style={{ color: '#52c41a', fontSize: '12px', marginLeft: '8px' }}
+                      >
+                        대상 글 보기 →
+                      </a>
+                    )}
                   </ResultCell>
                 </Popover>
               )
@@ -1235,20 +1350,34 @@ const JobTable: React.FC = () => {
             width: 100,
             sorter: true,
             align: 'center',
-            render: (text: string, row) =>
-              row.postJob?.headtext ? (
-                <Tag color="blue" style={{ fontSize: '11px' }}>
-                  {row.postJob?.headtext}
-                </Tag>
-              ) : (
-                '-'
-              ),
+            render: (text: string, row: Job) => {
+              if (row.type === JOB_TYPE.POST) {
+                const postJob = row as PostJob
+                return postJob.postJob?.headtext ? (
+                  <Tag color="blue" style={{ fontSize: '11px' }}>
+                    {postJob.postJob.headtext}
+                  </Tag>
+                ) : (
+                  '-'
+                )
+              } else if (row.type === JOB_TYPE.COMMENT) {
+                const commentJob = row as CommentJob
+                return commentJob.commentJob?.nickname ? (
+                  <Tag color="green" style={{ fontSize: '11px' }}>
+                    {commentJob.commentJob.nickname}
+                  </Tag>
+                ) : (
+                  '-'
+                )
+              }
+              return '-'
+            },
           },
           {
             title: '상태',
             dataIndex: 'status',
             key: 'status',
-            render: (value: JobStatus, record: PostJob) =>
+            render: (value: JobStatus, record: Job) =>
               editingStatusJobId === record.id ? (
                 <Select
                   size="small"
@@ -1283,12 +1412,12 @@ const JobTable: React.FC = () => {
               ),
           },
           {
-            title: '글쓰기예약시간',
+            title: '예약시간',
             dataIndex: 'scheduledAt',
             key: 'scheduledAt',
             width: 200,
             align: 'center',
-            render: (value: string, record: PostJob) => (
+            render: (value: string, record: Job) => (
               <DatePicker
                 showTime={{ format: 'HH:mm:ss' }}
                 format="YYYY-MM-DD HH:mm:ss"
@@ -1307,17 +1436,23 @@ const JobTable: React.FC = () => {
             key: 'autoDeleteMinutes',
             width: 150,
             align: 'center',
-            render: (_: any, record: PostJob) => {
+            render: (_: any, record: Job) => {
+              // 댓글 작업은 자동삭제 기능 없음
+              if (record.type === JOB_TYPE.COMMENT) {
+                return '-'
+              }
+
+              const postJob = record as PostJob
               // 이미 삭제된 작업만 수정 불가
-              if (record.postJob?.deletedAt) {
+              if (postJob.postJob?.deletedAt) {
                 return '-'
               }
               return (
                 <InputNumber
                   min={0}
                   placeholder="분"
-                  value={record.postJob?.autoDeleteMinutes || undefined}
-                  onChange={v => handleAutoDeleteMinutesChange(record, v as number)}
+                  value={postJob.postJob?.autoDeleteMinutes || undefined}
+                  onChange={v => handleAutoDeleteMinutesChange(postJob, v as number)}
                   style={{ width: 110 }}
                 />
               )
@@ -1329,7 +1464,13 @@ const JobTable: React.FC = () => {
             key: 'deleteAt',
             width: 170,
             align: 'center',
-            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
+            render: (value: string, record: Job) => {
+              if (record.type === JOB_TYPE.POST) {
+                const postJob = record as PostJob
+                return postJob.postJob?.deleteAt ? dayjs(postJob.postJob.deleteAt).format('YYYY-MM-DD HH:mm') : '-'
+              }
+              return '-'
+            },
             sorter: true,
           },
           {
@@ -1338,7 +1479,13 @@ const JobTable: React.FC = () => {
             key: 'deletedAt',
             width: 170,
             align: 'center',
-            render: (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'),
+            render: (value: string, record: Job) => {
+              if (record.type === JOB_TYPE.POST) {
+                const postJob = record as PostJob
+                return postJob.postJob?.deletedAt ? dayjs(postJob.postJob.deletedAt).format('YYYY-MM-DD HH:mm') : '-'
+              }
+              return '-'
+            },
             sorter: true,
           },
           {
@@ -1374,7 +1521,7 @@ const JobTable: React.FC = () => {
             width: 150,
             fixed: 'right',
             align: 'center',
-            render: (_: any, row: PostJob) => (
+            render: (_: any, row: Job) => (
               <Space size="small" direction="vertical">
                 <Space size="small">
                   <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
@@ -1390,7 +1537,7 @@ const JobTable: React.FC = () => {
                       재시도
                     </Button>
                   )}
-                  {row.status === JOB_STATUS.DELETE_FAILED && (
+                  {row.status === JOB_STATUS.DELETE_FAILED && row.type === JOB_TYPE.POST && (
                     <Button
                       type="primary"
                       size="small"
@@ -1400,7 +1547,6 @@ const JobTable: React.FC = () => {
                       삭제재시도
                     </Button>
                   )}
-                  {/* BLOG_POST(포스팅) 타입은 다운로드 버튼을 렌더링하지 않음 */}
                 </Space>
                 {row.status !== JOB_STATUS.PROCESSING && (
                   <Popconfirm

@@ -15,25 +15,24 @@ export interface PostSearchResponse {
   hasNextPage: boolean
 }
 
-export interface CommentJob {
-  id: string
-  keyword: string
-  comment: string
-  postUrls: string[]
-  nickname: string | null
-  password: string | null
-  isRunning: boolean
-  createdAt: string
-  taskDelay: number
-  galleryUrl?: string | null
-  loginId?: string | null
-  loginPassword?: string | null
-}
-
 export interface CommentSearchRequest {
   keyword: string
   sortType?: 'new' | 'accuracy'
   page?: number
+}
+
+export interface CommentJob {
+  id: string
+  keyword: string
+  comment: string
+  postUrl: string
+  nickname: string | null
+  password: string | null
+  isRunning: boolean
+  createdAt: Date
+  galleryUrl?: string | null
+  loginId?: string | null
+  loginPassword?: string | null
 }
 
 export interface CreateCommentJobRequest {
@@ -42,7 +41,6 @@ export interface CreateCommentJobRequest {
   postUrls: string[]
   nickname?: string
   password?: string
-  taskDelay?: number
   galleryUrl?: string
   loginId?: string
   loginPassword?: string
@@ -60,8 +58,8 @@ export const commentApi = {
   /**
    * 댓글 작업 생성
    */
-  async createCommentJob(request: CreateCommentJobRequest): Promise<CommentJob> {
-    const response = await apiClient.post('/dcinside/comment/job', request)
+  async createCommentJob(request: CreateCommentJobRequest): Promise<CommentJob[]> {
+    const response = await apiClient.post('/dcinside/comment/jobs', request)
     return response.data
   },
 
@@ -76,8 +74,7 @@ export const commentApi = {
   /**
    * 댓글 작업 상태 업데이트
    */
-  async updateJobStatus(jobId: string, status: 'RUNNING' | 'STOPPED'): Promise<{ success: boolean }> {
-    const response = await apiClient.patch(`/dcinside/comment/job/${jobId}/status`, { status })
-    return response.data
+  async updateJobStatus(jobId: string, status: 'RUNNING' | 'STOPPED'): Promise<void> {
+    await apiClient.patch(`/dcinside/comment/jobs/${jobId}/status`, { status })
   },
 }
