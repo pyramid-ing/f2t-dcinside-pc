@@ -72,12 +72,12 @@ const CommentExtraction: React.FC = () => {
 
     setExtractionLoading(true)
     try {
-      // 검색 결과에서 바로 엑셀 데이터 준비
+      // 검색 결과에서 바로 엑셀 데이터 준비 (열 순서: 제목, 요약, 갤러리명, url, 등록일자)
       const excelData = posts.map(post => ({
         제목: post.title,
-        'DC URL': post.url,
         요약: post.summary || '',
         갤러리명: post.galleryName || post.board,
+        url: post.url,
         등록일자: post.date,
       }))
 
@@ -204,7 +204,7 @@ const CommentExtraction: React.FC = () => {
             >
               엑셀 파일 다운로드
             </Button>
-            <Text type="secondary">다운로드 항목: 제목, DC URL, 요약, 갤러리명, 등록일자</Text>
+            <Text type="secondary">다운로드 항목: 제목, 요약, 갤러리명, url, 등록일자</Text>
           </Space>
         </ActionSection>
       )}
