@@ -30,7 +30,7 @@ export interface PostSearchResponse {
 export interface CommentSearchRequest {
   keyword: string
   sortType?: 'new' | 'accuracy'
-  page?: number
+  maxCount?: number
 }
 
 export interface CommentJob {

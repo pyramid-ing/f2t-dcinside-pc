@@ -110,21 +110,14 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    */
   async searchPosts(searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     try {
-      const { keyword, sortType = SortType.NEW, page = 1 } = searchDto
+      const { keyword, sortType = SortType.NEW, maxCount } = searchDto
 
-      // URL 구성
+      // URL 구성 (첫 페이지)
       let searchUrl: string
       if (sortType === SortType.NEW) {
         searchUrl = `https://search.dcinside.com/post/q/${encodeURIComponent(keyword)}`
       } else {
         searchUrl = `https://search.dcinside.com/post/sort/accuracy/q/${encodeURIComponent(keyword)}`
-      }
-
-      if (page > 1) {
-        searchUrl += `/p/${page}`
-        if (sortType === SortType.ACCURACY) {
-          searchUrl += '/sort/accuracy'
-        }
       }
 
       this.logger.log(`Searching posts: ${searchUrl}`)
@@ -169,18 +162,80 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         }
       })
 
-      // 다음 페이지 존재 여부 확인
-      const hasNextPage =
-        $('.paging a').filter(function () {
-          return $(this).text().trim() === '다음'
-        }).length > 0
+      // 다음 페이지 존재 여부 확인 (10페이지부터 다음페이지 체크)
+      const hasNextPage = $('.bottom_paging_box a.sp_pagingicon.page_next').length > 0
+
+      // maxCount가 지정된 경우, 목표 개수까지 다음 페이지를 순회하며 누적 수집
+      if (typeof maxCount === 'number' && maxCount > 0) {
+        let currentPage = 1
+        let canContinue = hasNextPage
+
+        while (posts.length < maxCount && canContinue) {
+          currentPage += 1
+
+          // 다음 페이지 URL 구성
+          let nextUrl: string
+          if (sortType === SortType.NEW) {
+            nextUrl = `https://search.dcinside.com/post/q/${encodeURIComponent(keyword)}`
+          } else {
+            nextUrl = `https://search.dcinside.com/post/sort/accuracy/q/${encodeURIComponent(keyword)}`
+          }
+          nextUrl += `/p/${currentPage}`
+          if (sortType === SortType.ACCURACY) {
+            nextUrl += '/sort/accuracy'
+          }
+
+          this.logger.log(`Searching posts (pagination): ${nextUrl}`)
+
+          const nextResp = await axios.get(nextUrl, {
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+            timeout: 10000,
+          })
+
+          const _$ = cheerio.load(nextResp.data)
+
+          _$('.sch_result_list li').each((index, element) => {
+            if (posts.length >= maxCount) return
+            const $item = _$(element)
+            const $link = $item.find('a.tit_txt')
+            const $sub = $item.find('.sub_txt')
+            const $date = $item.find('.date_time')
+            const $summary = $item.find('.link_dsc_txt').first()
+
+            if ($link.length > 0) {
+              const title = $link.text().trim()
+              const url = $link.attr('href')
+              const board = $sub.text().trim()
+              const date = $date.text().trim()
+              const summary = $summary.text().trim()
+
+              if (url && title) {
+                posts.push({
+                  id: `${Date.now()}_${currentPage}_${index}`,
+                  title,
+                  url: url.startsWith('http') ? url : `https://gall.dcinside.com${url}`,
+                  board,
+                  date,
+                  summary: summary || undefined,
+                  galleryName: board,
+                })
+              }
+            }
+          })
+
+          canContinue = _$('.bottom_paging_box a.sp_pagingicon.page_next').length > 0
+        }
+      }
 
       this.logger.log(`Found ${posts.length} posts for keyword: ${keyword}`)
 
       return {
-        posts,
+        posts: typeof maxCount === 'number' && maxCount > 0 ? posts.slice(0, maxCount) : posts,
         totalCount: posts.length,
-        currentPage: page,
+        currentPage: 1,
         hasNextPage,
       }
     } catch (error) {

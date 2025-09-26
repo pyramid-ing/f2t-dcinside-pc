@@ -41,6 +41,7 @@ const CommentExtraction: React.FC = () => {
   const [posts, setPosts] = useState<PostItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [extractionLoading, setExtractionLoading] = useState(false)
+  const [pageSize, setPageSize] = useState<number>(100)
 
   // 게시물 검색
   const handleSearch = async (values: { keyword: string; sortType: string; maxCount: number }) => {
@@ -49,12 +50,11 @@ const CommentExtraction: React.FC = () => {
       const response = await commentApi.searchPosts({
         keyword: values.keyword,
         sortType: values.sortType as 'new' | 'accuracy',
+        maxCount: values.maxCount,
       })
 
-      // 최대 개수만큼만 가져오기
-      const limitedPosts = response.posts.slice(0, values.maxCount)
-      setPosts(limitedPosts)
-      message.success(`${limitedPosts.length}개의 게시물을 찾았습니다.`)
+      setPosts(response.posts)
+      message.success(`${response.posts.length}개의 게시물을 찾았습니다.`)
     } catch (error) {
       message.error('게시물 검색에 실패했습니다.')
       console.error('Search error:', error)
@@ -152,10 +152,10 @@ const CommentExtraction: React.FC = () => {
           </Form.Item>
           <Form.Item
             name="maxCount"
-            initialValue={50}
+            initialValue={100}
             rules={[{ required: true, message: '최대 추출 개수를 입력해주세요' }]}
           >
-            <InputNumber min={1} max={1000} placeholder="최대 개수" style={{ width: 120 }} addonAfter="개" />
+            <InputNumber min={25} max={1000} placeholder="최대 개수" style={{ width: 120 }} addonAfter="개" />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" icon={<SearchOutlined />} loading={searchLoading}>
@@ -168,7 +168,26 @@ const CommentExtraction: React.FC = () => {
       {/* 검색 결과 */}
       {posts.length > 0 && (
         <PostListSection title={`검색 결과 (${posts.length}개)`}>
-          <Table columns={postColumns} dataSource={posts} rowKey="id" pagination={{ pageSize: 10 }} size="small" />
+          <Table
+            columns={postColumns}
+            dataSource={posts}
+            rowKey="id"
+            pagination={{
+              pageSize,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              pageSizeOptions: ['10', '50', '100', '200', '500'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}개`,
+              onShowSizeChange: (_, size) => setPageSize(size),
+              onChange: (_page, size) => {
+                if (size && size !== pageSize) {
+                  setPageSize(size)
+                }
+              },
+              size: 'default',
+            }}
+            size="small"
+          />
         </PostListSection>
       )}
 
