@@ -6,22 +6,6 @@ import styled from 'styled-components'
 
 const { Title, Text } = Typography
 
-const Container = styled.div`
-  width: 100%;
-  background: #f5f5f5;
-  min-height: 100vh;
-  padding: 24px;
-`
-
-const UploadSection = styled.div`
-  max-width: 600px;
-  margin: 0 auto 40px auto;
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-`
-
 const ResultsSection = styled.div`
   width: 100%;
   max-width: 1400px;
@@ -266,8 +250,8 @@ const UploadDcinsideExcelForm: React.FC = () => {
   ]
 
   return (
-    <Container>
-      <UploadSection>
+    <div>
+      <div>
         <Title level={3} style={{ textAlign: 'center', marginBottom: '24px', color: '#1f2937' }}>
           📄 DC인사이드 게시글 업로드
         </Title>
@@ -332,7 +316,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
             </Button>
           </Form.Item>
         </Form>
-      </UploadSection>
+      </div>
 
       {results.length > 0 && (
         <ResultsSection>
@@ -380,7 +364,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
           </ResultsCard>
         </ResultsSection>
       )}
-    </Container>
+    </div>
   )
 }
 

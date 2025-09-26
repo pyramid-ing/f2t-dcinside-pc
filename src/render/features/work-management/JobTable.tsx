@@ -34,7 +34,6 @@ import {
   updateJobAutoDeleteMinutes,
   updateJobScheduledAt,
 } from '@render/api'
-import PageContainer from '../../components/shared/PageContainer'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import {
@@ -896,7 +895,7 @@ const JobTable: React.FC = () => {
   }).length
 
   return (
-    <PageContainer title="작업 관리" maxWidth="none">
+    <div>
       {/* 필터 영역 (상태/타입/검색 등) */}
       <div style={{ marginBottom: 12 }}>
         <Space size="middle" wrap>
@@ -1604,7 +1603,7 @@ const JobTable: React.FC = () => {
           )}
         </div>
       </Modal>
-    </PageContainer>
+    </div>
   )
 }
 

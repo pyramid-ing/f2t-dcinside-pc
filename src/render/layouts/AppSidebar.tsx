@@ -1,4 +1,4 @@
-import { HomeOutlined, KeyOutlined, SettingOutlined, UnorderedListOutlined, MessageOutlined } from '@ant-design/icons'
+import { KeyOutlined, SettingOutlined, UnorderedListOutlined, MessageOutlined } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -130,9 +130,9 @@ const AppSidebar: React.FC = () => {
 
   const getSelectedKey = () => {
     if (location.pathname === '/') return '1'
-    if (location.pathname === '/scheduled-posts') return '2'
-    if (location.pathname === '/comment-management') return '3'
-    if (location.pathname === '/settings') return '4'
+    if (location.pathname === '/comment-management') return '2'
+    if (location.pathname === '/settings') return '3'
+    if (location.pathname === '/license') return 'license-settings'
     return '1'
   }
 
@@ -147,21 +147,16 @@ const AppSidebar: React.FC = () => {
         items={[
           {
             key: '1',
-            icon: <HomeOutlined />,
-            label: <NavLink to="/">대시보드</NavLink>,
+            icon: <UnorderedListOutlined />,
+            label: <NavLink to="/">글쓰기</NavLink>,
           },
           {
             key: '2',
-            icon: <UnorderedListOutlined />,
-            label: <NavLink to="/scheduled-posts">글쓰기 작업관리</NavLink>,
-          },
-          {
-            key: '3',
             icon: <MessageOutlined />,
             label: <NavLink to="/comment-management">댓글</NavLink>,
           },
           {
-            key: '4',
+            key: '3',
             icon: <SettingOutlined />,
             label: <NavLink to="/settings">설정</NavLink>,
           },
