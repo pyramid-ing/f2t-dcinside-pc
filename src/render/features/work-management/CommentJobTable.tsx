@@ -13,6 +13,7 @@ import {
   InputNumber,
   Divider,
   DatePicker,
+  Alert,
 } from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
@@ -46,6 +47,8 @@ import {
 import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
 import { BulkActionType } from '@render/types/bulk-action.enum'
 import { SelectionMode } from '@render/types/selection-mode.enum'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 const ResultCell = styled.div`
   max-width: 100%;
@@ -247,6 +250,9 @@ function extractGalleryId(url: string): string {
 }
 
 const CommentJobTable: React.FC = () => {
+  const { canAccess } = usePermissions()
+  const hasCommentPermission = canAccess(Permission.COMMENT)
+
   const [data, setData] = useState<CommentJob[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
@@ -640,6 +646,17 @@ const CommentJobTable: React.FC = () => {
     } catch (error: any) {
       message.error(error?.message || '예약시간 변경 실패')
     }
+  }
+
+  if (!hasCommentPermission) {
+    return (
+      <Alert
+        message="권한이 없습니다"
+        description="댓글 작업 관리 기능을 사용하려면 '댓글작성' 권한이 필요합니다. 라이센스를 추가로 구매하셔야합니다."
+        type="warning"
+        showIcon
+      />
+    )
   }
 
   return (

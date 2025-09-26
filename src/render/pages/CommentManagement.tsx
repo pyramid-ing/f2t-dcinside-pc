@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Card, Button, Typography, Table, Space, message, Upload, Dropdown } from 'antd'
+import { Card, Button, Typography, Table, Space, message, Upload, Dropdown, Alert } from 'antd'
 import { PlayCircleOutlined, FileExcelOutlined, DownloadOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import PageContainer from '../components/shared/PageContainer'
@@ -10,6 +10,8 @@ import {
   generateAutoCommentSampleNonMemberNickname,
   generateAutoCommentSampleMember,
 } from '../utils/sampleExcelGenerator'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 const { Title, Text } = Typography
 
@@ -42,8 +44,24 @@ interface ParsedCommentData {
 }
 
 const CommentManagement: React.FC = () => {
+  const { canAccess } = usePermissions()
+  const hasCommentPermission = canAccess(Permission.COMMENT)
+
   const [excelData, setExcelData] = useState<ParsedCommentData[]>([])
   const [uploadLoading, setUploadLoading] = useState(false)
+
+  if (!hasCommentPermission) {
+    return (
+      <PageContainer>
+        <Alert
+          message="권한이 없습니다"
+          description="댓글 관리 기능을 사용하려면 '댓글작성' 권한이 필요합니다. 라이센스를 추가로 구매하셔야합니다."
+          type="warning"
+          showIcon
+        />
+      </PageContainer>
+    )
+  }
 
   // 샘플 엑셀 다운로드 핸들러
   const handleSampleDownload = (type: 'nonMemberGallery' | 'nonMemberNickname' | 'member') => {

@@ -13,6 +13,7 @@ export const Permissions = (...permissions: Permission[]) => SetMetadata(PERMISS
 export enum Permission {
   POSTING = 'posting',
   TETHERING = 'tethering',
+  COMMENT = 'comment',
 }
 
 interface License {

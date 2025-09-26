@@ -3,6 +3,7 @@ import { Permission } from '@render/types/permissions'
 export const permissionLabels: Record<Permission, string> = {
   [Permission.POSTING]: '자동등록',
   [Permission.TETHERING]: '테더링',
+  [Permission.COMMENT]: '댓글작성',
 }
 
 export const getPermissionLabel = (permission: Permission): string => {

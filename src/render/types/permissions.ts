@@ -1,6 +1,7 @@
 export enum Permission {
   POSTING = 'posting',
   TETHERING = 'tethering',
+  COMMENT = 'comment',
 }
 
 export interface LicenseInfo {

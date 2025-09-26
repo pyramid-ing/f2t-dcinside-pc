@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
-import { Card, Input, Button, Form, Typography, Table, Select, Space, message, InputNumber } from 'antd'
+import { Card, Input, Button, Form, Typography, Table, Select, Space, message, InputNumber, Alert } from 'antd'
 import { SearchOutlined, DownloadOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import PageContainer from '../components/shared/PageContainer'
 import { commentApi, PostItem } from '../api/commentApi'
 import * as XLSX from 'xlsx'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -37,11 +39,27 @@ const ActionSection = styled(Card)`
 // ExtractedPost는 PostDetail과 동일하므로 별도 정의 불필요
 
 const CommentExtraction: React.FC = () => {
+  const { canAccess } = usePermissions()
+  const hasCommentPermission = canAccess(Permission.COMMENT)
+
   const [searchForm] = Form.useForm()
   const [posts, setPosts] = useState<PostItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [extractionLoading, setExtractionLoading] = useState(false)
   const [pageSize, setPageSize] = useState<number>(100)
+
+  if (!hasCommentPermission) {
+    return (
+      <PageContainer>
+        <Alert
+          message="권한이 없습니다"
+          description="댓글 주제 추출 기능을 사용하려면 '댓글작성' 권한이 필요합니다. 라이센스를 추가로 구매하셔야합니다."
+          type="warning"
+          showIcon
+        />
+      </PageContainer>
+    )
+  }
 
   // 게시물 검색
   const handleSearch = async (values: { keyword: string; sortType: string; maxCount: number }) => {

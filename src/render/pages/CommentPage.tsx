@@ -1,9 +1,11 @@
-import { Card, Tabs } from 'antd'
+import { Card, Tabs, Alert } from 'antd'
 import React from 'react'
 import CommentJobTable from '@render/features/work-management/CommentJobTable'
 import CommentManagement from './CommentManagement'
 import CommentExtraction from './CommentExtraction'
 import styled from 'styled-components'
+import { usePermissions } from '@render/hooks/usePermissions'
+import { Permission } from '@render/types/permissions'
 
 const PageContainer = styled.div`
   padding: 24px;
@@ -57,6 +59,25 @@ const ContentCard = styled(Card)`
 `
 
 const CommentPage: React.FC = () => {
+  const { canAccess } = usePermissions()
+  const hasCommentPermission = canAccess(Permission.COMMENT)
+
+  if (!hasCommentPermission) {
+    return (
+      <PageContainer>
+        <ContentCard>
+          <Alert
+            message="권한이 없습니다"
+            description="댓글 작성 기능을 사용하려면 '댓글작성' 권한이 필요합니다. 라이센스를 추가로 구매하셔야합니다."
+            type="warning"
+            showIcon
+            style={{ margin: 24 }}
+          />
+        </ContentCard>
+      </PageContainer>
+    )
+  }
+
   return (
     <PageContainer>
       <ContentCard>

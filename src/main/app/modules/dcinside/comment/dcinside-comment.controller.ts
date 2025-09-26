@@ -1,4 +1,4 @@
-import { Controller, Post, Body, ValidationPipe, Get, Patch, Param } from '@nestjs/common'
+import { Controller, Post, Body, ValidationPipe, Get, Patch, Param, UseGuards } from '@nestjs/common'
 import { DcinsideCommentSearchDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
 import { CreateCommentJobDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-comment-job.dto'
 import { PostSearchResponseDto } from 'src/main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
@@ -6,6 +6,7 @@ import { CommentJobResponseDto } from 'src/main/app/modules/dcinside/comment/dto
 import { BulkCommentJobCreateDto } from 'src/main/app/modules/dcinside/comment/dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from '@main/app/modules/dcinside/comment/dcinside-comment-automation.service'
 import { CommentJobService } from '@main/app/modules/dcinside/comment/comment-job.service'
+import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 
 @Controller()
 export class DcinsideCommentController {
@@ -17,6 +18,8 @@ export class DcinsideCommentController {
   /**
    * 게시물 검색
    */
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.COMMENT)
   @Post('search')
   async searchPosts(@Body(ValidationPipe) searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     return this.commentAutomationService.searchPosts(searchDto)
@@ -25,6 +28,8 @@ export class DcinsideCommentController {
   /**
    * 댓글 작업 생성
    */
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.COMMENT)
   @Post('jobs')
   async createCommentJob(@Body(ValidationPipe) createDto: CreateCommentJobDto): Promise<CommentJobResponseDto[]> {
     const jobs = await this.commentJobService.createJobWithCommentJob(createDto)
@@ -34,6 +39,8 @@ export class DcinsideCommentController {
   /**
    * 댓글 작업 목록 조회
    */
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.COMMENT)
   @Get('jobs')
   async getCommentJobs(): Promise<CommentJobResponseDto[]> {
     return this.commentJobService.getCommentJobs()
@@ -42,6 +49,8 @@ export class DcinsideCommentController {
   /**
    * 댓글 작업 상태 업데이트
    */
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.COMMENT)
   @Patch('jobs/:id/status')
   async updateCommentJobStatus(
     @Param('id') jobId: string,
@@ -53,6 +62,8 @@ export class DcinsideCommentController {
   /**
    * 엑셀 파일로 댓글 작업 일괄 생성
    */
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.COMMENT)
   @Post('jobs/bulk')
   async createBulkCommentJobs(
     @Body(ValidationPipe) bulkDto: BulkCommentJobCreateDto,
