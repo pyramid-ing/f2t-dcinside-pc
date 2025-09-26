@@ -26,11 +26,11 @@ export interface CommentJob {
   keyword: string
   comment: string
   postUrl: string
+  postTitle: string
   nickname: string | null
   password: string | null
   isRunning: boolean
   createdAt: Date
-  galleryUrl?: string | null
   loginId?: string | null
   loginPassword?: string | null
 }
@@ -39,9 +39,9 @@ export interface CreateCommentJobRequest {
   keyword: string
   comment: string
   postUrls: string[]
+  postTitles?: string[]
   nickname?: string
   password?: string
-  galleryUrl?: string
   loginId?: string
   loginPassword?: string
 }

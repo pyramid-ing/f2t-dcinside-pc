@@ -87,16 +87,19 @@ export class CommentJobService implements JobProcessor {
     keyword: string
     comment: string
     postUrls: string[]
+    postTitles?: string[]
     nickname?: string
     password?: string
-    galleryUrl?: string
     loginId?: string
     loginPassword?: string
     scheduledAt?: Date
   }) {
     const jobs = []
 
-    for (const postUrl of commentJobData.postUrls) {
+    for (let i = 0; i < commentJobData.postUrls.length; i++) {
+      const postUrl = commentJobData.postUrls[i]
+      const postTitle = commentJobData.postTitles?.[i] ?? '알 수 없는 제목'
+
       const job = await this.prismaService.job.create({
         data: {
           type: JobType.COMMENT,
@@ -108,9 +111,9 @@ export class CommentJobService implements JobProcessor {
               keyword: commentJobData.keyword,
               comment: commentJobData.comment,
               postUrl,
+              postTitle,
               nickname: commentJobData.nickname ?? null,
               password: commentJobData.password ?? null,
-              galleryUrl: commentJobData.galleryUrl ?? null,
               loginId: commentJobData.loginId ?? null,
               loginPassword: commentJobData.loginPassword ?? null,
             },
@@ -150,7 +153,7 @@ export class CommentJobService implements JobProcessor {
         password: commentJob.password,
         isRunning: commentJob.job.status === JobStatus.PROCESSING,
         createdAt: commentJob.createdAt,
-        galleryUrl: commentJob.galleryUrl,
+        postTitle: commentJob.postTitle,
         loginId: commentJob.loginId,
         loginPassword: commentJob.loginPassword,
       }))

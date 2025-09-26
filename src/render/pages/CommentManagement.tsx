@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Card, Input, Button, Form, Typography, Row, Col, Table, Select, Space, message } from 'antd'
-import { SearchOutlined, PlayCircleOutlined, StopOutlined } from '@ant-design/icons'
+import { SearchOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import PageContainer from '../components/shared/PageContainer'
-import { commentApi, PostItem, CommentJob } from '../api/commentApi'
+import { commentApi, PostItem } from '../api/commentApi'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -38,28 +38,12 @@ const CommentManagement: React.FC = () => {
   const [searchForm] = Form.useForm()
   const [commentForm] = Form.useForm()
   const [posts, setPosts] = useState<PostItem[]>([])
-  const [commentJobs, setCommentJobs] = useState<CommentJob[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [selectedPosts, setSelectedPosts] = useState<string[]>([])
   const [nickname, setNickname] = useState<string>('')
   const [password, setPassword] = useState<string>('')
   const [loginId, setLoginId] = useState<string>('')
   const [loginPassword, setLoginPassword] = useState<string>('')
-  const [galleryUrl, setGalleryUrl] = useState<string>('')
-
-  // 컴포넌트 마운트 시 댓글 작업 목록 로드
-  useEffect(() => {
-    const loadCommentJobs = async () => {
-      try {
-        const jobs = await commentApi.getCommentJobs()
-        setCommentJobs(jobs)
-      } catch (error) {
-        console.error('Failed to load comment jobs:', error)
-      }
-    }
-
-    loadCommentJobs()
-  }, [])
 
   // 게시물 검색
   const handleSearch = async (values: { keyword: string; sortType: string }) => {
@@ -87,26 +71,24 @@ const CommentManagement: React.FC = () => {
     }
 
     try {
-      // 선택된 게시물들의 URL 가져오기
-      const selectedPostUrls = posts.filter(post => selectedPosts.includes(post.id)).map(post => post.url)
+      // 선택된 게시물들의 URL과 제목 가져오기
+      const selectedPostsData = posts.filter(post => selectedPosts.includes(post.id))
+      const selectedPostUrls = selectedPostsData.map(post => post.url)
+      const selectedPostTitles = selectedPostsData.map(post => post.title)
 
       // 각 게시물에 대해 개별 댓글 작업 생성
       const jobs = await commentApi.createCommentJob({
         keyword: searchForm.getFieldValue('keyword') || '검색된 게시물',
         comment: values.comment,
         postUrls: selectedPostUrls,
+        postTitles: selectedPostTitles,
         nickname: nickname || undefined,
         password: password || undefined,
-        galleryUrl: galleryUrl || undefined,
         loginId: loginId || undefined,
         loginPassword: loginPassword || undefined,
       })
 
       message.success(`${jobs.length}개의 댓글 작업이 생성되었습니다.`)
-
-      // 댓글 작업 목록 새로고침
-      const updatedJobs = await commentApi.getCommentJobs()
-      setCommentJobs(updatedJobs)
 
       // 선택된 게시물 초기화
       setSelectedPosts([])
@@ -114,18 +96,6 @@ const CommentManagement: React.FC = () => {
     } catch (error) {
       message.error('댓글 작업 생성에 실패했습니다.')
       console.error('Create comment job error:', error)
-    }
-  }
-
-  // 댓글 작업 중지
-  const handleStopJob = async (jobId: string) => {
-    try {
-      await commentApi.updateJobStatus(jobId, 'STOPPED')
-      setCommentJobs(prev => prev.map(job => (job.id === jobId ? { ...job, isRunning: false } : job)))
-      message.success('댓글 작업이 중지되었습니다.')
-    } catch (error) {
-      message.error('댓글 작업 중지에 실패했습니다.')
-      console.error('Stop job error:', error)
     }
   }
 
@@ -198,87 +168,6 @@ const CommentManagement: React.FC = () => {
     },
   ]
 
-  const jobColumns = [
-    {
-      title: '키워드',
-      dataIndex: 'keyword',
-      key: 'keyword',
-    },
-    {
-      title: '댓글 내용',
-      dataIndex: 'comment',
-      key: 'comment',
-      ellipsis: true,
-    },
-    {
-      title: '대상 게시물',
-      dataIndex: 'postUrl',
-      key: 'postUrl',
-      render: (postUrl: string) => (
-        <a
-          href="#"
-          onClick={e => {
-            e.preventDefault()
-            window.electronAPI?.openExternal(postUrl)
-          }}
-          style={{ cursor: 'pointer', fontSize: '12px' }}
-        >
-          게시물 보기
-        </a>
-      ),
-    },
-    {
-      title: '닉네임',
-      dataIndex: 'nickname',
-      key: 'nickname',
-      render: (nickname: string) => nickname || '-',
-    },
-    {
-      title: '상태',
-      dataIndex: 'isRunning',
-      key: 'isRunning',
-      render: (isRunning: boolean) => (
-        <span style={{ color: isRunning ? '#52c41a' : '#d9d9d9' }}>{isRunning ? '진행중' : '중지됨'}</span>
-      ),
-    },
-    {
-      title: '시작시간',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleString('ko-KR'),
-    },
-    {
-      title: '작업',
-      key: 'actions',
-      render: (record: CommentJob) => (
-        <Space>
-          {record.isRunning ? (
-            <Button size="small" danger icon={<StopOutlined />} onClick={() => handleStopJob(record.id)}>
-              중지
-            </Button>
-          ) : (
-            <Button
-              size="small"
-              icon={<PlayCircleOutlined />}
-              onClick={async () => {
-                try {
-                  await commentApi.updateJobStatus(record.id, 'RUNNING')
-                  setCommentJobs(prev => prev.map(job => (job.id === record.id ? { ...job, isRunning: true } : job)))
-                  message.success('댓글 작업이 재시작되었습니다.')
-                } catch (error) {
-                  message.error('댓글 작업 재시작에 실패했습니다.')
-                  console.error('Restart job error:', error)
-                }
-              }}
-            >
-              재시작
-            </Button>
-          )}
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <PageContainer>
       <Title level={2}>댓글 관리</Title>
@@ -315,14 +204,6 @@ const CommentManagement: React.FC = () => {
         <Row gutter={16}>
           <Col span={24}>
             <Form form={commentForm} onFinish={handleStartCommentJob}>
-              <Form.Item label="갤러리 URL">
-                <Input
-                  value={galleryUrl}
-                  onChange={e => setGalleryUrl(e.target.value)}
-                  placeholder="예: https://gall.dcinside.com/mgallery/board/lists?id=..."
-                />
-              </Form.Item>
-
               <Form.Item
                 name="comment"
                 rules={[{ required: true, message: '댓글 내용을 입력해주세요' }]}
@@ -378,13 +259,6 @@ const CommentManagement: React.FC = () => {
           </Col>
         </Row>
       </CommentFormSection>
-
-      {/* 댓글 작업 현황 */}
-      {commentJobs.length > 0 && (
-        <Card title="댓글 작업 현황">
-          <Table columns={jobColumns} dataSource={commentJobs} rowKey="id" pagination={{ pageSize: 5 }} size="small" />
-        </Card>
-      )}
     </PageContainer>
   )
 }

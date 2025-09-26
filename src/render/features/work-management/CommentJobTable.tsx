@@ -14,14 +14,11 @@ import {
   Divider,
   DatePicker,
 } from 'antd'
-import { LinkOutlined } from '@ant-design/icons'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import {
   bulkApplyInterval,
   bulkPendingToRequest,
-  bulkRetryDeleteJobs,
-  bulkUpdateAutoDelete,
   deleteJob,
   deleteJobs,
   getJobLogs,
@@ -29,18 +26,14 @@ import {
   getLatestJobLog,
   pendingToRequest,
   retryJob,
-  retryDeleteJob,
   retryJobs,
-  updateJobAutoDeleteMinutes,
   updateJobScheduledAt,
 } from '@render/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import {
   JobLog,
-  PostJob,
   CommentJob,
-  Job,
   JOB_STATUS,
   JOB_STATUS_LABEL,
   JOB_STATUS_COLOR,
@@ -189,15 +182,6 @@ function getDefaultMessage(status: JobStatus): string {
       return '성공적으로 완료되었습니다.'
     case JOB_STATUS.FAILED:
       return '처리 중 오류가 발생했습니다.'
-    // 삭제 관련 상태들
-    case JOB_STATUS.DELETE_REQUEST:
-      return '삭제 요청 대기 중입니다.'
-    case JOB_STATUS.DELETE_PROCESSING:
-      return '현재 삭제 중입니다.'
-    case JOB_STATUS.DELETE_COMPLETED:
-      return '성공적으로 삭제되었습니다.'
-    case JOB_STATUS.DELETE_FAILED:
-      return '삭제 중 오류가 발생했습니다.'
     default:
       return '알 수 없는 상태입니다.'
   }
@@ -214,15 +198,6 @@ function getStatusType(status: JobStatus): string {
       return 'pending'
     case JOB_STATUS.PROCESSING:
       return 'processing'
-    // 삭제 관련 상태들
-    case JOB_STATUS.DELETE_REQUEST:
-      return 'pending'
-    case JOB_STATUS.DELETE_PROCESSING:
-      return 'processing'
-    case JOB_STATUS.DELETE_COMPLETED:
-      return 'success'
-    case JOB_STATUS.DELETE_FAILED:
-      return 'error'
     default:
       return 'pending'
   }
@@ -239,15 +214,6 @@ function getStatusIcon(status: JobStatus): string {
       return '🎉'
     case JOB_STATUS.FAILED:
       return '⚠️'
-    // 삭제 관련 상태들
-    case JOB_STATUS.DELETE_REQUEST:
-      return '🗑️'
-    case JOB_STATUS.DELETE_PROCESSING:
-      return '🔄'
-    case JOB_STATUS.DELETE_COMPLETED:
-      return '✅'
-    case JOB_STATUS.DELETE_FAILED:
-      return '❌'
     default:
       return '❓'
   }
@@ -264,21 +230,12 @@ function getStatusTitle(status: JobStatus): string {
       return '완료 상세 정보'
     case JOB_STATUS.FAILED:
       return '실패 원인 상세'
-    // 삭제 관련 상태들
-    case JOB_STATUS.DELETE_REQUEST:
-      return '삭제 요청 상세 정보'
-    case JOB_STATUS.DELETE_PROCESSING:
-      return '삭제 진행 중 상세 정보'
-    case JOB_STATUS.DELETE_COMPLETED:
-      return '삭제 완료 상세 정보'
-    case JOB_STATUS.DELETE_FAILED:
-      return '삭제 실패 원인 상세'
     default:
       return '상세 정보'
   }
 }
 
-// 갤러리 ID 추출 함수 개선 (?id= 파라미터에서 추출)
+// 갤러리 ID 추출 함수
 function extractGalleryId(url: string): string {
   if (!url) return '-'
   try {
@@ -289,48 +246,8 @@ function extractGalleryId(url: string): string {
   }
 }
 
-// 작업 타입별 갤러리 정보 표시
-function getGalleryDisplay(job: Job): string {
-  if (job.type === JOB_TYPE.POST) {
-    return extractGalleryId((job as PostJob).postJob?.galleryUrl || '')
-  } else if (job.type === JOB_TYPE.COMMENT) {
-    const commentJob = job as CommentJob
-    return commentJob.commentJob?.galleryUrl ? extractGalleryId(commentJob.commentJob.galleryUrl) : '댓글'
-  }
-  return '-'
-}
-
-// 작업 타입별 제목 표시
-function getJobTitle(job: Job): string {
-  if (job.type === JOB_TYPE.POST) {
-    return (job as PostJob).postJob?.title || '-'
-  } else if (job.type === JOB_TYPE.COMMENT) {
-    const commentJob = job as CommentJob
-    return commentJob.commentJob?.keyword ? `[댓글] ${commentJob.commentJob.keyword}` : '[댓글]'
-  }
-  return '-'
-}
-
-// 작업 타입별 포스트 URL 표시 (댓글 작업용)
-function getPostUrl(job: Job): string | undefined {
-  if (job.type === JOB_TYPE.COMMENT) {
-    const commentJob = job as CommentJob
-    return commentJob.commentJob?.postUrl
-  }
-  return undefined
-}
-
-// 작업 타입별 결과 URL 표시
-function getJobResultUrl(job: Job): string | undefined {
-  if (job.type === JOB_TYPE.POST) {
-    return (job as PostJob).postJob?.resultUrl || job.resultUrl
-  }
-  // 댓글 작업은 결과 URL이 없음
-  return undefined
-}
-
-const JobTable: React.FC = () => {
-  const [data, setData] = useState<Job[]>([])
+const CommentJobTable: React.FC = () => {
+  const [data, setData] = useState<CommentJob[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
   const [typeFilter, setTypeFilter] = useState<JobType | ''>('')
@@ -350,8 +267,6 @@ const JobTable: React.FC = () => {
   const [logsLoading, setLogsLoading] = useState(false)
   const [latestLogs, setLatestLogs] = useState<Record<string, JobLog>>({})
 
-  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null)
-
   // 벌크 작업 관련 상태
   const [selection, setSelection] = useState<SelectionState>({
     mode: SelectionMode.PAGE,
@@ -360,14 +275,15 @@ const JobTable: React.FC = () => {
   })
   const [bulkRetryLoading, setBulkRetryLoading] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
-  const [previewCount, setPreviewCount] = useState<number | null>(null)
+
+  const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
+
+  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null)
 
   const [intervalStart, setIntervalStart] = useState<number>(60)
   const [intervalEnd, setIntervalEnd] = useState<number>(90)
   const [intervalUnit, setIntervalUnit] = useState<'sec' | 'min'>('min')
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
-
-  const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
 
   // 툴바: 등록후자동삭제(분)
   const [autoDeleteMinutes, setAutoDeleteMinutes] = useState<number | null>(null)
@@ -376,79 +292,8 @@ const JobTable: React.FC = () => {
   // 툴바: 자동삭제 제거
   const [autoDeleteRemoveLoading, setAutoDeleteRemoveLoading] = useState(false)
 
-  // 툴바: 선택된 작업에 등록후자동삭제(분) 일괄 적용
-  const handleBulkSetAutoDeleteMinutes = async () => {
-    const selectedCount = getSelectedCount()
-    if (selectedCount === 0) {
-      message.warning('적용할 작업을 선택해주세요.')
-      return
-    }
-    const m = Number(autoDeleteMinutes)
-    if (Number.isNaN(m) || m < 0) {
-      message.warning('분은 0 이상의 정수로 입력해주세요.')
-      return
-    }
-
-    setAutoDeleteApplyLoading(true)
-    try {
-      const request: BulkActionRequest = {
-        mode: selection.mode,
-        filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
-        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.AUTO_DELETE,
-        autoDeleteMinutes: m,
-      }
-
-      const response = await bulkUpdateAutoDelete(request)
-      message.success(response.message)
-
-      // 선택 상태 초기화
-      setSelection({
-        mode: SelectionMode.PAGE,
-        includeIds: new Set(),
-        excludedIds: new Set(),
-      })
-      setPreviewCount(null)
-      fetchJobs()
-    } catch (error: any) {
-      message.error(error.message || '등록후자동삭제(분) 적용 실패')
-    }
-    setAutoDeleteApplyLoading(false)
-  }
-
-  // 개별 작업의 등록후자동삭제(분) 변경
-  const handleAutoDeleteMinutesChange = async (job: PostJob, minutes: number | null) => {
-    try {
-      const m = Number(minutes)
-      if (Number.isNaN(m) || m < 0) {
-        message.warning('분은 0 이상의 정수로 입력해주세요.')
-        return
-      }
-      if (m === 0) {
-        // autoDeleteMinutes 제거
-        await updateJobAutoDeleteMinutes(job.id, null, null)
-        message.success('자동삭제 설정이 제거되었습니다')
-      } else {
-        // autoDeleteMinutes 설정
-        await updateJobAutoDeleteMinutes(job.id, m)
-
-        // 완료된 작업이면 즉시 deleteAt 계산하여 적용 (현재시간 기준)
-        if (job.status === JOB_STATUS.COMPLETED) {
-          const now = dayjs()
-          const deleteAt = now.add(m, 'minute').toISOString()
-          await updateJobAutoDeleteMinutes(job.id, m, deleteAt)
-        }
-        message.success('등록후자동삭제(분) 설정이 적용되었습니다')
-      }
-      fetchJobs()
-    } catch {
-      message.error('등록후자동삭제(분) 설정 실패')
-    }
-  }
-
   useEffect(() => {
-    setCurrentPage(1) // 필터 변경 시 첫 페이지로 이동
+    setCurrentPage(1)
     fetchJobs()
   }, [statusFilter, typeFilter, searchText, sortField, sortOrder])
 
@@ -458,7 +303,6 @@ const JobTable: React.FC = () => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      // 자동 새로고침 시에는 현재 검색 조건 유지
       fetchJobs()
     }, 5000)
     return () => clearInterval(timer)
@@ -467,7 +311,7 @@ const JobTable: React.FC = () => {
   // 현재 필터 조건 생성
   const getCurrentFilters = (): JobFilters => ({
     status: statusFilter || undefined,
-    type: typeFilter || undefined,
+    type: JOB_TYPE.COMMENT, // 댓글 작업만
     search: searchText || undefined,
     orderBy: sortField,
     order: sortOrder,
@@ -499,7 +343,7 @@ const JobTable: React.FC = () => {
     try {
       const res = await getJobs({
         status: statusFilter || undefined,
-        type: typeFilter || undefined,
+        type: JOB_TYPE.COMMENT, // 댓글 작업만
         search: searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
@@ -507,7 +351,7 @@ const JobTable: React.FC = () => {
         limit: pageSize,
       })
 
-      setData(res.data)
+      setData(res.data as CommentJob[])
       setTotalCount(res.pagination.totalCount)
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
@@ -531,7 +375,6 @@ const JobTable: React.FC = () => {
     setLogsLoading(true)
     try {
       const res = await getJobLogs(jobId)
-
       setJobLogs(res)
     } catch {
       setJobLogs([])
@@ -554,20 +397,6 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const handleRetryDelete = async (id: string) => {
-    try {
-      const res = await retryDeleteJob(id)
-      if (res.success) {
-        message.success('삭제 재시도 요청 완료')
-        fetchJobs()
-      } else {
-        message.error('message' in res ? res.message : '삭제 재시도 실패')
-      }
-    } catch (error: any) {
-      message.error(error?.message || '삭제 재시도 실패')
-    }
-  }
-
   const handleDelete = async (id: string) => {
     try {
       const res = await deleteJob(id)
@@ -586,7 +415,7 @@ const JobTable: React.FC = () => {
     if (sorter.field && sorter.order) {
       setSortField(sorter.field)
       setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
-      setCurrentPage(1) // 정렬 변경 시 첫 페이지로 이동
+      setCurrentPage(1)
     }
   }
 
@@ -641,7 +470,6 @@ const JobTable: React.FC = () => {
         excludedIds: new Set(),
       })
     } else {
-      // all 모드: 해제/재선택은 excludedIds로만 관리
       const newExcludedIds = new Set(selection.excludedIds)
       if (checked) {
         newExcludedIds.delete(jobId)
@@ -683,7 +511,6 @@ const JobTable: React.FC = () => {
         includeIds: new Set(),
         excludedIds: new Set(),
       })
-      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '벌크 재시도에 실패했습니다.')
@@ -691,38 +518,6 @@ const JobTable: React.FC = () => {
     setBulkRetryLoading(false)
   }
 
-  const handleBulkRetryDelete = async () => {
-    const selectedCount = getSelectedCount()
-    if (selectedCount === 0) {
-      message.warning('삭제 재시도할 작업을 선택해주세요.')
-      return
-    }
-
-    try {
-      const request = {
-        mode: selection.mode,
-        filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
-        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-      }
-
-      const response = await bulkRetryDeleteJobs(request)
-      message.success(response.message)
-
-      // 선택 상태 초기화
-      setSelection({
-        mode: SelectionMode.PAGE,
-        includeIds: new Set(),
-        excludedIds: new Set(),
-      })
-      setPreviewCount(null)
-      fetchJobs()
-    } catch (error: any) {
-      message.error(error.message || '벌크 삭제 재시도에 실패했습니다.')
-    }
-  }
-
-  // 벌크 삭제 핸들러
   const handleBulkDelete = async () => {
     const selectedCount = getSelectedCount()
     if (selectedCount === 0) {
@@ -749,48 +544,11 @@ const JobTable: React.FC = () => {
         includeIds: new Set(),
         excludedIds: new Set(),
       })
-      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '벌크 삭제에 실패했습니다.')
     }
     setBulkDeleteLoading(false)
-  }
-
-  // 툴바: 선택된 작업의 자동삭제 설정 제거
-  const handleBulkRemoveAutoDelete = async () => {
-    const selectedCount = getSelectedCount()
-    if (selectedCount === 0) {
-      message.warning('적용할 작업을 선택해주세요.')
-      return
-    }
-
-    setAutoDeleteRemoveLoading(true)
-    try {
-      const request: BulkActionRequest = {
-        mode: selection.mode,
-        filters: getCurrentFilters(),
-        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
-        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.AUTO_DELETE,
-        autoDeleteMinutes: null, // null로 설정하여 자동삭제 제거
-      }
-
-      const response = await bulkUpdateAutoDelete(request)
-      message.success(response.message)
-
-      // 선택 상태 초기화
-      setSelection({
-        mode: SelectionMode.PAGE,
-        includeIds: new Set(),
-        excludedIds: new Set(),
-      })
-      setPreviewCount(null)
-      fetchJobs()
-    } catch (error: any) {
-      message.error(error.message || '자동삭제 설정 제거 실패')
-    }
-    setAutoDeleteRemoveLoading(false)
   }
 
   const handleApplyInterval = async () => {
@@ -827,7 +585,6 @@ const JobTable: React.FC = () => {
         includeIds: new Set(),
         excludedIds: new Set(),
       })
-      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '간격 적용 실패')
@@ -859,14 +616,13 @@ const JobTable: React.FC = () => {
         includeIds: new Set(),
         excludedIds: new Set(),
       })
-      setPreviewCount(null)
       fetchJobs()
     } catch (error: any) {
       message.error(error.message || '상태 일괄변경 실패')
     }
   }
 
-  const handleStatusChange = async (job: Job, value: JobStatus) => {
+  const handleStatusChange = async (job: CommentJob, value: JobStatus) => {
     if (value === job.status) return
     if (job.status === JOB_STATUS.PENDING && value === JOB_STATUS.REQUEST) {
       await pendingToRequest(job.id)
@@ -875,7 +631,7 @@ const JobTable: React.FC = () => {
     fetchJobs()
   }
 
-  const handleScheduledAtChange = async (job: Job, date: dayjs.Dayjs | null) => {
+  const handleScheduledAtChange = async (job: CommentJob, date: dayjs.Dayjs | null) => {
     try {
       const scheduledAt = date ? date.toISOString() : null
       await updateJobScheduledAt(job.id, scheduledAt)
@@ -885,14 +641,6 @@ const JobTable: React.FC = () => {
       message.error(error?.message || '예약시간 변경 실패')
     }
   }
-
-  const pendingSelectedCount = data.filter(job => {
-    if (selection.mode === SelectionMode.ALL) {
-      return !selection.excludedIds.has(job.id) && job.status === JOB_STATUS.PENDING
-    } else {
-      return selection.includeIds.has(job.id) && job.status === JOB_STATUS.PENDING
-    }
-  }).length
 
   return (
     <div>
@@ -930,6 +678,7 @@ const JobTable: React.FC = () => {
           </Space>
         </Space>
       </div>
+
       {/* 선택 툴바: 선택된 작업이 있을 때만, 필터 아래에 배경색/라운드/패딩 적용 */}
       {getSelectedCount() > 0 && (
         <div
@@ -964,7 +713,7 @@ const JobTable: React.FC = () => {
               </>
             )}
           </span>
-          <Button type="primary" onClick={handleBulkRetry}>
+          <Button type="primary" onClick={handleBulkRetry} loading={bulkRetryLoading}>
             실패한 작업 재시도
             {selection.mode === SelectionMode.ALL ? (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
@@ -976,25 +725,7 @@ const JobTable: React.FC = () => {
               </span>
             )}
           </Button>
-          <Button
-            type="primary"
-            onClick={handleBulkRetryDelete}
-            style={{ backgroundColor: '#722ed1', borderColor: '#722ed1' }}
-          >
-            삭제실패 재시도
-            {selection.mode === SelectionMode.ALL ? (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
-              </span>
-            ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                (
-                {data.filter(job => selection.includeIds.has(job.id) && job.status === JOB_STATUS.DELETE_FAILED).length}
-                개)
-              </span>
-            )}
-          </Button>
-          <Button danger onClick={handleBulkDelete}>
+          <Button danger onClick={handleBulkDelete} loading={bulkDeleteLoading}>
             선택된 작업 삭제
             {selection.mode === SelectionMode.ALL ? (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
@@ -1041,7 +772,9 @@ const JobTable: React.FC = () => {
                 {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
               </span>
             ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({pendingSelectedCount}개)</span>
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                ({data.filter(job => selection.includeIds.has(job.id) && job.status === JOB_STATUS.PENDING).length}개)
+              </span>
             )}
           </Button>
           <Button onClick={handleBulkPendingToRequest} disabled={getSelectedCount() === 0}>
@@ -1051,62 +784,14 @@ const JobTable: React.FC = () => {
                 {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
               </span>
             ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>({pendingSelectedCount}개)</span>
-            )}
-          </Button>
-          <Divider type="vertical" />
-          <span>등록후자동삭제(분):</span>
-          <InputNumber
-            min={0}
-            placeholder="분"
-            value={autoDeleteMinutes as any}
-            onChange={v => setAutoDeleteMinutes((v as number) || null)}
-            style={{ width: 110 }}
-          />
-          <Button loading={autoDeleteApplyLoading} onClick={handleBulkSetAutoDeleteMinutes}>
-            자동삭제 적용
-            {selection.mode === SelectionMode.ALL ? (
               <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
-              </span>
-            ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                (
-                {
-                  data.filter(
-                    job =>
-                      selection.includeIds.has(job.id) &&
-                      job.type === JOB_TYPE.POST &&
-                      !(job as PostJob).postJob?.deletedAt,
-                  ).length
-                }
-                개)
-              </span>
-            )}
-          </Button>
-          <Button danger loading={autoDeleteRemoveLoading} onClick={handleBulkRemoveAutoDelete}>
-            자동삭제 제거
-            {selection.mode === SelectionMode.ALL ? (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
-              </span>
-            ) : (
-              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
-                (
-                {
-                  data.filter(
-                    job =>
-                      selection.includeIds.has(job.id) &&
-                      job.type === JOB_TYPE.POST &&
-                      !(job as PostJob).postJob?.deletedAt,
-                  ).length
-                }
-                개)
+                ({data.filter(job => selection.includeIds.has(job.id) && job.status === JOB_STATUS.PENDING).length}개)
               </span>
             )}
           </Button>
         </div>
       )}
+
       <Table
         rowKey="id"
         dataSource={data}
@@ -1129,7 +814,7 @@ const JobTable: React.FC = () => {
         bordered
         style={{ background: '#fff' }}
         scroll={{ x: 'max-content' }}
-        rowClassName={(record: Job) => `row-${record.status}`}
+        rowClassName={(record: CommentJob) => `row-${record.status}`}
         columns={[
           {
             title: (
@@ -1159,65 +844,23 @@ const JobTable: React.FC = () => {
             dataIndex: 'checkbox',
             width: 100,
             align: 'center',
-            render: (_: any, record: Job) => (
+            render: (_: any, record: CommentJob) => (
               <Checkbox checked={isChecked(record.id)} onChange={e => handleSelectJob(record.id, e.target.checked)} />
             ),
           },
           {
-            title: '갤러리',
-            dataIndex: 'galleryUrl',
-            width: 120,
-            sorter: true,
-            align: 'center',
-            render: (url: string, row: Job) => (
-              <span
-                style={{
-                  fontFamily: 'monospace',
-                  fontSize: '12px',
-                  background: row.type === JOB_TYPE.COMMENT ? '#e6f7ff' : '#f5f5f5',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  color: row.type === JOB_TYPE.COMMENT ? '#1890ff' : 'inherit',
-                }}
-              >
-                {getGalleryDisplay(row)}
-              </span>
-            ),
-          },
-          {
-            title: '제목',
-            dataIndex: 'subject',
-            width: 300,
+            title: '포스팅',
+            dataIndex: 'postTitle',
+            width: 200,
             sorter: true,
             ellipsis: { showTitle: false },
-            render: (text: string, row: Job) => {
-              const resultUrl = getJobResultUrl(row)
-              const title = getJobTitle(row)
-              const postUrl = getPostUrl(row)
+            render: (title: string, row: CommentJob) => {
+              const postTitle = row.commentJob?.postTitle || '-'
+              const postUrl = row.commentJob?.postUrl
 
               return (
-                <span title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  {title}
-                  {resultUrl && (
-                    <a
-                      href={resultUrl}
-                      onClick={e => {
-                        e.preventDefault()
-                        window.electronAPI?.openExternal(resultUrl)
-                      }}
-                      style={{
-                        color: '#1890ff',
-                        fontSize: '12px',
-                        marginLeft: 4,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '2px',
-                      }}
-                    >
-                      등록된 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
-                    </a>
-                  )}
-                  {postUrl && (
+                <span title={postTitle}>
+                  {postUrl ? (
                     <a
                       href={postUrl}
                       onClick={e => {
@@ -1225,16 +868,14 @@ const JobTable: React.FC = () => {
                         window.electronAPI?.openExternal(postUrl)
                       }}
                       style={{
-                        color: '#52c41a',
-                        fontSize: '12px',
-                        marginLeft: 4,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '2px',
+                        color: '#1890ff',
+                        textDecoration: 'none',
                       }}
                     >
-                      대상 글 보기 <LinkOutlined style={{ fontSize: '12px', opacity: 0.7 }} />
+                      {postTitle}
                     </a>
+                  ) : (
+                    postTitle
                   )}
                 </span>
               )
@@ -1244,8 +885,7 @@ const JobTable: React.FC = () => {
             title: '결과',
             dataIndex: 'resultMsg',
             width: 350,
-            render: (v: string, row: Job) => {
-              const resultUrl = getJobResultUrl(row)
+            render: (v: string, row: CommentJob) => {
               const latestLog = latestLogs[row.id]
               const displayMessage = latestLog ? latestLog.message : v || getDefaultMessage(row.status)
               const statusType = getStatusType(row.status)
@@ -1261,45 +901,6 @@ const JobTable: React.FC = () => {
                       최신 로그: {new Date(latestLog.createdAt).toLocaleString('ko-KR')}
                     </div>
                   )}
-                  {row.status === JOB_STATUS.COMPLETED && resultUrl && (
-                    <div className="result-url">
-                      <a
-                        href={resultUrl}
-                        onClick={e => {
-                          e.preventDefault()
-                          window.electronAPI?.openExternal(resultUrl)
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        등록된 글 보기 →
-                      </a>
-                    </div>
-                  )}
-                  {row.type === JOB_TYPE.COMMENT && getPostUrl(row) && (
-                    <div className="result-url">
-                      <a
-                        href={getPostUrl(row)}
-                        onClick={e => {
-                          e.preventDefault()
-                          window.electronAPI?.openExternal(getPostUrl(row)!)
-                        }}
-                        style={{
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          color: '#52c41a',
-                        }}
-                      >
-                        대상 글 보기 →
-                      </a>
-                    </div>
-                  )}
                 </PopoverContent>
               )
 
@@ -1313,30 +914,6 @@ const JobTable: React.FC = () => {
                 >
                   <ResultCell>
                     <div className={`result-text hover-hint ${statusType}-text`}>{displayMessage}</div>
-                    {row.status === JOB_STATUS.COMPLETED && resultUrl && (
-                      <a
-                        href={resultUrl}
-                        onClick={e => {
-                          e.preventDefault()
-                          window.electronAPI?.openExternal(resultUrl)
-                        }}
-                        style={{ color: '#1890ff', fontSize: '12px' }}
-                      >
-                        등록된 글 보기 →
-                      </a>
-                    )}
-                    {row.type === JOB_TYPE.COMMENT && getPostUrl(row) && (
-                      <a
-                        href={getPostUrl(row)}
-                        onClick={e => {
-                          e.preventDefault()
-                          window.electronAPI?.openExternal(getPostUrl(row)!)
-                        }}
-                        style={{ color: '#52c41a', fontSize: '12px', marginLeft: '8px' }}
-                      >
-                        대상 글 보기 →
-                      </a>
-                    )}
                   </ResultCell>
                 </Popover>
               )
@@ -1344,39 +921,56 @@ const JobTable: React.FC = () => {
             sorter: true,
           },
           {
-            title: '말머리',
-            dataIndex: 'headtext',
-            width: 100,
+            title: '키워드',
+            dataIndex: 'keyword',
+            width: 150,
+            sorter: true,
+            render: (text: string, row: CommentJob) => {
+              return row.commentJob?.keyword ? (
+                <Tag color="orange" style={{ fontSize: '11px' }}>
+                  {row.commentJob.keyword}
+                </Tag>
+              ) : (
+                '-'
+              )
+            },
+          },
+          {
+            title: '댓글내용',
+            dataIndex: 'content',
+            width: 250,
+            sorter: true,
+            ellipsis: { showTitle: false },
+            render: (text: string, row: CommentJob) => {
+              const content = row.commentJob?.comment || '-'
+              return (
+                <span title={content} style={{ fontSize: '13px' }}>
+                  {content}
+                </span>
+              )
+            },
+          },
+          {
+            title: '닉네임',
+            dataIndex: 'nickname',
+            width: 120,
             sorter: true,
             align: 'center',
-            render: (text: string, row: Job) => {
-              if (row.type === JOB_TYPE.POST) {
-                const postJob = row as PostJob
-                return postJob.postJob?.headtext ? (
-                  <Tag color="blue" style={{ fontSize: '11px' }}>
-                    {postJob.postJob.headtext}
-                  </Tag>
-                ) : (
-                  '-'
-                )
-              } else if (row.type === JOB_TYPE.COMMENT) {
-                const commentJob = row as CommentJob
-                return commentJob.commentJob?.nickname ? (
-                  <Tag color="green" style={{ fontSize: '11px' }}>
-                    {commentJob.commentJob.nickname}
-                  </Tag>
-                ) : (
-                  '-'
-                )
-              }
-              return '-'
+            render: (text: string, row: CommentJob) => {
+              return row.commentJob?.nickname ? (
+                <Tag color="green" style={{ fontSize: '11px' }}>
+                  {row.commentJob.nickname}
+                </Tag>
+              ) : (
+                '-'
+              )
             },
           },
           {
             title: '상태',
             dataIndex: 'status',
             key: 'status',
-            render: (value: JobStatus, record: Job) =>
+            render: (value: JobStatus, record: CommentJob) =>
               editingStatusJobId === record.id ? (
                 <Select
                   size="small"
@@ -1416,7 +1010,7 @@ const JobTable: React.FC = () => {
             key: 'scheduledAt',
             width: 200,
             align: 'center',
-            render: (value: string, record: Job) => (
+            render: (value: string, record: CommentJob) => (
               <DatePicker
                 showTime={{ format: 'HH:mm:ss' }}
                 format="YYYY-MM-DD HH:mm:ss"
@@ -1427,64 +1021,6 @@ const JobTable: React.FC = () => {
                 allowClear
               />
             ),
-            sorter: true,
-          },
-          {
-            title: '등록후자동삭제(분)',
-            dataIndex: 'autoDeleteMinutes',
-            key: 'autoDeleteMinutes',
-            width: 150,
-            align: 'center',
-            render: (_: any, record: Job) => {
-              // 댓글 작업은 자동삭제 기능 없음
-              if (record.type === JOB_TYPE.COMMENT) {
-                return '-'
-              }
-
-              const postJob = record as PostJob
-              // 이미 삭제된 작업만 수정 불가
-              if (postJob.postJob?.deletedAt) {
-                return '-'
-              }
-              return (
-                <InputNumber
-                  min={0}
-                  placeholder="분"
-                  value={postJob.postJob?.autoDeleteMinutes || undefined}
-                  onChange={v => handleAutoDeleteMinutesChange(postJob, v as number)}
-                  style={{ width: 110 }}
-                />
-              )
-            },
-          },
-          {
-            title: '삭제예정',
-            dataIndex: ['postJob', 'deleteAt'],
-            key: 'deleteAt',
-            width: 170,
-            align: 'center',
-            render: (value: string, record: Job) => {
-              if (record.type === JOB_TYPE.POST) {
-                const postJob = record as PostJob
-                return postJob.postJob?.deleteAt ? dayjs(postJob.postJob.deleteAt).format('YYYY-MM-DD HH:mm') : '-'
-              }
-              return '-'
-            },
-            sorter: true,
-          },
-          {
-            title: '삭제시간',
-            dataIndex: ['postJob', 'deletedAt'],
-            key: 'deletedAt',
-            width: 170,
-            align: 'center',
-            render: (value: string, record: Job) => {
-              if (record.type === JOB_TYPE.POST) {
-                const postJob = record as PostJob
-                return postJob.postJob?.deletedAt ? dayjs(postJob.postJob.deletedAt).format('YYYY-MM-DD HH:mm') : '-'
-              }
-              return '-'
-            },
             sorter: true,
           },
           {
@@ -1520,7 +1056,7 @@ const JobTable: React.FC = () => {
             width: 150,
             fixed: 'right',
             align: 'center',
-            render: (_: any, row: Job) => (
+            render: (_: any, row: CommentJob) => (
               <Space size="small" direction="vertical">
                 <Space size="small">
                   <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
@@ -1534,16 +1070,6 @@ const JobTable: React.FC = () => {
                       style={{ fontSize: '11px' }}
                     >
                       재시도
-                    </Button>
-                  )}
-                  {row.status === JOB_STATUS.DELETE_FAILED && row.type === JOB_TYPE.POST && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => handleRetryDelete(row.id)}
-                      style={{ fontSize: '11px' }}
-                    >
-                      삭제재시도
                     </Button>
                   )}
                 </Space>
@@ -1607,4 +1133,4 @@ const JobTable: React.FC = () => {
   )
 }
 
-export default JobTable
+export default CommentJobTable

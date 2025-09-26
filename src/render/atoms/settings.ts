@@ -8,6 +8,7 @@ const defaultSettings: Settings = {
   openAIApiKey: '',
   showBrowserWindow: false,
   taskDelay: 0,
+  reuseWindowBetweenTasks: false,
 }
 
 // 설정 상태 atom

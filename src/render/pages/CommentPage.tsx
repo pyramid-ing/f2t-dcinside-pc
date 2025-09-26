@@ -1,7 +1,7 @@
 import { Card, Tabs } from 'antd'
 import React from 'react'
-import PostingJobTable from '@render/features/work-management/PostingJobTable'
-import UploadDcinsideExcelForm from '../features/dashboard/UploadDcinsideExcelForm'
+import CommentJobTable from '@render/features/work-management/CommentJobTable'
+import CommentManagement from './CommentManagement'
 import styled from 'styled-components'
 
 const PageContainer = styled.div`
@@ -55,7 +55,7 @@ const ContentCard = styled(Card)`
   }
 `
 
-const ScheduledPostsPage: React.FC = () => {
+const CommentPage: React.FC = () => {
   return (
     <PageContainer>
       <ContentCard>
@@ -66,12 +66,12 @@ const ScheduledPostsPage: React.FC = () => {
             {
               key: 'upload',
               label: '업로드',
-              children: <UploadDcinsideExcelForm />,
+              children: <CommentManagement />,
             },
             {
-              key: 'posting',
-              label: '글쓰기 작업',
-              children: <PostingJobTable />,
+              key: 'management',
+              label: '댓글 작업',
+              children: <CommentJobTable />,
             },
           ]}
         />
@@ -80,4 +80,4 @@ const ScheduledPostsPage: React.FC = () => {
   )
 }
 
-export default ScheduledPostsPage
+export default CommentPage

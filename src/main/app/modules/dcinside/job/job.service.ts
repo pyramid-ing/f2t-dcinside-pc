@@ -99,6 +99,7 @@ export class JobService {
           take: 1,
         },
         postJob: true,
+        commentJob: true,
       },
       skip,
       take: limitNum,

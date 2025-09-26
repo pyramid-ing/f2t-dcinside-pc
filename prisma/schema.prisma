@@ -87,9 +87,9 @@ model CommentJob {
   keyword   String
   comment   String
   postUrl   String // 단일 포스트 URL
+  postTitle String // 포스트 제목
   nickname  String?
   password  String?
-  galleryUrl String?
   loginId    String?
   loginPassword String?
 

@@ -122,9 +122,9 @@ export interface CommentJobDetail {
   keyword?: string
   comment?: string
   postUrl?: string
+  postTitle?: string
   nickname?: string
   password?: string
-  galleryUrl?: string
   loginId?: string
   loginPassword?: string
 
