@@ -10,6 +10,7 @@ import { CommentJobResponseDto } from './dto/dcinside-comment-job.dto'
 import { BulkCommentJobCreateDto } from './dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from './dcinside-comment-automation.service'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
+import { HtmlTitleExtractor } from '@main/app/utils/html-title-extractor'
 
 @Injectable()
 export class CommentJobService implements JobProcessor {
@@ -124,9 +125,14 @@ export class CommentJobService implements JobProcessor {
   }) {
     const jobs = []
 
+    // 모든 URL의 실제 제목을 병렬로 가져오기
+    const actualTitles = await HtmlTitleExtractor.extractTitles(commentJobData.postUrls)
+    this.logger.log(`게시물 제목 추출 완료: ${actualTitles.length}개 제목`)
+
     for (let i = 0; i < commentJobData.postUrls.length; i++) {
       const postUrl = commentJobData.postUrls[i]
-      const postTitle = commentJobData.postTitles?.[i] ?? '알 수 없는 제목'
+      // 실제 제목을 가져오되, 실패한 경우 기본값 사용
+      const postTitle = actualTitles[i] || commentJobData.postTitles?.[i] || '알 수 없는 제목'
 
       const job = await this.prismaService.job.create({
         data: {
@@ -288,7 +294,6 @@ export class CommentJobService implements JobProcessor {
           keyword: bulkDto.keyword,
           comment: commentJobData.comment,
           postUrls: [commentJobData.postUrl],
-          postTitles: ['엑셀에서 가져온 게시물'],
           nickname: commentJobData.nickname,
           password: commentJobData.password,
           loginId: commentJobData.loginId,
