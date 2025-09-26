@@ -249,10 +249,12 @@ export class DcinsidePostingService extends DcinsideBaseService {
       await this._navigateToPostPage(page, postJob, jobId)
 
       // 2. 비정상 페이지 체크
-      const isAbnormalPage = await this.checkAbnormalPage(page)
-      if (isAbnormalPage) {
+      try {
+        await this.checkAbnormalPage(page)
+      } catch (error) {
+        // 이미 삭제된 경우 성공으로 처리
         await this.jobLogsService.createJobLog(jobId, '이미 삭제된 게시물로 판단되어 성공 처리')
-        return // 이미 삭제된 경우 성공으로 처리
+        return
       }
 
       // 3. 삭제 버튼 찾기

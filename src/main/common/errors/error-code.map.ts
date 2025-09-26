@@ -47,6 +47,16 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     message: meta => meta?.message || '예약날짜 형식이 잘못되었습니다.',
   },
 
+  // 디시인사이드 댓글 관련
+  [ErrorCode.COMMENT_DISABLED_PAGE]: { status: 400, message: m => m?.message || '댓글 작성이 불가능한 페이지입니다' },
+  [ErrorCode.POST_NOT_FOUND_OR_DELETED]: {
+    status: 404,
+    message: m => m?.message || '삭제되었거나 존재하지 않는 게시물입니다',
+  },
+  [ErrorCode.NICKNAME_REQUIRED_GALLERY]: { status: 400, message: m => m?.message || '닉네임이 필수인 갤러리입니다' },
+  [ErrorCode.NICKNAME_REQUIRED]: { status: 400, message: m => m?.message || '닉네임을 입력해주세요' },
+  [ErrorCode.CAPTCHA_SOLVE_FAILED]: { status: 400, message: m => m?.message || '캡차 해결에 실패했습니다' },
+
   [ErrorCode.JOB_NOT_FOUND]: { status: 404, message: () => '작업을 찾을 수 없습니다.' },
   [ErrorCode.JOB_ID_REQUIRED]: { status: 400, message: () => '작업 ID가 제공되지 않았습니다.' },
   [ErrorCode.JOB_ALREADY_PROCESSING]: { status: 409, message: () => '처리 중인 작업입니다.' },

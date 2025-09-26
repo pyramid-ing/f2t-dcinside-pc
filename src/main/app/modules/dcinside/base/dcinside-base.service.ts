@@ -9,7 +9,7 @@ import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
 import { BrowserContext, Page } from 'playwright'
 import UserAgent from 'user-agents'
 import { sleep } from '@main/app/utils/sleep'
-import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
+import { DcException } from '@main/common/errors/dc.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -17,11 +17,12 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { getExternalIp } from '@main/app/utils/ip'
 import { assertPermission } from '@main/app/utils/permission.assert'
+import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
 
 export function assertValidGalleryUrl(url: string): asserts url is string {
   const urlMatch = url.match(/[?&]id=([^&]+)/)
   if (!urlMatch) {
-    throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+    throw DcException.postNotFoundOrDeleted({
       message: '갤러리 주소에서 id를 추출할 수 없습니다.',
     })
   }
@@ -29,7 +30,7 @@ export function assertValidGalleryUrl(url: string): asserts url is string {
 
 export function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
   if (!popupPage) {
-    throw new DcinsideAutomationError(ErrorCode.IMAGE_UPLOAD_FAILED, {
+    throw DcException.postNotFoundOrDeleted({
       message: '이미지 팝업 윈도우를 찾을 수 없습니다.',
     })
   }
@@ -37,7 +38,7 @@ export function assertValidPopupPage(popupPage: any): asserts popupPage is Page 
 
 export function assertRetrySuccess(success: boolean, errorMessage: string): asserts success is true {
   if (!success) {
-    throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
+    throw DcException.commentDisabledPage({ message: errorMessage })
   }
 }
 
@@ -384,14 +385,14 @@ export abstract class DcinsideBaseService {
       }
     } catch (error) {
       this.logger.error(`캡챠 처리 실패: ${error.message}`)
-      throw new DcinsideAutomationError(ErrorCode.CAPTCHA_FAILED, { message: error.message })
+      throw DcException.captchaSolveFailed({ message: error.message })
     }
   }
 
   /**
    * 비정상(삭제/존재하지 않음) 페이지 감지
    */
-  protected async checkAbnormalPage(page: Page): Promise<boolean> {
+  protected async checkAbnormalPage(page: Page): Promise<void> {
     const abnormalInfo = await page.evaluate(() => {
       const container = document.querySelector('.box_infotxt.delet') as HTMLElement | null
       if (!container) return null
@@ -422,14 +423,12 @@ export abstract class DcinsideBaseService {
 
       if (deletionDetected || redirectDetected) {
         this.logger.log(`삭제 완료: ${combined} (이미 삭제됨)`)
-        return true
+        throw DcException.postNotFoundOrDeleted({ message: combined })
       }
 
       // 다른 비정상 상태는 에러로 처리
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: combined })
+      throw DcException.postNotFoundOrDeleted({ message: combined })
     }
-
-    return false
   }
 
   /**

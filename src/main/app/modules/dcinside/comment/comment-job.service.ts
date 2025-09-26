@@ -5,8 +5,10 @@ import { JobProcessor, JobResult, JobType, JobStatus } from '@main/app/modules/d
 import { Job as PrismaJob } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { DcException, DcExceptionType } from '@main/common/errors/dc.exception'
 import { CommentJobResponseDto } from './dto/dcinside-comment-job.dto'
 import { DcinsideCommentAutomationService } from './dcinside-comment-automation.service'
+import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
 @Injectable()
 export class CommentJobService implements JobProcessor {
@@ -17,6 +19,26 @@ export class CommentJobService implements JobProcessor {
     private readonly jobLogsService: JobLogsService,
     private readonly commentAutomationService: DcinsideCommentAutomationService,
   ) {}
+
+  /**
+   * DcException을 CustomHttpException으로 매핑
+   */
+  private mapDcExceptionToCustomHttpException(dcException: DcException): CustomHttpException {
+    switch (dcException.type) {
+      case DcExceptionType.COMMENT_DISABLED_PAGE:
+        return new CustomHttpException(ErrorCode.COMMENT_DISABLED_PAGE, dcException.metadata)
+      case DcExceptionType.POST_NOT_FOUND_OR_DELETED:
+        return new CustomHttpException(ErrorCode.POST_NOT_FOUND_OR_DELETED, dcException.metadata)
+      case DcExceptionType.NICKNAME_REQUIRED_GALLERY:
+        return new CustomHttpException(ErrorCode.NICKNAME_REQUIRED_GALLERY, dcException.metadata)
+      case DcExceptionType.NICKNAME_REQUIRED:
+        return new CustomHttpException(ErrorCode.NICKNAME_REQUIRED, dcException.metadata)
+      case DcExceptionType.CAPTCHA_SOLVE_FAILED:
+        return new CustomHttpException(ErrorCode.CAPTCHA_SOLVE_FAILED, dcException.metadata)
+      default:
+        return new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, dcException.metadata)
+    }
+  }
 
   canProcess(job: PrismaJob): boolean {
     return job.type === JobType.COMMENT
@@ -67,6 +89,11 @@ export class CommentJobService implements JobProcessor {
 
         // 에러 로그 기록
         await this.jobLogsService.createJobLog(jobId, resultMessage, 'error')
+
+        // DcException을 CustomHttpException으로 매칭
+        if (error instanceof DcException) {
+          throw this.mapDcExceptionToCustomHttpException(error)
+        }
 
         throw error
       }
@@ -223,9 +250,17 @@ export class CommentJobService implements JobProcessor {
 
       this.logger.log(`Comment job completed: ${job.id}`)
     } catch (error) {
-      this.logger.error(`Comment job failed: ${job.id} - ${error.message}`)
+      // ErrorCodeMap에서 매핑
+      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
+      if (error instanceof CustomHttpException) {
+        const mapped = ErrorCodeMap[error.errorCode]
+        if (mapped) {
+          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+        }
+      }
+      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+      this.logger.error(logMessage, error.stack)
 
-      // 작업 실패 처리
       await this.prismaService.job.update({
         where: { id: job.id },
         data: {
