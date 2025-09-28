@@ -9,8 +9,8 @@ import { DcException, DcExceptionType } from '@main/common/errors/dc.exception'
 import { CommentJobResponseDto } from './dto/dcinside-comment-job.dto'
 import { BulkCommentJobCreateDto } from './dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from './dcinside-comment-automation.service'
-import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { HtmlTitleExtractor } from '@main/app/utils/html-title-extractor'
+import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
 @Injectable()
 export class CommentJobService implements JobProcessor {
@@ -37,6 +37,22 @@ export class CommentJobService implements JobProcessor {
         return new CustomHttpException(ErrorCode.NICKNAME_REQUIRED, dcException.metadata)
       case DcExceptionType.CAPTCHA_SOLVE_FAILED:
         return new CustomHttpException(ErrorCode.CAPTCHA_SOLVE_FAILED, dcException.metadata)
+      case DcExceptionType.CHROME_NOT_INSTALLED:
+        return new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, dcException.metadata)
+      case DcExceptionType.AUTH_REQUIRED:
+        return new CustomHttpException(ErrorCode.AUTH_REQUIRED, dcException.metadata)
+      case DcExceptionType.POST_PARAM_INVALID:
+        return new CustomHttpException(ErrorCode.POST_PARAM_INVALID, dcException.metadata)
+      case DcExceptionType.POST_SUBMIT_FAILED:
+        return new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, dcException.metadata)
+      case DcExceptionType.IMAGE_UPLOAD_FAILED:
+        return new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, dcException.metadata)
+      case DcExceptionType.RECAPTCHA_NOT_SUPPORTED:
+        return new CustomHttpException(ErrorCode.RECAPTCHA_NOT_SUPPORTED, dcException.metadata)
+      case DcExceptionType.CAPTCHA_FAILED:
+        return new CustomHttpException(ErrorCode.CAPTCHA_FAILED, dcException.metadata)
+      case DcExceptionType.GALLERY_TYPE_UNSUPPORTED:
+        return new CustomHttpException(ErrorCode.GALLERY_TYPE_UNSUPPORTED, dcException.metadata)
       default:
         return new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, dcException.metadata)
     }
@@ -92,7 +108,7 @@ export class CommentJobService implements JobProcessor {
         // 에러 로그 기록
         await this.jobLogsService.createJobLog(jobId, resultMessage, 'error')
 
-        // DcException을 CustomHttpException으로 매칭
+        // DcException을 CustomHttpException으로 매핑
         if (error instanceof DcException) {
           throw this.mapDcExceptionToCustomHttpException(error)
         }

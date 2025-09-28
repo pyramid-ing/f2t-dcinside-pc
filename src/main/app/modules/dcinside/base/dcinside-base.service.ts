@@ -10,14 +10,11 @@ import { BrowserContext, Page } from 'playwright'
 import UserAgent from 'user-agents'
 import { sleep } from '@main/app/utils/sleep'
 import { DcException } from '@main/common/errors/dc.exception'
-import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
-import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { getExternalIp } from '@main/app/utils/ip'
 import { assertPermission } from '@main/app/utils/permission.assert'
-import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
 
 export function assertValidGalleryUrl(url: string): asserts url is string {
   const urlMatch = url.match(/[?&]id=([^&]+)/)
@@ -126,7 +123,7 @@ export abstract class DcinsideBaseService {
         } catch (error) {
           // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
           if (error instanceof ChromeNotInstalledError) {
-            throw new DcinsideAutomationError(ErrorCode.CHROME_NOT_INSTALLED, {
+            throw DcException.chromeNotInstalled({
               message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
             })
           }
@@ -159,7 +156,7 @@ export abstract class DcinsideBaseService {
     } catch (error) {
       // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
       if (error instanceof ChromeNotInstalledError) {
-        throw new DcinsideAutomationError(ErrorCode.CHROME_NOT_INSTALLED, {
+        throw DcException.chromeNotInstalled({
           message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
         })
       }
@@ -271,7 +268,7 @@ export abstract class DcinsideBaseService {
     if (!isLoggedIn) {
       // 로그인이 안되어 있으면 로그인 실행
       if (!loginPassword) {
-        throw new DcinsideAutomationError(ErrorCode.AUTH_REQUIRED, {
+        throw DcException.authRequired({
           message: '로그인이 필요하지만 로그인 패스워드가 제공되지 않았습니다.',
         })
       }
@@ -283,7 +280,7 @@ export abstract class DcinsideBaseService {
       })
 
       if (!loginResult.success) {
-        throw new DcinsideAutomationError(ErrorCode.AUTH_REQUIRED, {
+        throw DcException.authRequired({
           message: `자동 로그인 실패: ${loginResult.message}`,
         })
       }
@@ -305,7 +302,7 @@ export abstract class DcinsideBaseService {
     const twoCaptchaApiKey = settings.twoCaptchaApiKey
 
     if (!twoCaptchaApiKey) {
-      throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+      throw DcException.postParamInvalid({
         message: '2captcha API 키가 설정되지 않았습니다.',
       })
     }
@@ -346,7 +343,7 @@ export abstract class DcinsideBaseService {
         this.logger.error(errorMessage)
       }
 
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+      throw DcException.postSubmitFailed({
         message: errorMessage,
       })
     }
@@ -475,7 +472,7 @@ export abstract class DcinsideBaseService {
         await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
       } catch (e: any) {
         await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
-        throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, { message: '테더링 IP 변경 실패' })
+        throw DcException.postSubmitFailed({ message: '테더링 IP 변경 실패' })
       }
     } else {
       await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)

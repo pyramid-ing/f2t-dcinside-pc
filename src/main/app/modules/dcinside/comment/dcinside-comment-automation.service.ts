@@ -12,7 +12,6 @@ import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.ser
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
 import { DcException } from '@main/common/errors/dc.exception'
-import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { DcinsideCommentSearchDto, SortType } from '@main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
 import {
   DcinsidePostItemDto,
@@ -20,7 +19,6 @@ import {
 } from '@main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
-import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -240,7 +238,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       }
     } catch (error) {
       this.logger.error(`Failed to search posts: ${error.message}`, error.stack)
-      throw new CustomHttpException(ErrorCode.POST_SUBMIT_FAILED, {
+      throw DcException.postSubmitFailed({
         message: '게시물 검색에 실패했습니다.',
         originalError: error.message,
       })

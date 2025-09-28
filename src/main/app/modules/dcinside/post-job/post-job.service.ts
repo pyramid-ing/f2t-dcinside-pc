@@ -8,9 +8,8 @@ import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { IpMode } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
-import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
-import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
+import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -106,14 +105,7 @@ export class PostJobService implements JobProcessor {
       this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
       await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
-      try {
-        await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
-      } catch (e) {
-        if (e instanceof DcinsideAutomationError) {
-          throw new CustomHttpException(e.errorCode, e.metadata)
-        }
-        throw e
-      }
+      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
 
       // 삭제 성공 시 원본 작업의 deletedAt 업데이트
       await this.prismaService.postJob.update({

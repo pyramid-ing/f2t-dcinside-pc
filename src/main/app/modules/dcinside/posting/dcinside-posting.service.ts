@@ -5,8 +5,7 @@ import { Injectable } from '@nestjs/common'
 import { BrowserContext, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
 import { PostJob } from '@prisma/client'
-import { DcinsideAutomationError } from '@main/common/errors/dcinside-automation.exception'
-import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { DcException } from '@main/common/errors/dc.exception'
 import {
   DcinsideBaseService,
   detectRecaptcha,
@@ -375,7 +374,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       const errorMessage = `삭제 버튼을 찾을 수 없습니다: ${error.message}`
       this.logger.warn(errorMessage)
       await this.jobLogsService.createJobLog(jobId, errorMessage)
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: errorMessage })
+      throw DcException.postSubmitFailed({ message: errorMessage })
     }
   }
 
@@ -384,7 +383,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     // 비회원인 경우 비밀번호 입력
     if (!isMember) {
       if (!post.password) {
-        throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+        throw DcException.postParamInvalid({
           message: '삭제 비밀번호가 설정되지 않았습니다.',
         })
       }
@@ -445,14 +444,14 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
     // 비밀번호 오류
     if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
-      throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+      throw DcException.postParamInvalid({
         message: '삭제 실패: 비밀번호가 맞지 않습니다.',
       })
     }
 
     // 기타 오류
     if (alertMessage) {
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+      throw DcException.postSubmitFailed({
         message: `삭제 실패: ${alertMessage}`,
       })
     }
@@ -493,7 +492,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
       if (!found) {
         this.logger.warn(`말머리 "${headtext}"를 찾을 수 없습니다.`)
-        throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+        throw DcException.postParamInvalid({
           message: `말머리 "${headtext}"를 찾을 수 없습니다.`,
         })
       }
@@ -504,7 +503,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
         const msg = `말머리 목록을 60초 내에 불러오지 못했습니다. (타임아웃)`
         this.logger.warn(msg)
-        throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, { message: msg })
+        throw DcException.postParamInvalid({ message: msg })
       }
       if (error.message && error.message.includes('말머리')) {
         throw error // 말머리 오류는 그대로 전파
@@ -569,7 +568,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       switch (imageFailureAction) {
         case 'fail':
           // 작업 실패 - 전체 포스팅 중단
-          throw new DcinsideAutomationError(ErrorCode.IMAGE_UPLOAD_FAILED, { message: errorMessage })
+          throw DcException.imageUploadFailed({ message: errorMessage })
         case 'skip':
           this.logger.log('이미지 업로드 실패하였으나 설정에 따라 이미지 없이 포스팅을 진행합니다.')
           break
@@ -696,7 +695,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
           return true
         }
-        throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: '팝업이 아직 닫히지 않았습니다.' })
+        throw DcException.postSubmitFailed({ message: '팝업이 아직 닫히지 않았습니다.' })
       },
       1000,
       10,
@@ -741,14 +740,14 @@ export class DcinsidePostingService extends DcinsideBaseService {
       const recaptchaResult = await detectRecaptcha(page)
       if (recaptchaResult.found) {
         if (!recaptchaResult.siteKey) {
-          throw new DcinsideAutomationError(ErrorCode.RECAPTCHA_NOT_SUPPORTED, {
+          throw DcException.recaptchaNotSupported({
             message: 'reCAPTCHA 사이트 키를 찾을 수 없습니다.',
           })
         }
 
         const settings = await this.settingsService.getSettings()
         if (!settings.twoCaptchaApiKey) {
-          throw new DcinsideAutomationError(ErrorCode.RECAPTCHA_NOT_SUPPORTED, {
+          throw DcException.recaptchaNotSupported({
             message: 'reCAPTCHA가 감지되었지만 2captcha API 키가 설정되지 않았습니다.',
           })
         }
@@ -779,7 +778,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
             this.logger.log(`글쓰기용 캡차 답안 입력 완료: ${answer}`)
           }
         } catch (error) {
-          throw new DcinsideAutomationError(ErrorCode.CAPTCHA_FAILED, { message: error.message })
+          throw DcException.captchaFailed({ message: error.message })
         }
       } else {
         this.logger.log('글쓰기용 캡차가 존재하지 않음')
@@ -852,7 +851,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
         // 커스텀 팝업 결과 처리
         if (result && typeof result === 'object' && 'isCustomPopup' in result) {
-          throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+          throw DcException.postSubmitFailed({
             message: `글 등록 실패: ${result.message}`,
           })
         }
@@ -864,7 +863,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           // 캡챠 오류 메시지일 경우에만 재시도
           if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
             captchaTryCount += 1
-            if (captchaTryCount >= 3) throw new DcinsideAutomationError(ErrorCode.CAPTCHA_FAILED)
+            if (captchaTryCount >= 3) throw DcException.captchaFailed()
 
             // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
             try {
@@ -878,7 +877,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
             continue // while – 다시 등록 버튼 클릭 시도
           } else {
             // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
-            throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+            throw DcException.postSubmitFailed({
               message: `글 등록 실패: ${dialogMessage}`,
             })
           }
@@ -925,7 +924,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       }
     } else {
       // 제목 추출 실패 시 에러 처리
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+      throw DcException.postSubmitFailed({
         message:
           '등록은 되었으나 알수 없는 이유로 게시글을 찾을수 없습니다. 링크 등 제목,내용이 부적절 할 경우가 의심됩니다.',
       })
@@ -959,10 +958,10 @@ export class DcinsidePostingService extends DcinsideBaseService {
       if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
         const msg = '게시글 목록 페이지로 60초 내에 이동하지 못했습니다. (타임아웃)'
         this.logger.warn(msg)
-        throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+        throw DcException.postSubmitFailed({ message: msg })
       }
       this.logger.warn(`목록 페이지 이동 대기 중 타임아웃: ${error.message}`)
-      throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, {
+      throw DcException.postSubmitFailed({
         message: '글 등록 후 목록 페이지 이동 실패 - 글 등록이 정상적으로 완료되지 않았습니다.',
       })
     }
@@ -979,7 +978,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
             const msg = '갤러리 목록 페이지를 60초 내에 불러오지 못했습니다. (타임아웃)'
             this.logger.warn(msg)
-            throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+            throw DcException.postSubmitFailed({ message: msg })
           }
           throw error
         }
@@ -990,7 +989,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
             const msg = '글쓰기 버튼을 60초 내에 찾지 못했습니다. (타임아웃)'
             this.logger.warn(msg)
-            throw new DcinsideAutomationError(ErrorCode.POST_SUBMIT_FAILED, { message: msg })
+            throw DcException.postSubmitFailed({ message: msg })
           }
           throw error
         }
@@ -1020,11 +1019,11 @@ export class DcinsidePostingService extends DcinsideBaseService {
     } catch (error) {
       if (error instanceof ZodError) {
         const zodErrors = error.issues.map(err => `${err.path.join('.')}: ${err.message}`)
-        throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+        throw DcException.postParamInvalid({
           message: `포스팅 파라미터 검증 실패: ${zodErrors.join(', ')}`,
         })
       }
-      throw new DcinsideAutomationError(ErrorCode.POST_PARAM_INVALID, {
+      throw DcException.postParamInvalid({
         message: `포스팅 파라미터 검증 실패: ${error.message}`,
       })
     }
@@ -1093,7 +1092,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       case 'person':
         return `https://gall.dcinside.com/person/board/lists/?id=${id}`
       default:
-        throw new DcinsideAutomationError(ErrorCode.GALLERY_TYPE_UNSUPPORTED, { type })
+        throw DcException.galleryTypeUnsupported({ type })
     }
   }
 }

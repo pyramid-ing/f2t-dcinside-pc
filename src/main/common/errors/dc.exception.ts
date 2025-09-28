@@ -7,6 +7,14 @@ export enum DcExceptionType {
   NICKNAME_REQUIRED_GALLERY = 'NICKNAME_REQUIRED_GALLERY',
   NICKNAME_REQUIRED = 'NICKNAME_REQUIRED',
   CAPTCHA_SOLVE_FAILED = 'CAPTCHA_SOLVE_FAILED',
+  CHROME_NOT_INSTALLED = 'CHROME_NOT_INSTALLED',
+  AUTH_REQUIRED = 'AUTH_REQUIRED',
+  POST_PARAM_INVALID = 'POST_PARAM_INVALID',
+  POST_SUBMIT_FAILED = 'POST_SUBMIT_FAILED',
+  IMAGE_UPLOAD_FAILED = 'IMAGE_UPLOAD_FAILED',
+  RECAPTCHA_NOT_SUPPORTED = 'RECAPTCHA_NOT_SUPPORTED',
+  CAPTCHA_FAILED = 'CAPTCHA_FAILED',
+  GALLERY_TYPE_UNSUPPORTED = 'GALLERY_TYPE_UNSUPPORTED',
 }
 
 /**
@@ -55,5 +63,61 @@ export class DcException extends Error {
    */
   static captchaSolveFailed(metadata?: Record<string, any>): DcException {
     return new DcException(DcExceptionType.CAPTCHA_SOLVE_FAILED, metadata)
+  }
+
+  /**
+   * 크롬 브라우저 미설치 예외
+   */
+  static chromeNotInstalled(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.CHROME_NOT_INSTALLED, metadata)
+  }
+
+  /**
+   * 인증 필요 예외
+   */
+  static authRequired(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.AUTH_REQUIRED, metadata)
+  }
+
+  /**
+   * 게시물 파라미터 유효하지 않음 예외
+   */
+  static postParamInvalid(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.POST_PARAM_INVALID, metadata)
+  }
+
+  /**
+   * 게시물 제출 실패 예외
+   */
+  static postSubmitFailed(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.POST_SUBMIT_FAILED, metadata)
+  }
+
+  /**
+   * 이미지 업로드 실패 예외
+   */
+  static imageUploadFailed(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.IMAGE_UPLOAD_FAILED, metadata)
+  }
+
+  /**
+   * reCAPTCHA 미지원 예외
+   */
+  static recaptchaNotSupported(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.RECAPTCHA_NOT_SUPPORTED, metadata)
+  }
+
+  /**
+   * 캡차 실패 예외
+   */
+  static captchaFailed(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.CAPTCHA_FAILED, metadata)
+  }
+
+  /**
+   * 갤러리 타입 미지원 예외
+   */
+  static galleryTypeUnsupported(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.GALLERY_TYPE_UNSUPPORTED, metadata)
   }
 }
