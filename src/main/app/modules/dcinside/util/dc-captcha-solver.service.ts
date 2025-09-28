@@ -38,9 +38,9 @@ export class DcCaptchaSolverService {
                   text: `You are a CAPTCHA solver that ONLY responds with JSON format: { "answer": "captcha_text" }. Never provide explanations or additional text.
 
 이 이미지는 CAPTCHA입니다. 
+- 정답은 영어 소문자와 숫자로만 이루어집니다.
 - 이미지에 표시된 텍스트를 정확히 읽어주세요
-- 대소문자를 구분하여 정확히 입력해주세요
-- 특수문자나 공백이 있다면 그대로 포함해주세요
+- 소문자를 구분하여 정확히 입력해주세요
 - 답변은 반드시 JSON 형식으로만 해주세요: {"answer": "실제캡차텍스트"}`,
                 },
                 {
