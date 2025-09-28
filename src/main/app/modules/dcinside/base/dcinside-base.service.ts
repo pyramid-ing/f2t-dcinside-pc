@@ -195,7 +195,7 @@ export abstract class DcinsideBaseService {
     params: { id: string; password: string },
   ): Promise<{ success: boolean; message: string }> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
+      await page.goto('https://dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
 
       // 로그인 폼 입력 및 로그인 버튼 클릭
       await page.fill('#user_id', params.id)
@@ -230,7 +230,7 @@ export abstract class DcinsideBaseService {
 
       if (!loginBoxExists) {
         // #login_box가 없으면 메인 페이지로 이동
-        await page.goto('https://dcinside.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        await page.goto('https://dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
         await page.waitForSelector('#login_box', { timeout: 10000 })
       }
 
