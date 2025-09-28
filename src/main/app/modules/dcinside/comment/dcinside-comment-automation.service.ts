@@ -504,7 +504,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           try {
             await submitButton.click()
             // 댓글 등록 후 성공/실패 메시지 확인
-            await this._checkCommentSubmissionResult(page, alertMessage)
+            await this._checkCommentSubmissionResult(alertMessage)
             this.logger.log(`Comment posted successfully on: ${postUrl}`)
           } finally {
             // 이벤트 리스너 정리
@@ -551,7 +551,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 댓글 등록 결과 확인
    */
-  private async _checkCommentSubmissionResult(page: Page, alertMessage: string): Promise<void> {
+  private async _checkCommentSubmissionResult(alertMessage: string): Promise<void> {
     // 잠시 대기하여 alert 메시지 확인
     await sleep(2000)
 
