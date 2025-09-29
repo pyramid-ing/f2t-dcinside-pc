@@ -325,7 +325,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 게시물 페이지로 이동
    */
   private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
-    await page.goto(postUrl, { waitUntil: 'domcontentloaded' })
+    await page.goto(postUrl, { waitUntil: 'load' })
   }
 
   /**
