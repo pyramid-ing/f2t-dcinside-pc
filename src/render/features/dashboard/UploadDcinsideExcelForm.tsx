@@ -296,7 +296,7 @@ const UploadDcinsideExcelForm: React.FC = () => {
               엑셀 파일 형식을 확인하고 샘플 데이터로 테스트해보세요
             </Text>
             <Space size="middle">
-              <Dropdown menu={{ items: sampleMenuItems }} placement="bottomCenter">
+              <Dropdown menu={{ items: sampleMenuItems }} placement="bottom">
                 <Button type="primary" icon={<DownloadOutlined />} size="large">
                   자동 글쓰기 샘플 다운로드
                 </Button>

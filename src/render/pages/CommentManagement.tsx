@@ -247,7 +247,7 @@ const CommentManagement: React.FC = () => {
             댓글 엑셀 파일 형식을 확인하고 샘플 데이터로 테스트해보세요
           </Text>
           <Space size="middle">
-            <Dropdown menu={{ items: commentSampleMenuItems }} placement="bottomCenter">
+            <Dropdown menu={{ items: commentSampleMenuItems }} placement="bottom">
               <Button type="primary" icon={<DownloadOutlined />} size="large">
                 댓글 샘플 다운로드
               </Button>
@@ -280,7 +280,7 @@ const CommentManagement: React.FC = () => {
             <Table
               columns={excelDataColumns}
               dataSource={excelData}
-              rowKey={(record, index) => `${record.postUrl}-${index}`}
+              rowKey={record => `${record.postUrl}-${record.comment}`}
               pagination={{ pageSize: 10 }}
               size="small"
             />
