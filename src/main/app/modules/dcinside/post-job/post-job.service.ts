@@ -10,6 +10,8 @@ import { IpMode } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
+import { DcExceptionMapper } from '@main/app/modules/dcinside/utils/dc-exception-mapper.util'
+import { DcException } from '@main/common/errors/dc.exception'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -68,6 +70,11 @@ export class PostJobService implements JobProcessor {
 
       this.logger.debug(`Completed job ${job.id}`)
     } catch (error) {
+      // DcException을 CustomHttpException으로 변환
+      if (error instanceof DcException) {
+        error = DcExceptionMapper.mapDcExceptionToCustomHttpException(error)
+      }
+
       // ErrorCodeMap에서 매핑
       let logMessage = `작업 처리 중 오류 발생: ${error.message}`
       if (error instanceof CustomHttpException) {
@@ -117,6 +124,11 @@ export class PostJobService implements JobProcessor {
 
       this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
     } catch (error) {
+      // DcException을 CustomHttpException으로 변환
+      if (error instanceof DcException) {
+        error = DcExceptionMapper.mapDcExceptionToCustomHttpException(error)
+      }
+
       // ErrorCodeMap에서 매핑
       let logMessage = `작업 처리 중 오류 발생: ${error.message}`
       if (error instanceof CustomHttpException) {
