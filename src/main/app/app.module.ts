@@ -58,10 +58,7 @@ import { AuthModule } from '@main/app/modules/auth/auth.module'
     {
       // 의존성 주입이 가능하도록 module에도 설정해준다.
       provide: APP_FILTER,
-      useFactory: () => {
-        return new GlobalExceptionFilter()
-      },
-      inject: [],
+      useClass: GlobalExceptionFilter,
     },
   ],
   controllers: [],

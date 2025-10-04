@@ -18,67 +18,58 @@ export const winstonConfig = {
       ),
     }),
 
-    // 파일 출력 (프로덕션에서만)
-    ...(EnvConfig.isPackaged
-      ? [
-          // 에러 로그 파일
-          new winston.transports.File({
-            filename: path.join(EnvConfig.userDataPath, 'logs', 'error.log'),
-            level: 'error',
-            format: winston.format.combine(
-              winston.format.timestamp(),
-              winston.format.errors({ stack: true }),
-              winston.format.json(),
-            ),
-            maxsize: 10 * 1024 * 1024, // 10MB
-            maxFiles: 5,
-            tailable: true,
-          }),
+    // 파일 출력 (개발환경과 프로덕션 모두에서 활성화)
+    new winston.transports.File({
+      filename: path.join(EnvConfig.userDataPath, 'logs', 'error.log'),
+      level: 'error',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      ),
+      maxsize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+      tailable: true,
+    }),
 
-          // 모든 로그 파일 (디버깅용)
-          new winston.transports.File({
-            filename: path.join(EnvConfig.userDataPath, 'logs', 'combined.log'),
-            format: winston.format.combine(
-              winston.format.timestamp(),
-              winston.format.errors({ stack: true }),
-              winston.format.json(),
-            ),
-            maxsize: 20 * 1024 * 1024, // 20MB
-            maxFiles: 3,
-            tailable: true,
-          }),
-        ]
-      : []),
+    // 모든 로그 파일 (디버깅용)
+    new winston.transports.File({
+      filename: path.join(EnvConfig.userDataPath, 'logs', 'combined.log'),
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      ),
+      maxsize: 20 * 1024 * 1024, // 20MB
+      maxFiles: 3,
+      tailable: true,
+    }),
   ],
 
   // 로그 레벨 설정
   level: EnvConfig.isPackaged ? 'error' : 'debug',
 
-  // 예외 처리
-  exceptionHandlers: EnvConfig.isPackaged
-    ? [
-        new winston.transports.File({
-          filename: path.join(EnvConfig.userDataPath, 'logs', 'exceptions.log'),
-          format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.errors({ stack: true }),
-            winston.format.json(),
-          ),
-        }),
-      ]
-    : [],
+  // 예외 처리 (개발환경과 프로덕션 모두에서 활성화)
+  exceptionHandlers: [
+    new winston.transports.File({
+      filename: path.join(EnvConfig.userDataPath, 'logs', 'exceptions.log'),
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      ),
+    }),
+  ],
 
-  // Promise 거부 처리
-  rejectionHandlers: EnvConfig.isPackaged
-    ? [
-        new winston.transports.File({
-          filename: path.join(EnvConfig.userDataPath, 'logs', 'rejections.log'),
-          format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.errors({ stack: true }),
-            winston.format.json(),
-          ),
-        }),
-      ]
-    : [],
+  // Promise 거부 처리 (개발환경과 프로덕션 모두에서 활성화)
+  rejectionHandlers: [
+    new winston.transports.File({
+      filename: path.join(EnvConfig.userDataPath, 'logs', 'rejections.log'),
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json(),
+      ),
+    }),
+  ],
 }
