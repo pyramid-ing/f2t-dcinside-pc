@@ -1,17 +1,18 @@
 import type { ValidationError } from '@nestjs/common'
-import { BadRequestException, ValidationPipe } from '@nestjs/common'
+import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { readFileSync } from 'fs'
 import { WinstonModule } from 'nest-winston'
-import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
 import { join } from 'path'
-import winston from 'winston'
 import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
 import { LoggerConfig } from './config/logger.config'
+import { winstonConfig } from '@main/config/winston.config'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -179,26 +180,9 @@ async function bootstrap() {
   try {
     await electronAppInit()
 
-    const instance = winston.createLogger({
-      transports: [
-        new winston.transports.Console({
-          format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.ms(),
-            nestWinstonModuleUtilities.format.nestLike('ITB', {
-              colors: true,
-              prettyPrint: true,
-            }),
-          ),
-          level: EnvConfig.isPackaged ? 'info' : 'silly',
-        }),
-      ],
-    })
-
+    // Winston 로거를 부트스트랩에서 직접 생성/주입
     const app = await NestFactory.create(AppModule, {
-      logger: WinstonModule.createLogger({
-        instance,
-      }),
+      logger: WinstonModule.createLogger(winstonConfig),
     })
 
     app.enableCors()
@@ -211,8 +195,19 @@ async function bootstrap() {
       new ValidationPipe({
         transform: true,
         exceptionFactory: (validationErrors: ValidationError[] = []) => {
-          console.error(JSON.stringify(validationErrors))
-          return new BadRequestException(validationErrors)
+          // 유효성 검사 오류 상세 정보 수집
+          const validationDetails = validationErrors.map(error => {
+            const constraints = error.constraints || {}
+            const messages = Object.values(constraints)
+            return {
+              field: error.property,
+              messages,
+            }
+          })
+
+          return new CustomHttpException(ErrorCode.VALIDATION_ERROR, {
+            details: validationDetails,
+          })
         },
       }),
     )
