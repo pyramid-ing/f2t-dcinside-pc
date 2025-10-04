@@ -1,7 +1,7 @@
 {
   "name": "winsoft-dc",
   "type": "module",
-  "version": "1.11.4",
+  "version": "1.11.5",
   "packageManager": "pnpm@10.12.1",
   "description": "",
   "main": "dist/main/index.cjs",
