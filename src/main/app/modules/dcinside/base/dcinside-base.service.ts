@@ -101,10 +101,7 @@ export abstract class DcinsideBaseService {
         }
         proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
         try {
-          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
-            headless,
-            args: [proxyArg],
-          })
+          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, headless, [proxyArg])
           if (options?.reuseExisting) {
             let context = browser.contexts()[0] || null
             let page: Page | null = null
@@ -133,9 +130,7 @@ export abstract class DcinsideBaseService {
     }
     // fallback: 프록시 없이 재시도
     try {
-      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId || 'dcinside', {
-        headless,
-      })
+      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, headless)
       if (options?.reuseExisting) {
         let context = browser.contexts()[0] || null
         let page: Page | null = null
