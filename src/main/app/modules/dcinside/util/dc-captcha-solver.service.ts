@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Page } from 'playwright'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
-import axios from 'axios'
+import OpenAI from 'openai'
+
+interface CaptchaResponse {
+  answer: string
+}
 
 @Injectable()
 export class DcCaptchaSolverService {
@@ -24,73 +28,70 @@ export class DcCaptchaSolverService {
         throw new Error('OpenAI API 키가 설정되지 않았습니다')
       }
 
+      // OpenAI 클라이언트 초기화
+      const openai = new OpenAI({
+        apiKey: settings.openAIApiKey,
+      })
+
       // OpenAI API 호출
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `You are a CAPTCHA solver that ONLY responds with JSON format: { "answer": "captcha_text" }. Never provide explanations or additional text.
-
-이 이미지는 CAPTCHA입니다. 
-- 정답은 영어 소문자와 숫자로만 이루어집니다.
-- 이미지에 표시된 텍스트를 정확히 읽어주세요
-- 소문자를 구분하여 정확히 입력해주세요
-- 답변은 반드시 JSON 형식으로만 해주세요: {"answer": "실제캡차텍스트"}`,
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/png;base64,${captchaImageBase64}` },
-                },
-              ],
-            },
-          ],
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'captcha_schema',
-              schema: {
-                type: 'object',
-                properties: {
-                  answer: {
-                    type: 'string',
-                    description: 'The text shown in the CAPTCHA image',
-                  },
-                },
-                required: ['answer'],
-                additionalProperties: false,
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `당신은 이미지를 OCR해줍니다.`,
               },
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/png;base64,${captchaImageBase64}` },
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'captcha_schema',
+            schema: {
+              type: 'object',
+              properties: {
+                answer: {
+                  type: 'string',
+                  description: `이 이미지는 난독화되있습니다. 
+- 정답은 한글, 영어는 소문자만, 숫자도 포함되있습니다.(숫자는0없음)
+- 이미지에 표시된 텍스트를 정확히 읽어주세요`,
+                },
+              },
+              required: ['answer'],
+              additionalProperties: false,
             },
           },
-          max_tokens: 50,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${settings.openAIApiKey}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      )
+      })
 
-      const answer = response.data.choices[0]?.message?.content
+      const answer = response.choices[0]?.message?.content
 
       if (!answer) {
         throw new Error('OpenAI API returned no answer')
       }
 
-      const parsedAnswer = JSON.parse(answer)
-      const captchaText = parsedAnswer.answer
+      const parsedAnswer: CaptchaResponse = JSON.parse(answer)
+
+      if (!parsedAnswer.answer || typeof parsedAnswer.answer !== 'string') {
+        throw new Error('Invalid captcha response format')
+      }
+
+      const captchaText = parsedAnswer.answer.trim()
 
       this.logger.log(`캡차 해결 완료: ${captchaText}`)
       return captchaText
     } catch (error) {
-      this.logger.error(`DC 캡차 해결 실패: ${error.message}`)
-      throw error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      this.logger.error(`DC 캡차 해결 실패: ${errorMessage}`)
+      throw new Error(`캡차 해결 실패: ${errorMessage}`)
     }
   }
 
@@ -119,8 +120,9 @@ export class DcCaptchaSolverService {
       this.logger.log(`캡차 이미지 base64 추출 완료 (selector: ${captchaSelector})`)
       return captchaBase64String
     } catch (error) {
-      this.logger.error(`캡차 이미지 추출 실패 (selector: ${captchaSelector}): ${error.message}`)
-      throw error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      this.logger.error(`캡차 이미지 추출 실패 (selector: ${captchaSelector}): ${errorMessage}`)
+      throw new Error(`캡차 이미지 추출 실패: ${errorMessage}`)
     }
   }
 }
