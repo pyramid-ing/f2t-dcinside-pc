@@ -469,9 +469,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           // 댓글 등록 후 성공/실패 메시지 확인
           await this._checkCommentSubmissionResult(alertMessage)
 
-          // 실제 댓글이 추가되었는지 확인
-          await this._verifyCommentPosted(page, commentCountBefore)
-
           this.logger.log(`Comment posted successfully on: ${postUrl}`)
         } finally {
           // 이벤트 리스너 정리
@@ -494,31 +491,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       return comments.length
     } catch {
       return 0
-    }
-  }
-
-  /**
-   * 댓글이 실제로 작성되었는지 확인
-   */
-  private async _verifyCommentPosted(page: Page, previousCount: number): Promise<void> {
-    try {
-      // 페이지 새로고침하여 최신 댓글 목록 가져오기
-      await page.reload({ waitUntil: 'networkidle' })
-      await sleep(2000)
-
-      const currentCount = await this._getCommentCount(page)
-      this.logger.log(`제출 후 댓글 개수: ${currentCount} (이전: ${previousCount})`)
-
-      if (currentCount <= previousCount) {
-        throw DcException.commentDisabledPage({
-          message: '댓글이 정상적으로 작성되지 않았습니다. 댓글 개수가 증가하지 않았습니다.',
-        })
-      }
-
-      this.logger.log('댓글 작성 확인 완료')
-    } catch (error) {
-      this.logger.warn(`댓글 작성 확인 중 오류: ${error.message}`)
-      // 확인 실패 시에도 계속 진행 (alert가 없었다면 성공으로 간주)
     }
   }
 
