@@ -35,7 +35,7 @@ export class DcCaptchaSolverService {
 
       // OpenAI API 호출
       const response = await openai.chat.completions.create({
-        model: 'gpt-5',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'user',
@@ -61,7 +61,8 @@ export class DcCaptchaSolverService {
                 answer: {
                   type: 'string',
                   description: `이 이미지는 난독화되있습니다. 
-- 정답은 한글, 영어는 소문자만, 숫자도 포함되있습니다.(숫자는0없음)
+- 정답은 한글(받침없음), 알파벳(소문자만), 숫자(숫자는0없음)도 포함되있습니다.
+- 정답예시: t카u7d,ch8qg
 - 이미지에 표시된 텍스트를 정확히 읽어주세요`,
                 },
               },
