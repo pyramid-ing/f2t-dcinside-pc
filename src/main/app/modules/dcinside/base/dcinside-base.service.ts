@@ -16,13 +16,12 @@ import { Permission } from '@main/app/modules/auth/auth.guard'
 import { getExternalIp } from '@main/app/utils/ip'
 import { assertPermission } from '@main/app/utils/permission.assert'
 
-export function assertValidGalleryUrl(url: string): asserts url is string {
-  const urlMatch = url.match(/[?&]id=([^&]+)/)
-  if (!urlMatch) {
-    throw DcException.postNotFoundOrDeleted({
-      message: '갤러리 주소에서 id를 추출할 수 없습니다.',
-    })
-  }
+export type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
+
+export interface GalleryInfo {
+  id: string
+  type: GalleryType
+  postNo?: string
 }
 
 export function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
@@ -174,8 +173,8 @@ export abstract class DcinsideBaseService {
     options?: { proxyAuth?: { server: string; username?: string; password?: string } },
   ): Promise<{ context: BrowserContext; page: Page }> {
     const context = await browser.newContext({
-      viewport: { width: 1200, height: 1142 },
-      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      viewport: { width: 414, height: 896 }, // iPhone 11 Pro Max 크기
+      userAgent: new UserAgent({ deviceCategory: 'mobile' }).toString(),
       ...(options?.proxyAuth ? { proxy: options.proxyAuth } : {}),
     })
 
@@ -221,22 +220,22 @@ export abstract class DcinsideBaseService {
   }
 
   /**
-   * 로그인 상태 확인
+   * 로그인 상태 확인 (모바일 전용)
    */
   public async isLogin(page: Page): Promise<boolean> {
     try {
-      // 현재 페이지에서 #login_box가 이미 존재하는지 확인
-      const loginBoxExists = await page.$('#login_box')
+      // 현재 페이지에서 .gall-tit-box가 이미 존재하는지 확인
+      const hasGallTitBox = await page.$('.gall-tit-box')
 
-      if (!loginBoxExists) {
-        // #login_box가 없으면 메인 페이지로 이동
+      if (!hasGallTitBox) {
+        // .gall-tit-box가 없으면 메인 페이지로 이동
         await page.goto('https://dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
-        await page.waitForSelector('#login_box', { timeout: 10000 })
+        await page.waitForSelector('.gall-tit-box', { timeout: 10000 })
       }
 
-      // 로그인 여부 확인 (user_name이 있으면 로그인된 상태)
-      const userName = await page.waitForSelector('#login_box .user_name', { timeout: 5000 })
-      return !!userName
+      // 모바일 버전에서만 .btn-write가 있으면 로그인된 상태 (글쓰기 버튼이 보임)
+      const writeButton = await page.$('.btn-write')
+      return !!writeButton
     } catch {
       return false
     }
@@ -354,19 +353,19 @@ export abstract class DcinsideBaseService {
    */
   protected async solveDcCaptcha(
     page: Page,
-    captchaSelector: string,
+    captchaImgSelector: string,
     inputSelector: string,
     jobId?: string,
   ): Promise<void> {
     try {
-      const captchaImg = page.locator(captchaSelector)
+      const captchaImg = page.locator(captchaImgSelector)
       const captchaCount = await captchaImg.count()
 
       if (captchaCount > 0) {
         this.logger.log('DC 캡챠 감지됨, 해결 시작')
 
         // 캡챠 이미지 추출
-        const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, captchaSelector)
+        const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, captchaImgSelector)
 
         // 캡챠 해결
         const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
@@ -391,16 +390,19 @@ export abstract class DcinsideBaseService {
    */
   protected async checkAbnormalPage(page: Page): Promise<void> {
     const abnormalInfo = await page.evaluate(() => {
-      const container = document.querySelector('.box_infotxt.delet') as HTMLElement | null
+      // 모바일 DC인사이드의 penalty-box 구조 확인
+      const container = document.querySelector('.penalty-box') as HTMLElement | null
       if (!container) return null
 
       const texts: string[] = []
-      const strong = container.querySelector('strong') as HTMLElement | null
-      if (strong?.textContent) texts.push(strong.textContent.trim())
 
-      const paragraphs = Array.from(container.querySelectorAll('p')) as HTMLElement[]
+      // penalty-box 내의 모든 p 태그에서 텍스트 추출
+      const paragraphs = Array.from(container.querySelectorAll('p.txt')) as HTMLElement[]
       for (const p of paragraphs) {
-        if (p.textContent) texts.push(p.textContent.trim())
+        if (p.textContent) {
+          const text = p.textContent.trim()
+          if (text) texts.push(text)
+        }
       }
 
       const combined = texts.join(' ')
@@ -411,9 +413,12 @@ export abstract class DcinsideBaseService {
       const combined = abnormalInfo.combined || ''
 
       // 삭제/존재하지 않음 관련 패턴들 (한국어/영문 보조 문구 포함)
-      const deletionPatterns = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
+      const deletionPatterns = [
+        '게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다',
+        'You will be redirected in a few seconds',
+      ]
 
-      const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다']
+      const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다', 'You will be redirected in a few seconds']
 
       const deletionDetected = deletionPatterns.some(p => combined.includes(p))
       const redirectDetected = redirectHints.some(p => combined.includes(p))
@@ -572,6 +577,91 @@ export abstract class DcinsideBaseService {
       await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
       await sleep(settings.taskDelay * 1000)
     }
+  }
+
+  /**
+   * 갤러리 정보 추출 (모바일 URL 패턴 기반)
+   */
+  protected _extractGalleryInfo(url: string): GalleryInfo {
+    let id: string
+    let postNo: string | undefined
+
+    // 모바일 URL 패턴별 처리 (경로 기반)
+    if (url.includes('/board/')) {
+      // 일반 갤러리: /board/galleryId/postNo
+      const boardMatch = url.match(/\/board\/([^/]+)\/([^/?]+)/)
+      if (boardMatch) {
+        id = boardMatch[1]
+        postNo = boardMatch[2] // 마지막 슬러그
+      } else {
+        // 게시물 번호가 없는 경우 (갤러리 목록)
+        const galleryMatch = url.match(/\/board\/([^/?]+)/)
+        if (galleryMatch) {
+          id = galleryMatch[1]
+          postNo = undefined
+        } else {
+          throw DcException.postNotFoundOrDeleted({
+            message: '갤러리 URL 형식이 올바르지 않습니다.',
+          })
+        }
+      }
+    } else if (url.includes('/mini/')) {
+      // 미니 갤러리: /mini/galleryId/postNo
+      const miniMatch = url.match(/\/mini\/([^/]+)\/([^/?]+)/)
+      if (miniMatch) {
+        id = miniMatch[1]
+        postNo = miniMatch[2] // 마지막 슬러그
+      } else {
+        // 갤러리 목록
+        const galleryMatch = url.match(/\/mini\/([^/?]+)/)
+        if (galleryMatch) {
+          id = galleryMatch[1]
+          postNo = undefined
+        } else {
+          throw DcException.postNotFoundOrDeleted({
+            message: '미니 갤러리 URL 형식이 올바르지 않습니다.',
+          })
+        }
+      }
+    } else if (url.includes('/person/')) {
+      // 인물 갤러리: /person/galleryId/postNo
+      const personMatch = url.match(/\/person\/([^/]+)\/([^/?]+)/)
+      if (personMatch) {
+        id = personMatch[1]
+        postNo = personMatch[2] // 마지막 슬러그
+      } else {
+        // 갤러리 목록
+        const galleryMatch = url.match(/\/person\/([^/?]+)/)
+        if (galleryMatch) {
+          id = galleryMatch[1]
+          postNo = undefined
+        } else {
+          throw DcException.postNotFoundOrDeleted({
+            message: '인물 갤러리 URL 형식이 올바르지 않습니다.',
+          })
+        }
+      }
+    } else {
+      // 기타 URL 형식
+      throw DcException.postNotFoundOrDeleted({
+        message: '지원하지 않는 URL 형식입니다.',
+      })
+    }
+
+    // 갤러리 타입 판별
+    let type: GalleryType
+    if (url.includes('/mgallery/')) {
+      type = 'mgallery'
+    } else if (url.includes('/mini/')) {
+      type = 'mini'
+    } else if (url.includes('/person/')) {
+      type = 'person'
+    } else {
+      type = 'board' // 일반갤러리
+    }
+
+    this.logger.log(`갤러리 정보 추출: ID=${id}, Type=${type}, PostNo=${postNo || 'N/A'}`)
+    return { id, type, postNo }
   }
 
   /**

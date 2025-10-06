@@ -9,9 +9,9 @@ import { DcException } from '@main/common/errors/dc.exception'
 import {
   DcinsideBaseService,
   detectRecaptcha,
-  assertValidGalleryUrl,
   assertValidPopupPage,
   assertRetrySuccess,
+  GalleryInfo,
 } from '@main/app/modules/dcinside/base/dcinside-base.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
@@ -22,13 +22,6 @@ import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
-
-type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
-
-interface GalleryInfo {
-  id: string
-  type: GalleryType
-}
 
 interface ParsedPostJob {
   id: string
@@ -363,10 +356,10 @@ export class DcinsidePostingService extends DcinsideBaseService {
     await this.jobLogsService.createJobLog(jobId, '삭제 버튼 찾는 중...')
 
     try {
-      await page.waitForSelector('button.btn_grey.cancle', { timeout: 60_000 })
+      await page.waitForSelector('[onclick^=board_delete]', { timeout: 60_000 })
       await this.jobLogsService.createJobLog(jobId, '삭제 버튼 발견, 클릭 시도')
 
-      await page.click('button.btn_grey.cancle')
+      await page.click('[onclick^=board_delete]')
       await sleep(2000)
 
       await this.jobLogsService.createJobLog(jobId, '삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
@@ -388,8 +381,8 @@ export class DcinsidePostingService extends DcinsideBaseService {
         })
       }
 
-      await page.waitForSelector('#password', { timeout: 60_000 })
-      await page.fill('#password', post.password)
+      await page.waitForSelector('#board_pw', { timeout: 60_000 })
+      await page.fill('#board_pw', post.password)
       await sleep(1000)
 
       await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
@@ -419,16 +412,74 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
     try {
       // 삭제 버튼 클릭
-      await page.locator('.btn_ok').click({ timeout: 5000 })
+      await page.locator('button.btn-pwd-blue[type=submit]').click({ timeout: 5000 })
 
-      // 다이얼로그 처리 대기: alertMessage가 채워지면 즉시 진행, 최대 30초 대기
-      const start = Date.now()
-      while (!alertMessage && Date.now() - start < 30_000) {
-        await sleep(200)
+      // Promise.race로 alert 메시지와 페이지 이동을 동시에 감지
+      const result = await Promise.race([
+        // 1. Alert 다이얼로그 대기
+        new Promise<string>(resolve => {
+          const checkAlert = () => {
+            if (alertMessage) {
+              resolve(alertMessage)
+            } else {
+              setTimeout(checkAlert, 200)
+            }
+          }
+          setTimeout(checkAlert, 200)
+        }),
+
+        // 2. 갤러리 목록 페이지로 이동 대기 (마지막에 포스팅 ID가 없는 URL로 이동)
+        new Promise<string>(resolve => {
+          let timeoutId: NodeJS.Timeout
+          let intervalId: NodeJS.Timeout
+
+          const checkUrl = () => {
+            try {
+              const currentUrl = page.url()
+              // URL이 변경되었고, 마지막에 숫자(포스팅 ID)가 없는 경우 목록 페이지로 이동한 것으로 판단
+              // board, mini, mgallery, person 등 다양한 갤러리 타입에 대응
+              const isGalleryUrl =
+                currentUrl.includes('/board/') ||
+                currentUrl.includes('/mini/') ||
+                currentUrl.includes('/mgallery/') ||
+                currentUrl.includes('/person/')
+
+              if (isGalleryUrl && !currentUrl.match(/\/\d+$/)) {
+                clearTimeout(timeoutId)
+                clearInterval(intervalId)
+                resolve('SUCCESS_BY_NAVIGATION')
+              }
+            } catch (error) {
+              // 에러가 발생해도 계속 체크
+            }
+          }
+
+          // 30초 타임아웃 설정
+          timeoutId = setTimeout(() => {
+            clearInterval(intervalId)
+            resolve('TIMEOUT')
+          }, 30_000)
+
+          // 200ms마다 URL 체크
+          intervalId = setInterval(checkUrl, 200)
+        }),
+
+        // 3. 타임아웃 (30초)
+        new Promise<string>(resolve => {
+          setTimeout(() => resolve('TIMEOUT'), 30_000)
+        }),
+      ])
+
+      if (result === 'SUCCESS_BY_NAVIGATION') {
+        await this.jobLogsService.createJobLog(jobId, `삭제 성공: 갤러리 목록 페이지로 이동됨`)
+        return 'SUCCESS_BY_NAVIGATION'
+      } else if (result === 'TIMEOUT') {
+        await this.jobLogsService.createJobLog(jobId, '삭제 처리 타임아웃')
+        return 'TIMEOUT'
+      } else {
+        await this.jobLogsService.createJobLog(jobId, `삭제 처리 완료, 알림 메시지: ${result}`)
+        return result
       }
-
-      await this.jobLogsService.createJobLog(jobId, `삭제 처리 완료, 알림 메시지: ${alertMessage}`)
-      return alertMessage
     } finally {
       page.off('dialog', dialogHandler)
     }
@@ -436,27 +487,34 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
   // 6. 성공 여부 체크
   private async _verifyDeleteSuccess(alertMessage: string, jobId: string): Promise<void> {
-    // alertMessage에서 성공 여부 확인
-    if (alertMessage.includes('게시물이 삭제 되었습니다')) {
-      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 게시물이 삭제되었습니다.')
+    // 페이지 이동을 통한 성공 확인
+    if (alertMessage === 'SUCCESS_BY_NAVIGATION') {
+      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 갤러리 목록 페이지로 이동됨')
       return
     }
 
+    // 타임아웃 케이스
+    if (alertMessage === 'TIMEOUT') {
+      throw DcException.postSubmitFailed({
+        message: '삭제 처리 타임아웃: 30초 내에 응답이 없습니다.',
+      })
+    }
+
     // 비밀번호 오류
-    if (alertMessage.includes('비밀번호가 맞지 않습니다')) {
+    if (alertMessage.includes('비밀번호가 틀립니다')) {
       throw DcException.postParamInvalid({
         message: '삭제 실패: 비밀번호가 맞지 않습니다.',
       })
     }
 
-    // 기타 오류
+    // 기타 오류 (alert가 나타난 경우)
     if (alertMessage) {
       throw DcException.postSubmitFailed({
         message: `삭제 실패: ${alertMessage}`,
       })
     }
 
-    // 알림 메시지가 없는 경우도 성공으로 처리
+    // 알림 메시지가 없는 경우도 성공으로 처리 (alert 없이 페이지 이동으로 성공)
     await this.jobLogsService.createJobLog(jobId, '삭제 성공: 알림 메시지 없이 완료됨')
   }
 
@@ -513,31 +571,25 @@ export class DcinsidePostingService extends DcinsideBaseService {
   }
 
   private async _inputContent(page: Page, contentHtml: string): Promise<void> {
-    // HTML 모드 체크박스 활성화
-    await page.waitForSelector('#chk_html', { timeout: 60_000 })
+    // 모바일 DC인사이드에서는 HTML 체크박스가 없으므로 note-editable 영역에 직접 HTML 삽입
+    await page.waitForSelector('.note-editor .note-editable', { timeout: 60_000 })
 
-    const htmlChecked = await page.locator('#chk_html').isChecked()
-    if (!htmlChecked) {
-      await page.click('#chk_html')
-    }
-
-    // HTML 코드 입력
-    await page.waitForSelector('.note-editor .note-codable', { timeout: 60_000 })
     await page.evaluate(html => {
-      const textarea = document.querySelector('.note-editor .note-codable') as HTMLTextAreaElement
-      if (textarea) {
-        textarea.value = html
-        textarea.dispatchEvent(new Event('input', { bubbles: true }))
-        textarea.dispatchEvent(new Event('change', { bubbles: true }))
+      const editableDiv = document.querySelector('.note-editor .note-editable') as HTMLElement
+      if (editableDiv) {
+        // 기존 내용 제거
+        editableDiv.innerHTML = ''
+
+        // HTML 내용 삽입
+        editableDiv.innerHTML = html
+
+        // 이벤트 발생시켜서 에디터가 내용 변경을 인식하도록 함
+        editableDiv.dispatchEvent(new Event('input', { bubbles: true }))
+        editableDiv.dispatchEvent(new Event('change', { bubbles: true }))
       }
     }, contentHtml)
 
-    // HTML 모드 다시 해제 (일반 에디터로 전환하여 내용 확인)
-    await sleep(500)
-    const htmlChecked2 = await page.locator('#chk_html').isChecked()
-    if (htmlChecked2) {
-      await page.click('#chk_html')
-    }
+    this.logger.log('모바일 HTML 내용 입력 완료')
   }
 
   private async _uploadImages(
@@ -717,7 +769,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       // X 버튼이 없거나 클릭 실패 시 무시하고 계속 진행
     }
 
-    // 실제 입력 대상만 가시화 대기
+    // 모바일/PC 공통 닉네임 입력 필드 대기 및 입력
     await page.waitForSelector('#name', { state: 'visible', timeout: 60_000 })
     await page.evaluate(_nickname => {
       const nicknameInput = document.querySelector('#name') as HTMLInputElement | HTMLTextAreaElement | null
@@ -833,7 +885,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
         })
 
         // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-        await page.click('button.btn_svc.write')
+        await page.click('.wrt-tit-box button')
 
         // 커스텀 팝업 대기 프로미스
         const customPopupPromise = this.waitForCustomPopup(page)
@@ -844,7 +896,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           timeoutPromise,
           customPopupPromise,
           page
-            .waitForURL(/\/lists/, { timeout: 60_000 })
+            .waitForURL(/\/board\/[^\/]+$/, { timeout: 60_000 })
             .then(() => null)
             .catch(() => null),
         ])
@@ -898,19 +950,25 @@ export class DcinsidePostingService extends DcinsideBaseService {
   }
 
   private async _extractPostUrl(page: Page, title: string): Promise<string> {
-    // 목록 테이블에서 제목이 일치하는 첫 번째 글의 a href 추출
-    await page.waitForSelector('table.gall_list', { timeout: 60_000 })
+    // 모바일 버전에서 .gall-detail-lst에서 제목이 일치하는 첫 번째 글의 a href 추출
+    await page.waitForSelector('.gall-detail-lst', { timeout: 60_000 })
     let postUrl = await page.evaluate(title => {
-      const rows = Array.from(document.querySelectorAll('table.gall_list tbody tr.ub-content'))
-      for (const row of rows) {
-        const titTd = row.querySelector('td.gall_tit.ub-word')
-        if (!titTd) continue
-        const a = titTd.querySelector('a')
-        if (!a) continue
-        // 제목 텍스트 추출 (em, b 등 태그 포함 가능)
-        const text = a.textContent?.replace(/\s+/g, ' ').trim()
+      // 모바일 버전 선택자 사용 - 광고 요소 제외하고 실제 게시글만 처리
+      const mobileRows = Array.from(document.querySelectorAll('.gall-detail-lst li'))
+      for (const row of mobileRows) {
+        // 광고 요소는 제외 (.adv-inner 클래스가 있는 li는 광고)
+        if (row.classList.contains('adv-inner')) continue
+
+        const gallDetailLink = row.querySelector('.gall-detail-lnktb')
+        if (!gallDetailLink) continue
+
+        const subjectLink = gallDetailLink.querySelector('a.lt .subject-add .subjectin')
+        if (!subjectLink) continue
+
+        const text = subjectLink.textContent?.replace(/\s+/g, ' ').trim()
         if (text === title) {
-          return a.getAttribute('href')
+          const parentLink = gallDetailLink.querySelector('a.lt')
+          return parentLink?.getAttribute('href')
         }
       }
       return null
@@ -937,20 +995,8 @@ export class DcinsidePostingService extends DcinsideBaseService {
     try {
       // URL 변경 또는 특정 요소 나타날 때까지 대기
       await Promise.race([
-        // 1. URL이 목록 페이지로 변경되길 대기
-        page.waitForFunction(
-          expectedUrl => {
-            return window.location.href.includes('/lists') || window.location.href.includes(expectedUrl)
-          },
-          this._buildGalleryUrl(galleryInfo),
-          { timeout: 60_000 },
-        ),
-
-        // 2. 게시글 목록 테이블이 나타날 때까지 대기
-        page.waitForSelector('table.gall_list', { timeout: 60_000 }),
-
-        // 3. 네비게이션 이벤트 대기
-        page.waitForURL(/\/lists/, { timeout: 60_000 }),
+        // 1. 게시글 목록 테이블이 나타날 때까지 대기
+        page.waitForSelector('.gall-detail-lnktb', { timeout: 60_000 }),
       ])
 
       this.logger.log('게시글 목록 페이지로 이동 완료')
@@ -984,7 +1030,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
         }
         // 글쓰기 버튼 클릭 (goWrite)
         try {
-          await page.waitForSelector('a.btn_write.txt', { timeout: 60_000 })
+          await page.waitForSelector('a.btn-write.lnk', { timeout: 60_000 })
         } catch (error: any) {
           if (error.name === 'TimeoutError' || (error.message && error.message.includes('Timeout'))) {
             const msg = '글쓰기 버튼을 60초 내에 찾지 못했습니다. (타임아웃)'
@@ -993,7 +1039,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
           }
           throw error
         }
-        await page.click('a.btn_write.txt')
+        await page.click('a.btn-write.lnk')
         await sleep(4000)
         // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
@@ -1057,40 +1103,18 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }
   }
 
-  private _extractGalleryInfo(galleryUrl: string): GalleryInfo {
-    // URL에서 id 파라미터 추출
-    assertValidGalleryUrl(galleryUrl)
-    const urlMatch = galleryUrl.match(/[?&]id=([^&]+)/)!
-    const id = urlMatch[1]
-
-    // 갤러리 타입 판별
-    let type: GalleryType
-    if (galleryUrl.includes('/mgallery/')) {
-      type = 'mgallery'
-    } else if (galleryUrl.includes('/mini/')) {
-      type = 'mini'
-    } else if (galleryUrl.includes('/person/')) {
-      type = 'person'
-    } else {
-      type = 'board' // 일반갤러리
-    }
-
-    this.logger.log(`갤러리 정보 추출: ID=${id}, Type=${type}`)
-    return { id, type }
-  }
-
   private _buildGalleryUrl(galleryInfo: GalleryInfo): string {
     const { id, type } = galleryInfo
 
     switch (type) {
       case 'board':
-        return `https://gall.dcinside.com/board/lists/?id=${id}`
+        return `https://m.dcinside.com/board/${id}`
       case 'mgallery':
-        return `https://gall.dcinside.com/mgallery/board/lists/?id=${id}`
+        return `https://m.dcinside.com/mgallery/board/lists/?id=${id}`
       case 'mini':
-        return `https://gall.dcinside.com/mini/board/lists/?id=${id}`
+        return `https://m.dcinside.com/mini/board/lists/?id=${id}`
       case 'person':
-        return `https://gall.dcinside.com/person/board/lists/?id=${id}`
+        return `https://m.dcinside.com/person/board/lists/?id=${id}`
       default:
         throw DcException.galleryTypeUnsupported({ type })
     }

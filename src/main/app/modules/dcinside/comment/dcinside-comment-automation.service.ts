@@ -19,6 +19,7 @@ import {
 } from '@main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
+import UserAgent from 'user-agents'
 
 @Injectable()
 export class DcinsideCommentAutomationService extends DcinsideBaseService {
@@ -51,7 +52,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 개별 게시물에 댓글 작성 (순차적 함수 호출로 가독성 향상)
+   * 개별 게시물에 댓글 작성 (API 방식)
    */
   async commentOnPost(
     postUrl: string,
@@ -62,6 +63,8 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     loginPassword: string | null,
     jobId: string,
   ): Promise<void> {
+    await this.jobLogsService.createJobLog(jobId, '브라우저 자동화 방식으로 댓글 작성 시작')
+
     const settings = await this.settingsService.getSettings()
 
     // 1. 페이지 켜기 (브라우저 생성)
@@ -84,17 +87,15 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       await this.checkAbnormalPage(page)
 
       await this._validateCommentForm(page)
-      const postNo = await this._extractPostNo(postUrl)
-
       // 비회원일 때만 닉네임과 비밀번호 입력
       if (!isMember) {
-        await this._inputNickname(page, postNo, nickname)
-        await this._inputPassword(page, postNo, password)
+        await this._inputNickname(page, nickname)
+        await this._inputPassword(page, password)
       }
 
-      await this._inputComment(page, postNo, comment)
+      await this._inputComment(page, comment)
 
-      await this._submitCommentWithRetry(page, postNo, postUrl)
+      await this._submitCommentWithRetry(page, postUrl)
     } finally {
       // 브라우저 종료 (신규 생성 모드일 때만)
       if (!settings.reuseWindowBetweenTasks) {
@@ -104,26 +105,23 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 디시인사이드 게시물 검색
+   * 디시인사이드 게시물 검색 (모바일 기준)
    */
   async searchPosts(searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     try {
       const { keyword, sortType = SortType.NEW, maxCount } = searchDto
 
-      // URL 구성 (첫 페이지)
-      let searchUrl: string
-      if (sortType === SortType.NEW) {
-        searchUrl = `https://search.dcinside.com/post/q/${encodeURIComponent(keyword)}`
-      } else {
-        searchUrl = `https://search.dcinside.com/post/sort/accuracy/q/${encodeURIComponent(keyword)}`
-      }
+      // 모바일 검색 URL 구성 - 정확한 옵션 타입 사용
+      const optionType = sortType === SortType.NEW ? 'recency_plus' : 'rankup'
+      const searchUrl = `https://m.dcinside.com/search/gall_content?keyword=${encodeURIComponent(keyword)}&option_type=${optionType}`
 
-      this.logger.log(`Searching posts: ${searchUrl}`)
+      this.logger.log(`Searching posts (mobile): ${searchUrl}`)
+
+      const userAgent = new UserAgent({ deviceCategory: 'mobile' }).toString()
 
       const response = await axios.get(searchUrl, {
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'User-Agent': userAgent,
         },
         timeout: 10000,
       })
@@ -131,37 +129,38 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       const $ = cheerio.load(response.data)
       const posts: DcinsidePostItemDto[] = []
 
-      // 게시물 목록 파싱
-      $('.sch_result_list li').each((index, element) => {
+      // 모바일 게시물 목록 파싱 (.sch-lst li)
+      $('.sch-lst li').each((index, element) => {
         const $item = $(element)
-        const $link = $item.find('a.tit_txt')
-        const $sub = $item.find('.sub_txt')
-        const $date = $item.find('.date_time')
-        const $summary = $item.find('.link_dsc_txt').first() // 첫 번째 link_dsc_txt 요소
+        const $link = $item.find('a')
+        const $title = $item.find('.sch-lnk .tit')
+        const $summary = $item.find('.sch-lnk .txt')
+        const $galleryName = $item.find('.sch-lnk-sub .gallname-lnk')
+        const $date = $item.find('.sch-lnk-sub .date')
 
-        if ($link.length > 0) {
-          const title = $link.text().trim()
+        if ($link.length > 0 && $title.length > 0) {
+          const title = $title.text().trim()
           const url = $link.attr('href')
-          const board = $sub.text().trim()
-          const date = $date.text().trim()
           const summary = $summary.text().trim()
+          const galleryName = $galleryName.text().trim()
+          const date = $date.text().trim()
 
           if (url && title) {
             posts.push({
               id: `${Date.now()}_${index}`,
               title,
-              url: url.startsWith('http') ? url : `https://gall.dcinside.com${url}`,
-              board,
+              url: url.startsWith('http') ? url : `https://m.dcinside.com${url}`,
+              board: galleryName,
               date,
               summary: summary || undefined,
-              galleryName: board,
+              galleryName,
             })
           }
         }
       })
 
-      // 다음 페이지 존재 여부 확인 (10페이지부터 다음페이지 체크)
-      const hasNextPage = $('.bottom_paging_box a.sp_pagingicon.page_next').length > 0
+      // 다음 페이지 존재 여부 확인
+      const hasNextPage = $('.paging .next').length > 0
 
       // maxCount가 지정된 경우, 목표 개수까지 다음 페이지를 순회하며 누적 수집
       if (typeof maxCount === 'number' && maxCount > 0) {
@@ -172,59 +171,50 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           currentPage += 1
 
           // 다음 페이지 URL 구성
-          let nextUrl: string
-          if (sortType === SortType.NEW) {
-            nextUrl = `https://search.dcinside.com/post/q/${encodeURIComponent(keyword)}`
-          } else {
-            nextUrl = `https://search.dcinside.com/post/sort/accuracy/q/${encodeURIComponent(keyword)}`
-          }
-          nextUrl += `/p/${currentPage}`
-          if (sortType === SortType.ACCURACY) {
-            nextUrl += '/sort/accuracy'
-          }
+          const nextUrl = `${searchUrl}&page=${currentPage}`
 
           this.logger.log(`Searching posts (pagination): ${nextUrl}`)
 
           const nextResp = await axios.get(nextUrl, {
             headers: {
-              'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'User-Agent': userAgent,
             },
             timeout: 10000,
           })
 
           const _$ = cheerio.load(nextResp.data)
 
-          _$('.sch_result_list li').each((index, element) => {
+          _$('.sch-lst li').each((index, element) => {
             if (posts.length >= maxCount) return
             const $item = _$(element)
-            const $link = $item.find('a.tit_txt')
-            const $sub = $item.find('.sub_txt')
-            const $date = $item.find('.date_time')
-            const $summary = $item.find('.link_dsc_txt').first()
+            const $link = $item.find('a')
+            const $title = $item.find('.sch-lnk .tit')
+            const $summary = $item.find('.sch-lnk .txt')
+            const $galleryName = $item.find('.sch-lnk-sub .gallname-lnk')
+            const $date = $item.find('.sch-lnk-sub .date')
 
-            if ($link.length > 0) {
-              const title = $link.text().trim()
+            if ($link.length > 0 && $title.length > 0) {
+              const title = $title.text().trim()
               const url = $link.attr('href')
-              const board = $sub.text().trim()
-              const date = $date.text().trim()
               const summary = $summary.text().trim()
+              const galleryName = $galleryName.text().trim()
+              const date = $date.text().trim()
 
               if (url && title) {
                 posts.push({
                   id: `${Date.now()}_${currentPage}_${index}`,
                   title,
-                  url: url.startsWith('http') ? url : `https://gall.dcinside.com${url}`,
-                  board,
+                  url: url.startsWith('http') ? url : `https://m.dcinside.com${url}`,
+                  board: galleryName,
                   date,
                   summary: summary || undefined,
-                  galleryName: board,
+                  galleryName,
                 })
               }
             }
           })
 
-          canContinue = _$('.bottom_paging_box a.sp_pagingicon.page_next').length > 0
+          canContinue = _$('.paging .next').length > 0
         }
       }
 
@@ -329,10 +319,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   }
 
   /**
-   * 댓글 작성 폼 검증
+   * 댓글 작성 폼 검증 및 스크롤 이동 (모바일 전용)
    */
   private async _validateCommentForm(page: Page): Promise<void> {
-    const commentForm = page.locator('.cmt_write_box')
+    const commentForm = page.locator('.comment-write')
     if ((await commentForm.count()) === 0) {
       // 댓글 쓰기가 불가능한 게시판인지 확인
       const commentDisabledMessage = page.locator('.comment_disabled, .cmt_disabled, .no_comment')
@@ -354,98 +344,66 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         message: '댓글 작성 폼을 찾을 수 없습니다',
       })
     }
-  }
 
-  /**
-   * 게시물 번호 추출
-   */
-  private async _extractPostNo(postUrl: string): Promise<string> {
-    const match = postUrl.match(/no=(\d+)/)
-    const postNo = match ? match[1] : ''
-
-    if (!postNo) {
-      throw DcException.postNotFoundOrDeleted({
-        message: '게시물 번호를 찾을 수 없습니다',
-        postUrl,
-      })
-    }
-    return postNo
+    // 댓글 폼이 존재하면 해당 위치로 스크롤 이동
+    await commentForm.scrollIntoViewIfNeeded()
   }
 
   /**
    * 1. 닉네임 입력
    */
-  private async _inputNickname(page: Page, postNo: string, nickname: string | null): Promise<void> {
-    // 닉네임이 필요한 갤러리인지 확인
-    const nicknameRequired = await page.locator('.nickname_required, .need_nickname').count()
-    if (nicknameRequired > 0 && (!nickname || nickname.trim() === '')) {
-      throw DcException.nicknameRequiredGallery({
-        message: '이 갤러리는 닉네임이 필수입니다',
-        postNo,
-      })
-    }
-
+  private async _inputNickname(page: Page, nickname: string | null): Promise<void> {
     if (!nickname || nickname.trim() === '') {
       return
     }
 
-    try {
-      // 갤닉네임이 있는지 확인
-      const gallNickname = await page.$(`#gall_nick_name_${postNo}`)
-      if (gallNickname) {
-        const gallNickValue = await gallNickname.inputValue()
-        this.logger.log(`Gall nickname found: "${gallNickValue}"`)
+    // 갤닉네임이 있는지 확인 (모바일 전용)
+    const gallNickname = await page.$(`#comment_nick`)
+    if (gallNickname) {
+      const gallNickValue = await gallNickname.inputValue()
+      this.logger.log(`Gall nickname found: "${gallNickValue}"`)
 
-        // readonly 속성을 여러 방법으로 확인
-        const hasReadonlyAttr = await gallNickname.evaluate(el => el.hasAttribute('readonly'))
+      // readonly 속성을 여러 방법으로 확인
+      const hasReadonlyAttr = await gallNickname.evaluate(el => el.hasAttribute('disabled'))
 
-        // 갤닉네임이 있고 readonly인 경우 X 버튼 클릭
-        if (gallNickValue && hasReadonlyAttr) {
-          this.logger.log('Gall nickname is readonly, clicking X button')
-          const deleteButton = await page.$(`#btn_gall_nick_name_x_${postNo}`)
-          if (deleteButton) {
-            await deleteButton.click()
-            await sleep(500)
-            this.logger.log('X button clicked successfully')
-          } else {
-            this.logger.warn('X button not found')
-          }
+      // 갤닉네임이 있고 readonly인 경우 X 버튼 클릭 (모바일 전용)
+      if (gallNickValue && hasReadonlyAttr) {
+        this.logger.log('Gall nickname is readonly, clicking X button')
+        const deleteButton = await page.$(`#delete_nickname_btn`)
+        if (deleteButton) {
+          await deleteButton.click()
+          await sleep(500)
+          this.logger.log('X button clicked successfully')
         } else {
-          this.logger.log('Gall nickname is not readonly, skipping X button click')
+          this.logger.warn('X button not found')
         }
-      }
-
-      // 사용자 닉네임 입력 (X 버튼 클릭 후 잠시 대기)
-      await sleep(300)
-
-      const userNicknameInput = page.locator(`#name_${postNo}`)
-      if ((await userNicknameInput.count()) > 0) {
-        await userNicknameInput.fill(nickname)
-        this.logger.log(`User nickname filled: ${nickname}`)
       } else {
-        // 사용자 닉네임 필드가 없으면 갤닉네임 필드에 직접 입력 시도
-        const gallNicknameInput = page.locator(`#gall_nick_name_${postNo}`)
-        if ((await gallNicknameInput.count()) > 0) {
-          await gallNicknameInput.fill(nickname)
-          this.logger.log(`Gall nickname filled: ${nickname}`)
-        } else {
-          this.logger.warn('No nickname input field found')
-        }
+        this.logger.log('Gall nickname is not readonly, skipping X button click')
       }
-    } catch (error) {
-      this.logger.warn(`Nickname input handling failed: ${error.message}`)
-      // 닉네임 입력 실패는 치명적이지 않으므로 계속 진행
+    }
+
+    // 모바일 댓글 폼에서만 닉네임 입력
+    const mobileNicknameInput = page.locator(`#comment_nick`)
+    if ((await mobileNicknameInput.count()) > 0) {
+      await mobileNicknameInput.fill(nickname)
+      this.logger.log(`Mobile comment nickname filled: ${nickname}`)
+    } else {
+      this.logger.warn('Mobile comment nickname input field not found')
     }
   }
 
   /**
    * 2. 비밀번호 입력
    */
-  private async _inputPassword(page: Page, postNo: string, password: string | null): Promise<void> {
+  private async _inputPassword(page: Page, password: string | null): Promise<void> {
     if (password && password.trim() !== '') {
-      const passwordInput = page.locator('#password_' + postNo)
-      if ((await passwordInput.count()) > 0) {
-        await passwordInput.fill(password)
+      // 모바일 댓글 폼에서만 비밀번호 입력
+      const mobilePasswordInput = page.locator(`#comment_pw`)
+      if ((await mobilePasswordInput.count()) > 0) {
+        await mobilePasswordInput.fill(password)
+        this.logger.log(`Mobile comment password filled`)
+      } else {
+        this.logger.warn(`Mobile comment password input field not found`)
       }
     }
   }
@@ -453,22 +411,16 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 3. 댓글 내용 입력
    */
-  private async _inputComment(page: Page, postNo: string, comment: string): Promise<void> {
-    // 댓글 내용 검증
-    if (!comment || comment.trim() === '') {
-      throw DcException.commentDisabledPage({
-        message: '내용을 입력하세요.',
-      })
-    }
-
-    // 댓글 내용 입력
-    const commentTextarea = page.locator('#memo_' + postNo)
-    if ((await commentTextarea.count()) > 0) {
-      await commentTextarea.fill(comment)
+  private async _inputComment(page: Page, comment: string): Promise<void> {
+    // 모바일 댓글 폼에서만 댓글 내용 입력
+    const mobileCommentTextarea = page.locator(`#comment_memo`)
+    if ((await mobileCommentTextarea.count()) > 0) {
+      await mobileCommentTextarea.click()
+      await mobileCommentTextarea.fill(comment)
+      this.logger.log(`Mobile comment filled`)
     } else {
       throw DcException.commentDisabledPage({
-        message: '댓글 입력 필드를 찾을 수 없습니다',
-        postNo,
+        message: '모바일 댓글 입력 필드를 찾을 수 없습니다',
       })
     }
   }
@@ -476,7 +428,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 댓글 등록 (재시도 포함)
    */
-  private async _submitCommentWithRetry(page: Page, postNo: string, postUrl: string): Promise<void> {
+  private async _submitCommentWithRetry(page: Page, postUrl: string): Promise<void> {
     await retry(
       async () => {
         // 캡차 확인
@@ -487,38 +439,87 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
           })
         }
 
-        // 댓글 등록 버튼 클릭
-        const submitButton = page.locator(`button[data-no="${postNo}"].repley_add`)
-        if ((await submitButton.count()) > 0) {
-          // 댓글 등록 전에 dialog 이벤트 리스너 등록
-          let alertMessage = ''
-          const dialogHandler = async (dialog: any) => {
-            alertMessage = dialog.message()
-            this.logger.log(`Alert detected: ${alertMessage}`)
-            await dialog.accept()
-          }
-          page.on('dialog', dialogHandler)
+        // 제출 전 댓글 개수 확인
+        const commentCountBefore = await this._getCommentCount(page)
+        this.logger.log(`제출 전 댓글 개수: ${commentCountBefore}`)
 
-          try {
-            await submitButton.click()
-            // 댓글 등록 후 성공/실패 메시지 확인
-            await this._checkCommentSubmissionResult(alertMessage)
-            this.logger.log(`Comment posted successfully on: ${postUrl}`)
-          } finally {
-            // 이벤트 리스너 정리
-            page.removeAllListeners('dialog')
+        // 댓글 등록 전에 dialog 이벤트 리스너 등록
+        let alertMessage = ''
+        const dialogHandler = async (dialog: any) => {
+          alertMessage = dialog.message()
+          this.logger.log(`Alert detected: ${alertMessage}`)
+          await dialog.accept()
+        }
+        page.on('dialog', dialogHandler)
+
+        try {
+          const submitButton = await page.$(`.btn-comment-write`)
+          if (!submitButton) {
+            throw DcException.commentDisabledPage({
+              message: '댓글 작성 버튼을 찾을 수 없습니다.',
+            })
           }
-        } else {
-          throw DcException.commentDisabledPage({
-            message: '댓글 등록 버튼을 찾을 수 없습니다',
-            postNo,
-          })
+
+          await submitButton.click()
+          this.logger.log('댓글 작성 버튼 클릭 완료')
+
+          // 충분한 대기 시간 (5초)
+          await sleep(3000)
+
+          // 댓글 등록 후 성공/실패 메시지 확인
+          await this._checkCommentSubmissionResult(alertMessage)
+
+          // 실제 댓글이 추가되었는지 확인
+          await this._verifyCommentPosted(page, commentCountBefore)
+
+          this.logger.log(`Comment posted successfully on: ${postUrl}`)
+        } finally {
+          // 이벤트 리스너 정리
+          page.removeAllListeners('dialog')
         }
       },
-      2000, // 2초 간격
+      3000, // 3초 간격
       3, // 최대 3회 재시도
       'linear', // 선형 백오프
     )
+  }
+
+  /**
+   * 현재 댓글 개수 가져오기
+   */
+  private async _getCommentCount(page: Page): Promise<number> {
+    try {
+      // 모바일 댓글 목록에서 개수 확인
+      const comments = await page.$$('.all-comment-lst li')
+      return comments.length
+    } catch {
+      return 0
+    }
+  }
+
+  /**
+   * 댓글이 실제로 작성되었는지 확인
+   */
+  private async _verifyCommentPosted(page: Page, previousCount: number): Promise<void> {
+    try {
+      // 페이지 새로고침하여 최신 댓글 목록 가져오기
+      await page.reload({ waitUntil: 'networkidle' })
+      await sleep(2000)
+
+      const currentCount = await this._getCommentCount(page)
+      this.logger.log(`제출 후 댓글 개수: ${currentCount} (이전: ${previousCount})`)
+
+      if (currentCount <= previousCount) {
+        throw DcException.commentDisabledPage({
+          message: '댓글이 정상적으로 작성되지 않았습니다. 댓글 개수가 증가하지 않았습니다.',
+        })
+      }
+
+      this.logger.log('댓글 작성 확인 완료')
+    } catch (error) {
+      this.logger.warn(`댓글 작성 확인 중 오류: ${error.message}`)
+      // 확인 실패 시에도 계속 진행 (alert가 없었다면 성공으로 간주)
+    }
   }
 
   /**
@@ -526,17 +527,25 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    */
   private async _handleCaptcha(page: Page): Promise<{ success: boolean; error?: string }> {
     try {
-      // 댓글용 캡차 감지 (id가 kcaptcha_로 시작하는 요소 확인)
-      const captchaElement = page.locator('.cmt_write_box [id^="kcaptcha_"]')
+      // 모바일 댓글용 캡차 감지
+      const captchaElement = page.locator('#captcha_codeC')
       const captchaCount = await captchaElement.count()
 
       if (captchaCount > 0) {
-        this.logger.log('댓글용 문자 캡차 감지됨, 해결 시작')
+        this.logger.log('모바일 댓글용 캡차 감지됨, 해결 시작')
 
-        // 부모 클래스의 solveDcCaptcha 메서드 사용
-        await this.solveDcCaptcha(page, '.cmt_write_box [id^="kcaptcha_"]', '.cmt_write_box [id^="code_"]')
+        // 캡챠 새로고침 버튼 클릭 (댓글용)
+        const refreshButton = page.locator('.comment-write .code .sp-reload')
+        if ((await refreshButton.count()) > 0) {
+          this.logger.log('댓글용 캡챠 새로고침 버튼 클릭')
+          await refreshButton.click()
+          await sleep(1000) // 새로고침 후 잠시 대기
+        }
+
+        // 모바일 댓글용 캡차 해결
+        await this.solveDcCaptcha(page, '.comment-write .code img', '#captcha_codeC')
       } else {
-        this.logger.log('댓글용 캡차가 감지되지 않음')
+        this.logger.log('모바일 댓글용 캡차가 감지되지 않음')
       }
 
       return { success: true }
@@ -550,9 +559,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 댓글 등록 결과 확인
    */
   private async _checkCommentSubmissionResult(alertMessage: string): Promise<void> {
-    // 잠시 대기하여 alert 메시지 확인
-    await sleep(2000)
-
     // 댓글 내용 없음 체크
     if (alertMessage.includes('내용을 입력하세요')) {
       throw DcException.commentDisabledPage({
