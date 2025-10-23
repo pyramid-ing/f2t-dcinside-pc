@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Header, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common'
+import { Response } from 'express'
 import { PostJobService } from './post-job.service'
 import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 
@@ -50,5 +51,15 @@ export class PostJobController {
   @Post('update-view-counts')
   async updateViewCounts(@Body() data: { jobIds: string[] }) {
     return await this.postJobService.updateViewCounts(data.jobIds)
+  }
+
+  @Post('export-excel')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  async exportJobsToExcel(@Body() data: { jobIds: string[] }, @Res() res: Response) {
+    const excelBuffer = await this.postJobService.exportJobsToExcel(data.jobIds)
+
+    const fileName = `포스팅목록_${new Date().toISOString().slice(0, 10)}.xlsx`
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+    res.send(excelBuffer)
   }
 }

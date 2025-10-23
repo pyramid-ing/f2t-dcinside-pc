@@ -160,3 +160,17 @@ export async function updateViewCounts(
   const response = await api.post('/api/post-jobs/update-view-counts', { jobIds })
   return response.data
 }
+
+/**
+ * 선택된 작업들을 엑셀로 다운로드합니다.
+ */
+export async function exportJobsToExcel(jobIds: string[]): Promise<Blob> {
+  const response = await api.post(
+    '/api/post-jobs/export-excel',
+    { jobIds },
+    {
+      responseType: 'blob',
+    },
+  )
+  return response.data
+}

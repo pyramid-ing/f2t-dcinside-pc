@@ -34,6 +34,7 @@ import {
   updateJobAutoDeleteMinutes,
   updateJobScheduledAt,
   updateViewCounts,
+  exportJobsToExcel,
 } from '@render/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
@@ -300,6 +301,9 @@ const PostingJobTable: React.FC = () => {
 
   // 툴바: 조회수 가져오기
   const [viewCountUpdateLoading, setViewCountUpdateLoading] = useState(false)
+
+  // 툴바: 엑셀 다운로드
+  const [excelDownloadLoading, setExcelDownloadLoading] = useState(false)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -848,6 +852,53 @@ const PostingJobTable: React.FC = () => {
     setViewCountUpdateLoading(false)
   }
 
+  // 툴바: 선택된 작업을 엑셀로 다운로드
+  const handleExcelDownload = async () => {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('다운로드할 작업을 선택해주세요.')
+      return
+    }
+
+    setExcelDownloadLoading(true)
+    try {
+      // 선택된 작업 ID 목록 생성
+      let jobIds: string[] = []
+      if (selection.mode === SelectionMode.PAGE) {
+        jobIds = Array.from(selection.includeIds)
+      } else {
+        // ALL 모드일 경우, 제외된 것을 제외한 전체 목록
+        jobIds = data.filter(job => !selection.excludedIds.has(job.id)).map(job => job.id)
+      }
+
+      // 포스팅 작업만 필터링
+      const postJobIds = data.filter(job => jobIds.includes(job.id) && job.type === JOB_TYPE.POST).map(job => job.id)
+
+      if (postJobIds.length === 0) {
+        message.warning('다운로드할 수 있는 포스팅 작업이 없습니다.')
+        setExcelDownloadLoading(false)
+        return
+      }
+
+      const blob = await exportJobsToExcel(postJobIds)
+
+      // Blob을 다운로드
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `포스팅목록_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      message.success(`${postJobIds.length}개 작업을 엑셀로 다운로드했습니다.`)
+    } catch (error: any) {
+      message.error(error?.message || '엑셀 다운로드 실패')
+    }
+    setExcelDownloadLoading(false)
+  }
+
   return (
     <div>
       {/* 필터 영역 (상태/타입/검색 등) */}
@@ -1089,6 +1140,23 @@ const PostingJobTable: React.FC = () => {
                   ).length
                 }
                 개)
+              </span>
+            )}
+          </Button>
+          <Button
+            type="primary"
+            loading={excelDownloadLoading}
+            onClick={handleExcelDownload}
+            style={{ backgroundColor: '#1890ff', borderColor: '#1890ff' }}
+          >
+            엑셀 다운로드
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                ({data.filter(job => selection.includeIds.has(job.id) && job.type === JOB_TYPE.POST).length}개)
               </span>
             )}
           </Button>

@@ -12,6 +12,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcExceptionMapper } from '@main/app/modules/dcinside/utils/dc-exception-mapper.util'
 import { DcException } from '@main/common/errors/dc.exception'
+import * as XLSX from 'xlsx'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -347,5 +348,90 @@ export class PostJobService implements JobProcessor {
       failed,
       results,
     }
+  }
+
+  /**
+   * 작업 목록을 엑셀로 내보냅니다.
+   */
+  async exportJobsToExcel(jobIds: string[]): Promise<Buffer> {
+    try {
+      // 작업 정보 가져오기
+      const jobs = await this.prismaService.job.findMany({
+        where: {
+          id: { in: jobIds },
+          type: JobType.POST,
+        },
+        include: {
+          postJob: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      })
+
+      // 엑셀 데이터 생성
+      const excelData = jobs.map((job, index) => ({
+        번호: index + 1,
+        제목: job.postJob?.title || '',
+        갤러리URL: job.postJob?.galleryUrl || '',
+        '포스팅 링크': job.postJob?.resultUrl || '',
+        조회수: (job.postJob as any)?.viewCount || 0,
+        '조회수 업데이트': (job.postJob as any)?.viewCountUpdatedAt
+          ? new Date((job.postJob as any).viewCountUpdatedAt).toLocaleString('ko-KR')
+          : '',
+        상태: this.getStatusLabel(job.status),
+        등록일시: new Date(job.createdAt).toLocaleString('ko-KR'),
+        '자동삭제(분)': job.postJob?.autoDeleteMinutes || '',
+        닉네임: job.postJob?.nickname || '',
+        말머리: job.postJob?.headtext || '',
+      }))
+
+      // 워크북 생성
+      const workbook = XLSX.utils.book_new()
+      const worksheet = XLSX.utils.json_to_sheet(excelData)
+
+      // 컬럼 너비 설정
+      const columnWidths = [
+        { wch: 8 }, // 번호
+        { wch: 40 }, // 제목
+        { wch: 50 }, // 갤러리URL
+        { wch: 50 }, // 포스팅 링크
+        { wch: 10 }, // 조회수
+        { wch: 20 }, // 조회수 업데이트
+        { wch: 10 }, // 상태
+        { wch: 20 }, // 등록일시
+        { wch: 15 }, // 자동삭제(분)
+        { wch: 15 }, // 닉네임
+        { wch: 15 }, // 말머리
+      ]
+      worksheet['!cols'] = columnWidths
+
+      // 워크시트 추가
+      XLSX.utils.book_append_sheet(workbook, worksheet, '포스팅 목록')
+
+      // 엑셀 버퍼 생성
+      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+      return excelBuffer as Buffer
+    } catch (error) {
+      this.logger.error(`엑셀 내보내기 실패: ${error.message}`)
+      throw new Error(`엑셀 내보내기 실패: ${error.message}`)
+    }
+  }
+
+  /**
+   * 작업 상태 레이블 반환
+   */
+  private getStatusLabel(status: string): string {
+    const statusMap: Record<string, string> = {
+      [JobStatus.PENDING]: '대기중',
+      [JobStatus.REQUEST]: '요청됨',
+      [JobStatus.PROCESSING]: '처리중',
+      [JobStatus.COMPLETED]: '완료',
+      [JobStatus.FAILED]: '실패',
+      [JobStatus.DELETE_COMPLETED]: '삭제완료',
+      [JobStatus.DELETE_FAILED]: '삭제실패',
+    }
+    return statusMap[status] || status
   }
 }
