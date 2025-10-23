@@ -33,6 +33,7 @@ import {
   retryJobs,
   updateJobAutoDeleteMinutes,
   updateJobScheduledAt,
+  updateViewCounts,
 } from '@render/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
@@ -296,6 +297,9 @@ const PostingJobTable: React.FC = () => {
 
   // 툴바: 자동삭제 제거
   const [autoDeleteRemoveLoading, setAutoDeleteRemoveLoading] = useState(false)
+
+  // 툴바: 조회수 가져오기
+  const [viewCountUpdateLoading, setViewCountUpdateLoading] = useState(false)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -797,6 +801,53 @@ const PostingJobTable: React.FC = () => {
     }
   }
 
+  // 툴바: 선택된 작업의 조회수 가져오기
+  const handleUpdateViewCounts = async () => {
+    const selectedCount = getSelectedCount()
+    if (selectedCount === 0) {
+      message.warning('조회수를 가져올 작업을 선택해주세요.')
+      return
+    }
+
+    setViewCountUpdateLoading(true)
+    try {
+      // 선택된 작업 ID 목록 생성
+      let jobIds: string[] = []
+      if (selection.mode === SelectionMode.PAGE) {
+        jobIds = Array.from(selection.includeIds)
+      } else {
+        // ALL 모드일 경우, 제외된 것을 제외한 전체 목록
+        jobIds = data.filter(job => !selection.excludedIds.has(job.id)).map(job => job.id)
+      }
+
+      // 완료된 작업만 필터링 (resultUrl이 있는 작업만)
+      const validJobs = data.filter(job => jobIds.includes(job.id) && job.postJob?.resultUrl)
+      const validJobIds = validJobs.map(job => job.id)
+
+      if (validJobIds.length === 0) {
+        message.warning('조회수를 가져올 수 있는 작업이 없습니다. (완료된 작업만 가능)')
+        setViewCountUpdateLoading(false)
+        return
+      }
+
+      const response = await updateViewCounts(validJobIds)
+      if (response.success) {
+        message.success(`조회수 업데이트 완료: 성공 ${response.updated}개, 실패 ${response.failed}개`)
+        fetchJobs()
+      }
+
+      // 선택 상태 초기화
+      setSelection({
+        mode: SelectionMode.PAGE,
+        includeIds: new Set(),
+        excludedIds: new Set(),
+      })
+    } catch (error: any) {
+      message.error(error?.message || '조회수 업데이트 실패')
+    }
+    setViewCountUpdateLoading(false)
+  }
+
   return (
     <div>
       {/* 필터 영역 (상태/타입/검색 등) */}
@@ -1013,6 +1064,34 @@ const PostingJobTable: React.FC = () => {
               </span>
             )}
           </Button>
+          <Divider type="vertical" />
+          <Button
+            type="primary"
+            loading={viewCountUpdateLoading}
+            onClick={handleUpdateViewCounts}
+            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+          >
+            조회수 가져오기
+            {selection.mode === SelectionMode.ALL ? (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                {selection.excludedIds.size > 0 ? `(${getSelectedCount()}개)` : '(전체)'}
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                (
+                {
+                  data.filter(
+                    job =>
+                      selection.includeIds.has(job.id) &&
+                      job.type === JOB_TYPE.POST &&
+                      job.status === JOB_STATUS.COMPLETED &&
+                      (job as PostJob).postJob?.resultUrl,
+                  ).length
+                }
+                개)
+              </span>
+            )}
+          </Button>
         </div>
       )}
 
@@ -1213,6 +1292,28 @@ const PostingJobTable: React.FC = () => {
               ) : (
                 '-'
               )
+            },
+          },
+          {
+            title: '조회수',
+            dataIndex: ['postJob', 'viewCount'],
+            width: 100,
+            sorter: true,
+            align: 'center',
+            render: (viewCount: number | undefined, row: PostJob) => {
+              if (viewCount !== undefined && viewCount !== null) {
+                return (
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{viewCount.toLocaleString()}</div>
+                    {row.postJob?.viewCountUpdatedAt && (
+                      <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                        {dayjs(row.postJob.viewCountUpdatedAt).format('MM/DD HH:mm')}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return '-'
             },
           },
           {

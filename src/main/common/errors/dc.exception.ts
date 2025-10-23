@@ -15,6 +15,7 @@ export enum DcExceptionType {
   RECAPTCHA_NOT_SUPPORTED = 'RECAPTCHA_NOT_SUPPORTED',
   CAPTCHA_FAILED = 'CAPTCHA_FAILED',
   GALLERY_TYPE_UNSUPPORTED = 'GALLERY_TYPE_UNSUPPORTED',
+  VIEW_COUNT_FETCH_FAILED = 'VIEW_COUNT_FETCH_FAILED',
 }
 
 /**
@@ -119,5 +120,12 @@ export class DcException extends Error {
    */
   static galleryTypeUnsupported(metadata?: Record<string, any>): DcException {
     return new DcException(DcExceptionType.GALLERY_TYPE_UNSUPPORTED, metadata)
+  }
+
+  /**
+   * 조회수 가져오기 실패 예외
+   */
+  static viewCountFetchFailed(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.VIEW_COUNT_FETCH_FAILED, metadata)
   }
 }

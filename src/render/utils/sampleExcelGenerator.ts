@@ -4,10 +4,10 @@ import * as XLSX from 'xlsx'
 export const generateAutoPostSampleNonMember = () => {
   const sampleData = [
     {
-      갤러리주소: 'https://gall.dcinside.com/board/write/?id=football_new9',
-      제목: '샘플 게시글 제목입니다',
-      닉네임: '샘플닉네임',
-      내용HTML: '<p>샘플 게시글 내용입니다.</p><p>HTML 태그를 사용할 수 있습니다.</p>',
+      갤러리주소: 'https://m.dcinside.com/board/football_new9',
+      제목: '안녕',
+      닉네임: '닉네임1',
+      내용HTML: '<p>첫번째</p><p>HTML 태그를 사용할 수 있습니다.</p>',
       비밀번호: '1234',
       이미지경로1: '',
       이미지경로2: '',
@@ -27,10 +27,10 @@ export const generateAutoPostSampleNonMember = () => {
       '등록후자동삭제(분)': '10',
     },
     {
-      갤러리주소: 'https://gall.dcinside.com/board/write/?id=maplestory_new',
+      갤러리주소: 'https://m.dcinside.com/board/maplestory_new',
       제목: '두 번째 샘플 게시글',
-      닉네임: '테스트닉네임',
-      내용HTML: '<p>두 번째 샘플 내용입니다.</p>',
+      닉네임: '닉네임2',
+      내용HTML: '<p>2번째</p>',
       비밀번호: '5678',
       이미지경로1: '',
       이미지경로2: '',
@@ -58,7 +58,7 @@ export const generateAutoPostSampleNonMember = () => {
 export const generateAutoPostSampleMember = () => {
   const sampleData = [
     {
-      갤러리주소: 'https://gall.dcinside.com/board/write/?id=mistertrot',
+      갤러리주소: 'https://m.dcinside.com/board/mistertrot',
       제목: '회원 샘플 게시글 제목입니다',
       닉네임: '',
       내용HTML:
@@ -82,7 +82,7 @@ export const generateAutoPostSampleMember = () => {
       '등록후자동삭제(분)': '10',
     },
     {
-      갤러리주소: 'https://gall.dcinside.com/board/write/?id=football_new9',
+      갤러리주소: 'https://m.dcinside.com/board/football_new9',
       제목: '회원 두 번째 샘플 게시글',
       닉네임: '',
       내용HTML: '<p>회원으로 작성하는 두 번째 샘플 내용입니다.</p>',
@@ -113,7 +113,7 @@ export const generateAutoPostSampleMember = () => {
 export const generateAutoCommentSampleNonMemberGallery = () => {
   const sampleData = [
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=football_new9&no=12345',
+      'DC URL': 'https://m.dcinside.com/board/mistertrot/1234',
       댓글내용: '갤러리 닉네임을 사용하는 댓글입니다.',
       닉네임: '',
       비밀번호: '',
@@ -122,7 +122,7 @@ export const generateAutoCommentSampleNonMemberGallery = () => {
       예약날짜: '',
     },
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=maplestory_new&no=12346',
+      'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
       댓글내용: '두 번째 갤러리 닉네임 댓글입니다.',
       닉네임: '',
       비밀번호: '',
@@ -139,7 +139,7 @@ export const generateAutoCommentSampleNonMemberGallery = () => {
 export const generateAutoCommentSampleNonMemberNickname = () => {
   const sampleData = [
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=mistertrot&no=12345',
+      'DC URL': 'https://m.dcinside.com/board/mistertrot/1234',
       댓글내용: '닉네임을 직접 입력하는 댓글입니다.',
       닉네임: '테스트닉네임1',
       비밀번호: '1234',
@@ -148,7 +148,7 @@ export const generateAutoCommentSampleNonMemberNickname = () => {
       예약날짜: '',
     },
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=football_new9&no=12346',
+      'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
       댓글내용: '두 번째 닉네임 입력 댓글입니다.',
       닉네임: '테스트닉네임2',
       비밀번호: '5678',
@@ -165,7 +165,7 @@ export const generateAutoCommentSampleNonMemberNickname = () => {
 export const generateAutoCommentSampleMember = () => {
   const sampleData = [
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=maplestory_new&no=12345',
+      'DC URL': 'https://m.dcinside.com/board/mistertrot/1234',
       댓글내용: '회원으로 작성하는 댓글입니다.',
       닉네임: '',
       비밀번호: '',
@@ -174,7 +174,7 @@ export const generateAutoCommentSampleMember = () => {
       예약날짜: '',
     },
     {
-      'DC URL': 'https://gall.dcinside.com/board/view/?id=mistertrot&no=12346',
+      'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
       댓글내용: '회원으로 작성하는 두 번째 댓글입니다.',
       닉네임: '',
       비밀번호: '',

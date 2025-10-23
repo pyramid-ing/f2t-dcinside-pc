@@ -12,7 +12,7 @@ export class PostJobController {
     @Query('orderBy') orderBy?: string,
     @Query('order') order?: 'asc' | 'desc',
   ) {
-    return await this.postJobService.getPostJobs({
+    return this.postJobService.getPostJobs({
       search,
       orderBy: orderBy || 'updatedAt',
       order: order || 'desc',
@@ -43,5 +43,12 @@ export class PostJobController {
   @Delete(':id')
   async deletePostJob(@Param('id') id: string) {
     return await this.postJobService.deletePostJob(id)
+  }
+
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.POSTING)
+  @Post('update-view-counts')
+  async updateViewCounts(@Body() data: { jobIds: string[] }) {
+    return await this.postJobService.updateViewCounts(data.jobIds)
   }
 }

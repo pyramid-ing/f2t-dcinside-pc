@@ -17,12 +17,12 @@ export interface RegisterLicenseResponse {
 
 export const authApi = {
   getMachineId: async (): Promise<MachineIdResponse> => {
-    const { data } = await api.get<MachineIdResponse>('/auth/machine-id')
+    const { data } = await api.get<MachineIdResponse>('/api/auth/machine-id')
     return data
   },
 
   registerLicense: async (request: RegisterLicenseRequest): Promise<RegisterLicenseResponse> => {
-    const { data } = await api.post<RegisterLicenseResponse>('/auth/register-license', request)
+    const { data } = await api.post<RegisterLicenseResponse>('/api/auth/register-license', request)
     return data
   },
 }

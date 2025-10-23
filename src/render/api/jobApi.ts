@@ -150,3 +150,13 @@ export async function updateJobScheduledAt(jobId: string, scheduledAt: string | 
   const response = await api.patch(`/api/jobs/${jobId}`, { scheduledAt })
   return response.data
 }
+
+/**
+ * 선택된 작업들의 조회수를 업데이트합니다.
+ */
+export async function updateViewCounts(
+  jobIds: string[],
+): Promise<{ success: boolean; updated: number; failed: number; results: any[] }> {
+  const response = await api.post('/api/post-jobs/update-view-counts', { jobIds })
+  return response.data
+}

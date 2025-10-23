@@ -1,7 +1,7 @@
 import { Controller, Get, Param } from '@nestjs/common'
 import { JobLogsService } from 'src/main/app/modules/dcinside/job-logs/job-logs.service'
 
-@Controller('/job-logs')
+@Controller('job-logs')
 export class JobLogsController {
   constructor(private readonly jobLogsService: JobLogsService) {}
 

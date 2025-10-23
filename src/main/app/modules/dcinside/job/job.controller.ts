@@ -6,7 +6,7 @@ import { JobService } from './job.service'
 import { JobStatus, JobType } from './job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 
-@Controller('api/jobs')
+@Controller('jobs')
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 

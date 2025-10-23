@@ -289,4 +289,63 @@ export class PostJobService implements JobProcessor {
     })
     return job
   }
+
+  /**
+   * 선택된 작업들의 조회수를 업데이트합니다.
+   */
+  async updateViewCounts(
+    jobIds: string[],
+  ): Promise<{ success: boolean; updated: number; failed: number; results: any[] }> {
+    const results = []
+    let updated = 0
+    let failed = 0
+
+    for (const jobId of jobIds) {
+      try {
+        const job = await this.prismaService.job.findUnique({
+          where: { id: jobId },
+          include: { postJob: true },
+        })
+
+        if (!job || !job.postJob) {
+          results.push({ jobId, success: false, error: 'Job not found' })
+          failed++
+          continue
+        }
+
+        const resultUrl = job.postJob.resultUrl
+        if (!resultUrl) {
+          results.push({ jobId, success: false, error: 'Result URL not found' })
+          failed++
+          continue
+        }
+
+        // 조회수 가져오기
+        const viewCount = await this.postingService.getViewCount(resultUrl)
+
+        // 조회수 업데이트
+        await this.prismaService.postJob.update({
+          where: { id: job.postJob.id },
+          data: {
+            viewCount,
+            viewCountUpdatedAt: new Date(),
+          } as any,
+        })
+
+        results.push({ jobId, success: true, viewCount })
+        updated++
+      } catch (error) {
+        this.logger.error(`Failed to update view count for job ${jobId}: ${error.message}`)
+        results.push({ jobId, success: false, error: error.message })
+        failed++
+      }
+    }
+
+    return {
+      success: true,
+      updated,
+      failed,
+      results,
+    }
+  }
 }

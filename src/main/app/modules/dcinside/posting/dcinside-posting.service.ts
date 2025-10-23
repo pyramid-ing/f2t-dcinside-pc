@@ -22,6 +22,9 @@ import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
+import axios from 'axios'
+import * as cheerio from 'cheerio'
+import UserAgent from 'user-agents'
 
 interface ParsedPostJob {
   id: string
@@ -1117,6 +1120,45 @@ export class DcinsidePostingService extends DcinsideBaseService {
         return `https://m.dcinside.com/person/board/lists/?id=${id}`
       default:
         throw DcException.galleryTypeUnsupported({ type })
+    }
+  }
+
+  /**
+   * 디시인사이드 게시글의 조회수를 가져옵니다.
+   * @param resultUrl 게시글 URL
+   * @returns 조회수
+   */
+  public async getViewCount(resultUrl: string): Promise<number> {
+    try {
+      this.logger.log(`조회수 가져오기: ${resultUrl}`)
+
+      const userAgent = new UserAgent({ deviceCategory: 'mobile' })
+      const userAgentString = userAgent.toString()
+
+      const response = await axios.get(resultUrl, {
+        headers: {
+          'User-Agent': userAgentString,
+        },
+        timeout: 10000,
+      })
+
+      const $ = cheerio.load(response.data)
+
+      let viewCount = 0
+
+      const mobileViewText = $('.gall-thum-btm-inner .ginfo2 li:nth-child(1)').text().trim()
+      if (mobileViewText) {
+        const match = mobileViewText.match(/조회수 \s*(\d+)/)
+        if (match) {
+          viewCount = parseInt(match[1], 10)
+        }
+      }
+
+      this.logger.log(`조회수 파싱 완료: ${viewCount}`)
+      return viewCount
+    } catch (error) {
+      this.logger.error(`조회수 가져오기 실패: ${error.message}`)
+      throw DcException.viewCountFetchFailed({ message: error.message })
     }
   }
 }

@@ -111,6 +111,8 @@ export interface PostJobDetail {
   deleteAt?: string
   deletedAt?: string
   autoDeleteMinutes?: number
+  viewCount?: number
+  viewCountUpdatedAt?: string
 
   createdAt?: Date
   updatedAt?: Date
