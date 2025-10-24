@@ -242,12 +242,36 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-// 갤러리 ID 추출 함수
+// 갤러리 ID 추출 함수 (PC/모바일 모두 지원)
 function extractGalleryId(url: string): string {
   if (!url) return '-'
   try {
-    const match = url.match(/[?&]id=([^&]+)/)
-    return match ? match[1] : url
+    // PC URL 패턴: ?id=갤러리ID
+    const pcMatch = url.match(/[?&]id=([^&]+)/)
+    if (pcMatch) {
+      return pcMatch[1]
+    }
+
+    // 모바일 URL 패턴
+    // 일반/마이너: /board/갤러리ID
+    const boardMatch = url.match(/\/board\/([^/]+)/)
+    if (boardMatch) {
+      return boardMatch[1]
+    }
+
+    // 미니: /mini/갤러리ID
+    const miniMatch = url.match(/\/mini\/([^/]+)/)
+    if (miniMatch) {
+      return miniMatch[1]
+    }
+
+    // 인물: /person/갤러리ID
+    const personMatch = url.match(/\/person\/([^/]+)/)
+    if (personMatch) {
+      return personMatch[1]
+    }
+
+    return url
   } catch {
     return url
   }

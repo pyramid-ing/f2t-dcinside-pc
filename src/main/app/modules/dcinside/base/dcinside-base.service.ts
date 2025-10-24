@@ -575,22 +575,68 @@ export abstract class DcinsideBaseService {
   }
 
   /**
-   * 갤러리 정보 추출 (모바일 URL 패턴 기반)
+   * PC URL을 모바일 URL로 변환
+   * PC: dcinside.com (gall.dcinside.com 등)
+   * Mobile: m.dcinside.com
+   */
+  protected _convertPcToMobileUrl(url: string): string {
+    const urlObj = new URL(url)
+    const hostname = urlObj.hostname
+
+    // 이미 모바일 URL이면 그대로 반환
+    if (hostname === 'm.dcinside.com') {
+      return url
+    }
+
+    // PC URL 체크 (dcinside.com을 포함하지만 m.dcinside.com은 아닌 경우)
+    if (!hostname.includes('dcinside.com')) {
+      return url
+    }
+
+    // URL에서 갤러리 ID 추출
+    const idParam = urlObj.searchParams.get('id')
+    if (!idParam) {
+      throw new Error('갤러리 ID를 찾을 수 없습니다.')
+    }
+
+    // 갤러리 타입 판별 및 모바일 URL 생성
+    const pathname = urlObj.pathname
+
+    if (pathname.includes('/mgallery/')) {
+      // 마이너 갤러리
+      return `https://m.dcinside.com/board/${idParam}`
+    } else if (pathname.includes('/mini/')) {
+      // 미니 갤러리
+      return `https://m.dcinside.com/mini/${idParam}`
+    } else if (pathname.includes('/person/')) {
+      // 인물 갤러리
+      return `https://m.dcinside.com/person/${idParam}`
+    } else {
+      // 일반 갤러리
+      return `https://m.dcinside.com/board/${idParam}`
+    }
+  }
+
+  /**
+   * 갤러리 정보 추출 (PC/모바일 URL 모두 지원)
    */
   protected _extractGalleryInfo(url: string): GalleryInfo {
+    // PC URL을 모바일 URL로 변환
+    const mobileUrl = this._convertPcToMobileUrl(url)
+
     let id: string
     let postNo: string | undefined
 
     // 모바일 URL 패턴별 처리 (경로 기반)
-    if (url.includes('/board/')) {
+    if (mobileUrl.includes('/board/')) {
       // 일반 갤러리: /board/galleryId/postNo
-      const boardMatch = url.match(/\/board\/([^/]+)\/([^/?]+)/)
+      const boardMatch = mobileUrl.match(/\/board\/([^/]+)\/([^/?]+)/)
       if (boardMatch) {
         id = boardMatch[1]
         postNo = boardMatch[2] // 마지막 슬러그
       } else {
         // 게시물 번호가 없는 경우 (갤러리 목록)
-        const galleryMatch = url.match(/\/board\/([^/?]+)/)
+        const galleryMatch = mobileUrl.match(/\/board\/([^/?]+)/)
         if (galleryMatch) {
           id = galleryMatch[1]
           postNo = undefined
@@ -600,15 +646,15 @@ export abstract class DcinsideBaseService {
           })
         }
       }
-    } else if (url.includes('/mini/')) {
+    } else if (mobileUrl.includes('/mini/')) {
       // 미니 갤러리: /mini/galleryId/postNo
-      const miniMatch = url.match(/\/mini\/([^/]+)\/([^/?]+)/)
+      const miniMatch = mobileUrl.match(/\/mini\/([^/]+)\/([^/?]+)/)
       if (miniMatch) {
         id = miniMatch[1]
         postNo = miniMatch[2] // 마지막 슬러그
       } else {
         // 갤러리 목록
-        const galleryMatch = url.match(/\/mini\/([^/?]+)/)
+        const galleryMatch = mobileUrl.match(/\/mini\/([^/?]+)/)
         if (galleryMatch) {
           id = galleryMatch[1]
           postNo = undefined
@@ -618,15 +664,15 @@ export abstract class DcinsideBaseService {
           })
         }
       }
-    } else if (url.includes('/person/')) {
+    } else if (mobileUrl.includes('/person/')) {
       // 인물 갤러리: /person/galleryId/postNo
-      const personMatch = url.match(/\/person\/([^/]+)\/([^/?]+)/)
+      const personMatch = mobileUrl.match(/\/person\/([^/]+)\/([^/?]+)/)
       if (personMatch) {
         id = personMatch[1]
         postNo = personMatch[2] // 마지막 슬러그
       } else {
         // 갤러리 목록
-        const galleryMatch = url.match(/\/person\/([^/?]+)/)
+        const galleryMatch = mobileUrl.match(/\/person\/([^/?]+)/)
         if (galleryMatch) {
           id = galleryMatch[1]
           postNo = undefined
@@ -645,11 +691,11 @@ export abstract class DcinsideBaseService {
 
     // 갤러리 타입 판별
     let type: GalleryType
-    if (url.includes('/mgallery/')) {
+    if (mobileUrl.includes('/mgallery/')) {
       type = 'mgallery'
-    } else if (url.includes('/mini/')) {
+    } else if (mobileUrl.includes('/mini/')) {
       type = 'mini'
-    } else if (url.includes('/person/')) {
+    } else if (mobileUrl.includes('/person/')) {
       type = 'person'
     } else {
       type = 'board' // 일반갤러리

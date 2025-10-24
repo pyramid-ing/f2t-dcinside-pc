@@ -238,17 +238,6 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-// 갤러리 ID 추출 함수
-function extractGalleryId(url: string): string {
-  if (!url) return '-'
-  try {
-    const match = url.match(/[?&]id=([^&]+)/)
-    return match ? match[1] : url
-  } catch {
-    return url
-  }
-}
-
 const CommentJobTable: React.FC = () => {
   const { canAccess } = usePermissions()
   const hasCommentPermission = canAccess(Permission.COMMENT)
