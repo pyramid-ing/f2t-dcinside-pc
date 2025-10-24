@@ -37,26 +37,6 @@ interface ParsedPostJob {
   imagePosition?: '상단' | '하단' | null
 }
 
-// 커서를 이동하는 함수
-async function moveCursorToPosition(page: any, position: '상단' | '하단') {
-  await page.evaluate(pos => {
-    const editor = document.querySelector('.note-editor .note-editable') as HTMLElement
-    if (editor) {
-      editor.focus()
-
-      const selection = window.getSelection()
-      if (!selection) return
-
-      const range = document.createRange()
-      range.selectNodeContents(editor)
-      range.collapse(pos === '상단') // 시작 또는 끝 위치로 커서 이동
-
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
-  }, position)
-}
-
 @Injectable()
 export class DcinsidePostingService extends DcinsideBaseService {
   // 브라우저 ID 상수
@@ -604,13 +584,12 @@ export class DcinsidePostingService extends DcinsideBaseService {
     if (!imagePaths || imagePaths.length === 0) {
       return
     }
-    await moveCursorToPosition(page, imagePosition)
 
     // 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
     const appSettings = await this.settingsService.getSettings()
 
     try {
-      await this._performImageUpload(page, imagePaths)
+      await this._performImageUpload(page, imagePaths, imagePosition)
       this.logger.log('이미지 업로드 성공')
     } catch (imageUploadError) {
       const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
@@ -630,7 +609,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }
   }
 
-  private async _performImageUpload(page: Page, imagePaths: string[]): Promise<void> {
+  private async _performImageUpload(page: Page, imagePaths: string[], imagePosition: '상단' | '하단'): Promise<void> {
     try {
       this.logger.log('이미지 업로드 시작 (페이지 내 처리)')
 
@@ -644,6 +623,11 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
       // 업로드 완료 대기
       await this._waitForImageUploadComplete(page, imagePaths.length)
+
+      // 이미지 위치가 '상단'이면 이미지 블럭들을 에디터 상단으로 이동
+      if (imagePosition === '상단') {
+        await this._moveImagesToTop(page)
+      }
 
       this.logger.log('이미지 업로드 및 적용 완료')
     } catch (error) {
@@ -688,26 +672,29 @@ export class DcinsidePostingService extends DcinsideBaseService {
     await sleep(2000)
   }
 
-  private async _clickApplyButtonSafely(popup: Page): Promise<void> {
-    this.logger.log('적용 버튼 클릭 시도...')
+  private async _moveImagesToTop(page: Page): Promise<void> {
+    this.logger.log('이미지 블럭을 에디터 상단으로 이동 중...')
 
-    await retry(
-      async () => {
-        // 적용 버튼 존재 확인
-        await popup.waitForSelector('.btn_apply', { timeout: 60_000 })
-        await popup.click('.btn_apply')
-        // 클릭 후 팝업 닫힘 확인 (1초 대기)
-        await sleep(1000)
-        if (popup.isClosed()) {
-          this.logger.log('팝업이 닫혔습니다. 이미지 업로드 완료.')
-          return true
-        }
-        throw DcException.postSubmitFailed({ message: '팝업이 아직 닫히지 않았습니다.' })
-      },
-      1000,
-      10,
-      'linear',
-    )
+    await page.evaluate(() => {
+      const editorContainer = document.querySelector('.note-editor .note-editing-area .note-editable')
+      if (!editorContainer) {
+        throw new Error('에디터 컨테이너를 찾을 수 없습니다.')
+      }
+
+      // 이미지 블럭들을 찾기 (div.block contenteditable="false")
+      const imageBlocks = Array.from(editorContainer.querySelectorAll('div.block[contenteditable="false"]'))
+
+      if (imageBlocks.length === 0) {
+        return
+      }
+
+      // 이미지 블럭들을 에디터 컨테이너 상단으로 이동
+      imageBlocks.forEach(block => {
+        editorContainer.insertBefore(block, editorContainer.firstChild)
+      })
+    })
+
+    this.logger.log(`이미지 블럭 이동 완료`)
   }
 
   private async _inputNickname(page: Page, nickname: string): Promise<void> {
