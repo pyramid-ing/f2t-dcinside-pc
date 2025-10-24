@@ -9,7 +9,6 @@ import { DcException } from '@main/common/errors/dc.exception'
 import {
   DcinsideBaseService,
   detectRecaptcha,
-  assertValidPopupPage,
   assertRetrySuccess,
   GalleryInfo,
 } from '@main/app/modules/dcinside/base/dcinside-base.service'
@@ -611,7 +610,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     const appSettings = await this.settingsService.getSettings()
 
     try {
-      await this._performImageUpload(page, browserContext, imagePaths)
+      await this._performImageUpload(page, imagePaths)
       this.logger.log('이미지 업로드 성공')
     } catch (imageUploadError) {
       const errorMessage = `이미지 업로드 실패: ${imageUploadError.message}`
@@ -631,68 +630,29 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }
   }
 
-  private async _performImageUpload(page: Page, browserContext: BrowserContext, imagePaths: string[]): Promise<void> {
-    // 이미지 업로드 다이얼로그 처리
-    const handleImageUploadDialog = (dialog: any) => {
-      const message = dialog.message()
-      this.logger.log(`이미지 업로드 다이얼로그: ${message}`)
-
-      // 파일 업로드 다이얼로그인 경우 파일 선택
-      if (dialog.type() === 'beforeunload' || message.includes('업로드')) {
-        // 파일 경로들을 한 번에 설정
-        if (imagePaths && imagePaths.length > 0) {
-          // Playwright에서는 setInputFiles 사용
-          dialog.accept()
-        }
-      } else {
-        dialog.accept()
-      }
-    }
-
-    let popupPage: Page | null = null
+  private async _performImageUpload(page: Page, imagePaths: string[]): Promise<void> {
     try {
-      // 팝업이 열릴 때까지 대기하는 Promise 생성
-      const popupPromise = browserContext.waitForEvent('page')
+      this.logger.log('이미지 업로드 시작 (페이지 내 처리)')
 
-      // 다이얼로그 이벤트 리스너 등록
-      page.on('dialog', handleImageUploadDialog)
+      // 현재 페이지에서 파일 input 찾기
+      const fileInput = page.locator('input[type="file"]#upload')
+      await fileInput.waitFor({ state: 'attached', timeout: 10_000 })
 
-      // 이미지 버튼 클릭하여 팝업 열기
-      await page.click('button[aria-label="이미지"]')
-
-      // 팝업 페이지 대기
-      popupPage = await popupPromise
-      assertValidPopupPage(popupPage)
-
-      await popupPage.waitForLoadState('domcontentloaded')
-      this.logger.log('이미지 업로드 팝업 열림')
-
-      // 팝업에서 파일 업로드 처리
-      const fileInput = popupPage.locator('input[type="file"]')
+      // 파일 업로드
       await fileInput.setInputFiles(imagePaths)
+      this.logger.log(`${imagePaths.length}개 이미지 파일 선택 완료`)
 
       // 업로드 완료 대기
-      await this._waitForImageUploadComplete(popupPage, imagePaths.length)
-
-      // '적용' 버튼 클릭
-      await this._clickApplyButtonSafely(popupPage)
+      await this._waitForImageUploadComplete(page, imagePaths.length)
 
       this.logger.log('이미지 업로드 및 적용 완료')
     } catch (error) {
       this.logger.error(`이미지 업로드 중 오류: ${error.message}`)
       throw error
-    } finally {
-      // 이벤트 리스너 제거
-      page.removeListener('dialog', handleImageUploadDialog)
-
-      // 팝업 닫기
-      if (popupPage && !popupPage.isClosed()) {
-        await popupPage.close()
-      }
     }
   }
 
-  private async _waitForImageUploadComplete(popup: Page, expectedImageCount: number): Promise<void> {
+  private async _waitForImageUploadComplete(page: Page, expectedImageCount: number): Promise<void> {
     this.logger.log('이미지 업로드 완료 대기 중...')
 
     const maxWaitTime = 60_000 // 최대 60초 대기
@@ -701,28 +661,20 @@ export class DcinsidePostingService extends DcinsideBaseService {
     while (Date.now() - startTime < maxWaitTime) {
       try {
         // 로딩 박스가 있는지 확인
-        const loadingBox = await popup.$('.loding_box')
+        const loadingBox = await page.$('.loding_box')
         if (loadingBox) {
           this.logger.log('이미지 업로드 진행 중...')
           await sleep(2000)
           continue
         }
 
-        // 업로드된 이미지 리스트 확인
-        const uploadedImages = await popup.$$('ul#sortable li[data-key]')
+        // 업로드된 이미지 리스트 확인 (에디터 내 이미지 확인)
+        const uploadedImages = await page.$$('.note-editable img')
         this.logger.log(`업로드된 이미지 수: ${uploadedImages.length}/${expectedImageCount}`)
 
         if (uploadedImages.length >= expectedImageCount) {
-          // 모든 이미지가 data-key를 가지고 있는지 확인
-          const allHaveDataKey = await popup.evaluate(() => {
-            const items = document.querySelectorAll('ul#sortable li')
-            return Array.from(items).every(item => item.hasAttribute('data-key'))
-          })
-
-          if (allHaveDataKey) {
-            this.logger.log('모든 이미지 업로드 완료!')
-            break
-          }
+          this.logger.log('모든 이미지 업로드 완료!')
+          break
         }
 
         await sleep(1000)
