@@ -456,6 +456,48 @@ export abstract class DcinsideBaseService {
   }
 
   /**
+   * 갤러리 접근 제한 안내 팝업 처리
+   * 마이너 갤러리 접근 시 나타나는 팝업을 자동으로 확인 버튼 클릭
+   */
+  protected async handleGalleryAccessPopup(page: Page): Promise<void> {
+    try {
+      // 팝업이 나타날 때까지 최대 3초 대기
+      const popupContainerSelector = '.layer-popup-inner.notx'
+      await page.waitForSelector(popupContainerSelector, { timeout: 3000 })
+
+      this.logger.log('갤러리 접근 제한 안내 팝업 감지됨')
+
+      // 팝업 내용 확인 (선택적)
+      const popupContent = await page.evaluate(selector => {
+        const popup = document.querySelector(selector)
+        if (popup) {
+          const title = popup.querySelector('.pop-inbox-tit')?.textContent?.trim()
+          return title || ''
+        }
+        return ''
+      }, popupContainerSelector)
+
+      if (popupContent) {
+        this.logger.log(`팝업 내용: ${popupContent}`)
+      }
+
+      // 확인 버튼 클릭
+      const confirmButtonSelector = `${popupContainerSelector} button.btn-line.btn-line-inblue`
+      await page.waitForSelector(confirmButtonSelector, { timeout: 2000 })
+      await page.click(confirmButtonSelector)
+
+      this.logger.log('갤러리 접근 제한 안내 팝업 확인 버튼 클릭 완료')
+
+      // 팝업이 사라질 때까지 대기
+      await sleep(1000)
+    } catch (error) {
+      // 팝업이 나타나지 않거나 이미 사라진 경우 (정상 상황)
+      // 에러를 무시하고 계속 진행
+      this.logger.log('갤러리 접근 제한 팝업 없음 또는 이미 처리됨')
+    }
+  }
+
+  /**
    * 테더링 모드 처리
    */
   public async handleTetheringMode(jobId: string, settings: Settings): Promise<void> {

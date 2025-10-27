@@ -316,6 +316,9 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    */
   private async _navigateToPost(page: Page, postUrl: string): Promise<void> {
     await page.goto(postUrl, { waitUntil: 'load' })
+
+    // 갤러리 접근 제한 팝업 처리
+    await this.handleGalleryAccessPopup(page)
   }
 
   /**

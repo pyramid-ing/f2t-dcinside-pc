@@ -970,6 +970,10 @@ export class DcinsidePostingService extends DcinsideBaseService {
           }
           throw error
         }
+
+        // 갤러리 접근 제한 팝업 처리
+        await this.handleGalleryAccessPopup(page)
+
         // 글쓰기 버튼 클릭 (goWrite)
         try {
           await page.waitForSelector('a.btn-write.lnk', { timeout: 60_000 })
