@@ -137,7 +137,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
       await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
-      await this._navigateToWritePage(page, galleryInfo)
+      await this._navigateToWritePage(page, galleryInfo, isMember)
       await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
@@ -955,7 +955,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }
   }
 
-  private async _navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
+  private async _navigateToWritePage(page: Page, galleryInfo: GalleryInfo, isMember: boolean): Promise<void> {
     const success = await retry(
       async () => {
         const listUrl = this._buildGalleryListUrl(galleryInfo)
@@ -987,7 +987,19 @@ export class DcinsidePostingService extends DcinsideBaseService {
           }
           throw error
         }
-        await page.click('a.btn-write.lnk')
+
+        const writeButton = page.locator('a.btn-write.lnk').first()
+        const writeHref = await writeButton.getAttribute('href')
+
+        if (!isMember && writeHref && writeHref.startsWith('javascript:alert')) {
+          const alertMatch = writeHref.match(/alert\(['"]([^'"]+)['"]\)/)
+          const alertMessage = alertMatch ? alertMatch[1] : '멤버 전용 갤러리입니다.'
+          const errorMessage = `멤버 전용 갤러리로 비로그인 작성이 차단되었습니다. (${alertMessage})`
+          this.logger.warn(errorMessage)
+          throw DcException.authRequired({ message: errorMessage })
+        }
+
+        await writeButton.click()
         await sleep(4000)
         // 글쓰기 페이지로 정상 이동했는지 확인
         const currentUrl = page.url()
