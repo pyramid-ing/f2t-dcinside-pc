@@ -16,12 +16,29 @@ import { Permission } from '@main/app/modules/auth/auth.guard'
 import { getExternalIp } from '@main/app/utils/ip'
 import { assertPermission } from '@main/app/utils/permission.assert'
 
-export type GalleryType = 'board' | 'mgallery' | 'mini' | 'person'
+export enum GalleryType {
+  BOARD = 'board',
+  MGALLERY = 'mgallery',
+  MINI = 'mini',
+  PERSON = 'person',
+}
+
+export enum GalleryViewMode {
+  MOBILE = 'mobile',
+  PC = 'pc',
+}
+
+export enum GalleryViewKind {
+  LIST = 'list',
+  DETAIL = 'detail',
+}
 
 export interface GalleryInfo {
   id: string
   type: GalleryType
   postNo?: string
+  viewMode: GalleryViewMode
+  viewKind: GalleryViewKind
 }
 
 export function assertValidPopupPage(popupPage: any): asserts popupPage is Page {
@@ -617,134 +634,220 @@ export abstract class DcinsideBaseService {
   }
 
   /**
-   * PC URL을 모바일 URL로 변환
-   * PC: dcinside.com (gall.dcinside.com 등)
-   * Mobile: m.dcinside.com
-   */
-  protected _convertPcToMobileUrl(url: string): string {
-    const urlObj = new URL(url)
-    const hostname = urlObj.hostname
-
-    // 이미 모바일 URL이면 그대로 반환
-    if (hostname === 'm.dcinside.com') {
-      return url
-    }
-
-    // PC URL 체크 (dcinside.com을 포함하지만 m.dcinside.com은 아닌 경우)
-    if (!hostname.includes('dcinside.com')) {
-      return url
-    }
-
-    // URL에서 갤러리 ID 추출
-    const idParam = urlObj.searchParams.get('id')
-    if (!idParam) {
-      throw new Error('갤러리 ID를 찾을 수 없습니다.')
-    }
-
-    // 갤러리 타입 판별 및 모바일 URL 생성
-    const pathname = urlObj.pathname
-
-    if (pathname.includes('/mgallery/')) {
-      // 마이너 갤러리
-      return `https://m.dcinside.com/board/${idParam}`
-    } else if (pathname.includes('/mini/')) {
-      // 미니 갤러리
-      return `https://m.dcinside.com/mini/${idParam}`
-    } else if (pathname.includes('/person/')) {
-      // 인물 갤러리
-      return `https://m.dcinside.com/person/${idParam}`
-    } else {
-      // 일반 갤러리
-      return `https://m.dcinside.com/board/${idParam}`
-    }
-  }
-
-  /**
    * 갤러리 정보 추출 (PC/모바일 URL 모두 지원)
    */
   protected _extractGalleryInfo(url: string): GalleryInfo {
-    // PC URL을 모바일 URL로 변환
-    const mobileUrl = this._convertPcToMobileUrl(url)
+    const urlObj = new URL(url)
 
-    let id: string
-    let postNo: string | undefined
-
-    // 모바일 URL 패턴별 처리 (경로 기반)
-    if (mobileUrl.includes('/board/')) {
-      // 일반 갤러리: /board/galleryId/postNo
-      const boardMatch = mobileUrl.match(/\/board\/([^/]+)\/([^/?]+)/)
-      if (boardMatch) {
-        id = boardMatch[1]
-        postNo = boardMatch[2] // 마지막 슬러그
-      } else {
-        // 게시물 번호가 없는 경우 (갤러리 목록)
-        const galleryMatch = mobileUrl.match(/\/board\/([^/?]+)/)
-        if (galleryMatch) {
-          id = galleryMatch[1]
-          postNo = undefined
-        } else {
-          throw DcException.postNotFoundOrDeleted({
-            message: '갤러리 URL 형식이 올바르지 않습니다.',
-          })
-        }
-      }
-    } else if (mobileUrl.includes('/mini/')) {
-      // 미니 갤러리: /mini/galleryId/postNo
-      const miniMatch = mobileUrl.match(/\/mini\/([^/]+)\/([^/?]+)/)
-      if (miniMatch) {
-        id = miniMatch[1]
-        postNo = miniMatch[2] // 마지막 슬러그
-      } else {
-        // 갤러리 목록
-        const galleryMatch = mobileUrl.match(/\/mini\/([^/?]+)/)
-        if (galleryMatch) {
-          id = galleryMatch[1]
-          postNo = undefined
-        } else {
-          throw DcException.postNotFoundOrDeleted({
-            message: '미니 갤러리 URL 형식이 올바르지 않습니다.',
-          })
-        }
-      }
-    } else if (mobileUrl.includes('/person/')) {
-      // 인물 갤러리: /person/galleryId/postNo
-      const personMatch = mobileUrl.match(/\/person\/([^/]+)\/([^/?]+)/)
-      if (personMatch) {
-        id = personMatch[1]
-        postNo = personMatch[2] // 마지막 슬러그
-      } else {
-        // 갤러리 목록
-        const galleryMatch = mobileUrl.match(/\/person\/([^/?]+)/)
-        if (galleryMatch) {
-          id = galleryMatch[1]
-          postNo = undefined
-        } else {
-          throw DcException.postNotFoundOrDeleted({
-            message: '인물 갤러리 URL 형식이 올바르지 않습니다.',
-          })
-        }
-      }
-    } else {
-      // 기타 URL 형식
+    if (!urlObj.hostname.includes('dcinside.com')) {
       throw DcException.postNotFoundOrDeleted({
-        message: '지원하지 않는 URL 형식입니다.',
+        message: '디시인사이드 URL이 아닙니다.',
       })
     }
 
-    // 갤러리 타입 판별
-    let type: GalleryType
-    if (mobileUrl.includes('/mgallery/')) {
-      type = 'mgallery'
-    } else if (mobileUrl.includes('/mini/')) {
-      type = 'mini'
-    } else if (mobileUrl.includes('/person/')) {
-      type = 'person'
-    } else {
-      type = 'board' // 일반갤러리
+    const isMobile = urlObj.hostname === 'm.dcinside.com'
+
+    const { type, id, postNo, viewKind } = isMobile
+      ? this._parseMobileGalleryUrl(urlObj)
+      : this._parsePcGalleryUrl(urlObj)
+
+    const result: GalleryInfo = {
+      id,
+      type,
+      postNo,
+      viewMode: isMobile ? GalleryViewMode.MOBILE : GalleryViewMode.PC,
+      viewKind,
     }
 
-    this.logger.log(`갤러리 정보 추출: ID=${id}, Type=${type}, PostNo=${postNo || 'N/A'}`)
-    return { id, type, postNo }
+    this.logger.log(
+      `갤러리 정보 추출: ID=${result.id}, Type=${result.type}, PostNo=${result.postNo || 'N/A'}, ViewMode=${result.viewMode}, ViewKind=${result.viewKind}`,
+    )
+
+    return result
+  }
+
+  protected _buildGalleryListUrl(info: GalleryInfo): string {
+    return info.viewMode === GalleryViewMode.PC
+      ? this._buildPcGalleryListUrl(info.type, info.id)
+      : this._buildMobileGalleryListUrl(info.type, info.id)
+  }
+
+  private _parsePcGalleryUrl(urlObj: URL): {
+    type: GalleryType
+    id: string
+    postNo?: string
+    viewKind: GalleryViewKind
+  } {
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean)
+
+    if (pathSegments.length === 0) {
+      throw DcException.postNotFoundOrDeleted({ message: '갤러리 경로를 분석할 수 없습니다.' })
+    }
+
+    const { type, action } = this._detectPcGalleryTypeAndAction(pathSegments)
+    const id = urlObj.searchParams.get('id')?.trim()
+    const postNo = this._normalizePostNo(
+      urlObj.searchParams.get('no') || urlObj.searchParams.get('post_no') || undefined,
+    )
+
+    if (!id) {
+      throw DcException.postNotFoundOrDeleted({ message: '갤러리 ID를 찾을 수 없습니다.' })
+    }
+
+    if (action === GalleryViewKind.DETAIL && !postNo) {
+      throw DcException.postNotFoundOrDeleted({ message: '게시글 번호를 찾을 수 없습니다.' })
+    }
+
+    return { type, id, postNo, viewKind: action }
+  }
+
+  private _parseMobileGalleryUrl(urlObj: URL): {
+    type: GalleryType
+    id: string
+    postNo?: string
+    viewKind: GalleryViewKind
+  } {
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean)
+
+    if (pathSegments.length === 0 && urlObj.searchParams.get('id')) {
+      // lists/?id= 형태 지원
+      const typeFromQuery = this._parseGalleryType(urlObj.searchParams.get('type')) ?? GalleryType.BOARD
+      const idFromQuery = urlObj.searchParams.get('id')!
+      const postNoFromQuery = this._normalizePostNo(
+        urlObj.searchParams.get('no') || urlObj.searchParams.get('post_no') || undefined,
+      )
+      return {
+        type: typeFromQuery,
+        id: idFromQuery,
+        postNo: postNoFromQuery,
+        viewKind: postNoFromQuery ? GalleryViewKind.DETAIL : GalleryViewKind.LIST,
+      }
+    }
+
+    const [first, second, third] = pathSegments
+
+    if (!first) {
+      throw DcException.postNotFoundOrDeleted({ message: '갤러리 경로를 분석할 수 없습니다.' })
+    }
+
+    const type = this._detectGalleryTypeFromMobilePath(first, urlObj.searchParams.get('type'))
+    const id = (second || urlObj.searchParams.get('id') || '').trim()
+    const postNoCandidate = third || urlObj.searchParams.get('no') || urlObj.searchParams.get('post_no') || undefined
+    const postNo = this._normalizePostNo(postNoCandidate)
+
+    if (!id) {
+      throw DcException.postNotFoundOrDeleted({ message: '갤러리 ID를 찾을 수 없습니다.' })
+    }
+
+    return { type, id, postNo, viewKind: postNo ? GalleryViewKind.DETAIL : GalleryViewKind.LIST }
+  }
+
+  private _detectPcGalleryTypeAndAction(segments: string[]): {
+    type: GalleryType
+    action: GalleryViewKind
+  } {
+    const [first, second, third] = segments
+
+    let type: GalleryType
+    let actionSegment: string | undefined
+
+    switch (first) {
+      case 'board':
+        type = GalleryType.BOARD
+        actionSegment = second
+        break
+      case 'mgallery':
+        type = GalleryType.MGALLERY
+        actionSegment = third ?? second
+        break
+      case 'mini':
+        type = GalleryType.MINI
+        actionSegment = third ?? second
+        break
+      case 'person':
+        type = GalleryType.PERSON
+        actionSegment = third ?? second
+        break
+      default:
+        throw DcException.postNotFoundOrDeleted({ message: '지원하지 않는 갤러리 경로입니다.' })
+    }
+
+    if (actionSegment === 'lists') {
+      return { type, action: GalleryViewKind.LIST }
+    }
+
+    if (actionSegment === 'view') {
+      return { type, action: GalleryViewKind.DETAIL }
+    }
+
+    throw DcException.postNotFoundOrDeleted({ message: '갤러리 경로 형식이 올바르지 않습니다.' })
+  }
+
+  private _detectGalleryTypeFromMobilePath(firstSegment: string, typeHint: string | null): GalleryType {
+    const parsedHint = this._parseGalleryType(typeHint)
+    if (parsedHint) {
+      return parsedHint
+    }
+
+    if (firstSegment === 'mini') return GalleryType.MINI
+    if (firstSegment === 'person') return GalleryType.PERSON
+    if (firstSegment === 'board') return GalleryType.BOARD
+
+    // 모바일 경로에서 명확히 구분되지 않는 경우 기본 갤러리로 처리
+    return GalleryType.BOARD
+  }
+
+  private _normalizePostNo(value?: string | null): string | undefined {
+    const sanitized = value?.trim()
+    if (!sanitized) return undefined
+
+    return /^\d+$/.test(sanitized) ? sanitized : undefined
+  }
+
+  private _buildMobileGalleryUrl(type: GalleryType, id: string, postNo?: string): string {
+    switch (type) {
+      case GalleryType.MINI:
+        return postNo ? `https://m.dcinside.com/mini/${id}/${postNo}` : `https://m.dcinside.com/mini/${id}`
+      case GalleryType.PERSON:
+        return postNo ? `https://m.dcinside.com/person/${id}/${postNo}` : `https://m.dcinside.com/person/${id}`
+      case GalleryType.MGALLERY:
+      case GalleryType.BOARD:
+      default:
+        return postNo ? `https://m.dcinside.com/board/${id}/${postNo}` : `https://m.dcinside.com/board/${id}`
+    }
+  }
+
+  private _buildMobileGalleryListUrl(type: GalleryType, id: string): string {
+    return this._buildMobileGalleryUrl(type, id)
+  }
+
+  private _buildPcGalleryListUrl(type: GalleryType, id: string): string {
+    switch (type) {
+      case GalleryType.MGALLERY:
+        return `https://gall.dcinside.com/mgallery/board/lists/?id=${id}`
+      case GalleryType.MINI:
+        return `https://gall.dcinside.com/mini/board/lists/?id=${id}`
+      case GalleryType.PERSON:
+        return `https://gall.dcinside.com/person/board/lists/?id=${id}`
+      case GalleryType.BOARD:
+      default:
+        return `https://gall.dcinside.com/board/lists/?id=${id}`
+    }
+  }
+
+  private _parseGalleryType(value?: string | null): GalleryType | null {
+    switch (value) {
+      case GalleryType.BOARD:
+        return GalleryType.BOARD
+      case GalleryType.MGALLERY:
+        return GalleryType.MGALLERY
+      case GalleryType.MINI:
+        return GalleryType.MINI
+      case GalleryType.PERSON:
+        return GalleryType.PERSON
+      default:
+        return null
+    }
   }
 
   /**

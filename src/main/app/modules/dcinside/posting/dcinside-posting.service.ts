@@ -958,8 +958,10 @@ export class DcinsidePostingService extends DcinsideBaseService {
   private async _navigateToWritePage(page: Page, galleryInfo: GalleryInfo): Promise<void> {
     const success = await retry(
       async () => {
-        const listUrl = this._buildGalleryUrl(galleryInfo)
-        this.logger.log(`글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리)`)
+        const listUrl = this._buildGalleryListUrl(galleryInfo)
+        this.logger.log(
+          `글쓰기 페이지 이동 시도: ${listUrl} (${galleryInfo.type} 갤러리, ${galleryInfo.viewMode.toUpperCase()} 목록)`,
+        )
         try {
           await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
         } catch (error: any) {
@@ -1046,23 +1048,6 @@ export class DcinsidePostingService extends DcinsideBaseService {
       password: postJob.password,
       imagePaths,
       imagePosition: postJob.imagePosition as '상단' | '하단' | null,
-    }
-  }
-
-  private _buildGalleryUrl(galleryInfo: GalleryInfo): string {
-    const { id, type } = galleryInfo
-
-    switch (type) {
-      case 'board':
-        return `https://m.dcinside.com/board/${id}`
-      case 'mgallery':
-        return `https://m.dcinside.com/mgallery/board/lists/?id=${id}`
-      case 'mini':
-        return `https://m.dcinside.com/mini/board/lists/?id=${id}`
-      case 'person':
-        return `https://m.dcinside.com/person/board/lists/?id=${id}`
-      default:
-        throw DcException.galleryTypeUnsupported({ type })
     }
   }
 
