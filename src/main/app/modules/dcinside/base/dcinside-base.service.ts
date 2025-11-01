@@ -206,25 +206,36 @@ export abstract class DcinsideBaseService {
     params: { id: string; password: string },
   ): Promise<{ success: boolean; message: string }> {
     try {
-      await page.goto('https://dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
+      await page.goto('https://msign.dcinside.com/login', {
+        waitUntil: 'load',
+        timeout: 60_000,
+      })
 
-      // 로그인 폼 입력 및 로그인 버튼 클릭
-      await page.fill('#user_id', params.id)
-      await page.fill('#pw', params.password)
-      await page.click('#login_ok')
-      await sleep(2000)
+      await page.fill('#code', params.id)
+      await page.fill('#password', params.password)
 
-      // 로그인 체크
+      await page.click('#loginAction')
+
+      const popupHandled = await this.handlePasswordChangeCampaignPopup(page)
+
+      if (!popupHandled) {
+        await page.waitForURL(url => url.hostname === 'm.dcinside.com', { timeout: 60_000 }).catch(() => null)
+      }
+
+      if (!page.url().startsWith('https://m.dcinside.com')) {
+        await page.goto('https://m.dcinside.com/', { waitUntil: 'load', timeout: 60_000 }).catch(() => null)
+      }
+
+      // 로그인 후 메인 페이지로 이동하여 상태 확인
       const isLoggedIn = await this.isLogin(page)
       if (isLoggedIn) {
-        // 쿠키 저장
         const context = page.context()
         const cookies = await context.cookies()
         this.cookieService.saveCookies('dcinside', params.id, cookies)
         return { success: true, message: '로그인 성공' }
-      } else {
-        return { success: false, message: '로그인 실패' }
       }
+
+      return { success: false, message: '로그인 실패' }
     } catch (e) {
       this.logger.error(`페이지 로그인 실패: ${e.message}`)
       return { success: false, message: e.message }
@@ -236,21 +247,51 @@ export abstract class DcinsideBaseService {
    */
   public async isLogin(page: Page): Promise<boolean> {
     try {
-      // 현재 페이지에서 .gall-tit-box가 이미 존재하는지 확인
-      const hasGallTitBox = await page.$('.gall-tit-box')
+      const currentUrl = page.url()
 
-      if (!hasGallTitBox) {
-        // .gall-tit-box가 없으면 메인 페이지로 이동
-        await page.goto('https://dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
-        await page.waitForSelector('.gall-tit-box', { timeout: 10000 })
+      if (!currentUrl.startsWith('https://m.dcinside.com')) {
+        await page.goto('https://m.dcinside.com/', { waitUntil: 'load', timeout: 60_000 })
+      } else {
+        await page.waitForLoadState('load', { timeout: 10_000 })
       }
 
-      // 모바일 버전에서만 .btn-write가 있으면 로그인된 상태 (글쓰기 버튼이 보임)
-      const writeButton = await page.$('.btn-write')
-      return !!writeButton
+      await page.waitForSelector('.header-top', { timeout: 10_000 })
+
+      const userMenu = await page.$('.header-top .sign.on')
+      if (userMenu) {
+        return true
+      }
+
+      const logoutLink = await page.$('.header-top a[href*="logout"]')
+      if (logoutLink) {
+        return true
+      }
+
+      return false
     } catch {
       return false
     }
+  }
+
+  private async handlePasswordChangeCampaignPopup(page: Page): Promise<boolean> {
+    try {
+      const popup = page.locator('.pwch_cpiwrap')
+      await popup.waitFor({ state: 'visible', timeout: 5_000 })
+
+      const laterButton = popup.locator('a.btn-line-login').filter({ hasText: /다음에 변경/ })
+      if ((await laterButton.count()) > 0) {
+        await Promise.all([
+          page.waitForURL(url => url.hostname === 'm.dcinside.com', { timeout: 60_000 }).catch(() => null),
+          laterButton.first().click(),
+        ])
+        await sleep(1_000)
+        return true
+      }
+    } catch {
+      // 팝업이 없는 경우 무시
+    }
+
+    return false
   }
 
   /**
