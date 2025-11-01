@@ -88,6 +88,15 @@ export abstract class DcinsideBaseService {
   }
 
   /**
+   * 권한 확인
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+    const licenseCache = settings.licenseCache
+    assertPermission(licenseCache, permission)
+  }
+
+  /**
    * 브라우저 실행 (프록시 지원)
    */
   public async launch(options?: {
@@ -889,14 +898,5 @@ export abstract class DcinsideBaseService {
       default:
         return null
     }
-  }
-
-  /**
-   * 권한 확인
-   */
-  private async checkPermission(permission: Permission): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-    const licenseCache = settings.licenseCache
-    assertPermission(licenseCache, permission)
   }
 }
