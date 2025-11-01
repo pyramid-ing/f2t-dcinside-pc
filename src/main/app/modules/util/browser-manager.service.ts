@@ -2,13 +2,17 @@ import { Injectable, Logger } from '@nestjs/common'
 import { chromium, Browser, BrowserContext } from 'playwright'
 import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installed.exception'
 
+export interface BrowserLaunchOptions {
+  headless?: boolean
+  args?: string[]
+}
+
 // 브라우저 ID별 브라우저 관리
 interface ManagedBrowser {
   browserId: string
   browser: Browser
   context: BrowserContext
-  headless: boolean // 브라우저 생성 시 사용된 headless 옵션
-  proxyArgs?: string[] // 프록시 args
+  options: BrowserLaunchOptions // 브라우저 생성 시 사용된 옵션 저장
 }
 
 /**
@@ -50,7 +54,7 @@ export class BrowserManagerService {
   private managedBrowsers = new Map<string, ManagedBrowser>() // 브라우저 ID별 브라우저 관리
 
   // 브라우저 실행 (세션 시작)
-  async launchBrowser(headless: boolean = true, proxyArgs?: string[]): Promise<Browser> {
+  async launchBrowser(options: BrowserLaunchOptions = {}): Promise<Browser> {
     // Stealth 모드를 위한 기본 args
     const stealthArgs = [
       '--no-sandbox',
@@ -67,11 +71,11 @@ export class BrowserManagerService {
       '--disable-gpu', // GPU 하드웨어 가속 비활성화
     ]
 
-    // 프록시 args가 있으면 추가
-    const allArgs = proxyArgs ? [...stealthArgs, ...proxyArgs] : stealthArgs
+    // 추가 args가 있으면 병합
+    const allArgs = options.args ? [...stealthArgs, ...options.args] : stealthArgs
 
     const launchOptions: any = {
-      headless,
+      headless: options.headless ?? true,
       args: allArgs,
     }
 
@@ -81,7 +85,7 @@ export class BrowserManagerService {
 
     try {
       const browser = await chromium.launch(launchOptions)
-      this.logger.log(`브라우저 세션 시작됨 (Stealth 모드, headless: ${headless})`)
+      this.logger.log('브라우저 세션 시작됨 (Stealth 모드)')
       return browser
     } catch (error) {
       // Playwright 브라우저 설치 관련 에러 처리
@@ -112,7 +116,7 @@ export class BrowserManagerService {
   }
 
   // 브라우저 ID별 브라우저 가져오기 또는 생성
-  async getOrCreateBrowser(browserId: string, headless: boolean = true, proxyArgs?: string[]): Promise<Browser> {
+  async getOrCreateBrowser(browserId: string, options: BrowserLaunchOptions = {}): Promise<Browser> {
     let managedBrowser = this.managedBrowsers.get(browserId)
 
     // 브라우저가 존재하는 경우
@@ -121,12 +125,12 @@ export class BrowserManagerService {
         // 브라우저가 실제로 연결되어 있는지 확인
         managedBrowser.browser.version()
 
-        // headless 모드 또는 프록시 args가 변경되었는지 확인
-        const proxyChanged = JSON.stringify(managedBrowser.proxyArgs) !== JSON.stringify(proxyArgs)
-        if (managedBrowser.headless !== headless || proxyChanged) {
-          this.logger.log(
-            `브라우저 옵션 변경 감지: ${browserId} (headless: ${managedBrowser.headless} → ${headless}, proxy 변경: ${proxyChanged}), 기존 브라우저 종료 후 새로 생성합니다`,
-          )
+        // 브라우저 옵션이 변경되었는지 확인 (특히 headless 모드)
+        const currentOptions = managedBrowser.options
+        const newOptions = this.normalizeOptions(options)
+
+        if (this.hasOptionsChanged(currentOptions, newOptions)) {
+          this.logger.log(`브라우저 옵션 변경 감지: ${browserId}, 기존 브라우저 종료 후 새로 생성합니다`)
           await this.closeManagedBrowser(browserId)
           managedBrowser = null
         }
@@ -140,15 +144,15 @@ export class BrowserManagerService {
 
     if (!managedBrowser) {
       // 새 브라우저 생성
-      const browser = await this.launchBrowser(headless, proxyArgs)
+      const normalizedOptions = this.normalizeOptions(options)
+      const browser = await this.launchBrowser(normalizedOptions)
       const context = await browser.newContext()
 
       managedBrowser = {
         browserId,
         browser,
         context,
-        headless, // headless 옵션 저장
-        proxyArgs, // 프록시 args 저장
+        options: normalizedOptions, // 옵션 저장
       }
 
       this.managedBrowsers.set(browserId, managedBrowser)
@@ -156,5 +160,46 @@ export class BrowserManagerService {
     }
 
     return managedBrowser.browser
+  }
+
+  // 브라우저 옵션 정규화 (기본값 적용)
+  private normalizeOptions(options: BrowserLaunchOptions): BrowserLaunchOptions {
+    // Stealth 모드를 위한 기본 args
+    const stealthArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--lang=ko-KR,ko',
+      '--disable-blink-features=AutomationControlled', // 자동화 감지 비활성화
+      '--disable-dev-shm-usage',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-infobars',
+      '--window-position=0,0',
+      '--ignore-certificate-errors',
+      '--ignore-certificate-errors-spki-list',
+      '--disable-gpu', // GPU 하드웨어 가속 비활성화
+    ]
+
+    // 추가 args가 있으면 병합
+    const allArgs = options.args ? [...stealthArgs, ...options.args] : stealthArgs
+
+    return {
+      headless: options.headless ?? true,
+      args: allArgs,
+    }
+  }
+
+  // 옵션 변경 여부 확인
+  private hasOptionsChanged(current: BrowserLaunchOptions, newOptions: BrowserLaunchOptions): boolean {
+    // headless 모드 변경 확인
+    if (current.headless !== newOptions.headless) {
+      return true
+    }
+
+    // args 변경 확인 (간단한 비교)
+    const currentArgs = current.args?.sort().join(',') || ''
+    const newArgs = newOptions.args?.sort().join(',') || ''
+
+    return currentArgs !== newArgs
   }
 }

@@ -238,6 +238,17 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
+// 갤러리 ID 추출 함수
+function extractGalleryId(url: string): string {
+  if (!url) return '-'
+  try {
+    const match = url.match(/[?&]id=([^&]+)/)
+    return match ? match[1] : url
+  } catch {
+    return url
+  }
+}
+
 const CommentJobTable: React.FC = () => {
   const { canAccess } = usePermissions()
   const hasCommentPermission = canAccess(Permission.COMMENT)
@@ -948,9 +959,67 @@ const CommentJobTable: React.FC = () => {
             sorter: true,
             ellipsis: { showTitle: false },
             render: (text: string, row: CommentJob) => {
-              const content = row.commentJob?.comment || '-'
+              const rawContent = row.commentJob?.comment || '-'
+
+              // URL 디코딩 처리
+              const decodeContent = (content: string): string => {
+                if (content === '-') return content
+                try {
+                  return decodeURIComponent(content)
+                } catch (error) {
+                  // 디코딩 실패 시 원본 반환
+                  return content
+                }
+              }
+
+              const content = decodeContent(rawContent)
+
+              const handleCopyToClipboard = async () => {
+                if (content === '-') return
+
+                try {
+                  await navigator.clipboard.writeText(content)
+                  message.success('댓글 내용이 클립보드에 복사되었습니다')
+                } catch (error) {
+                  // 클립보드 API 실패 시 fallback
+                  try {
+                    const textArea = document.createElement('textarea')
+                    textArea.value = content
+                    document.body.appendChild(textArea)
+                    textArea.select()
+                    document.execCommand('copy')
+                    document.body.removeChild(textArea)
+                    message.success('댓글 내용이 클립보드에 복사되었습니다')
+                  } catch (fallbackError) {
+                    message.error('클립보드 복사에 실패했습니다. 직접 복사해주세요.')
+                  }
+                }
+              }
+
               return (
-                <span title={content} style={{ fontSize: '13px' }}>
+                <span
+                  title={`클릭하여 복사: ${content}`}
+                  style={{
+                    fontSize: '13px',
+                    cursor: content !== '-' ? 'pointer' : 'default',
+                    color: content !== '-' ? '#1890ff' : 'inherit',
+                    textDecoration: content !== '-' ? 'underline' : 'none',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    transition: 'background-color 0.2s',
+                  }}
+                  onClick={handleCopyToClipboard}
+                  onMouseEnter={e => {
+                    if (content !== '-') {
+                      e.currentTarget.style.backgroundColor = 'rgba(24, 144, 255, 0.1)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (content !== '-') {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                    }
+                  }}
+                >
                   {content}
                 </span>
               )

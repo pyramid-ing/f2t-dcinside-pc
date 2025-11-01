@@ -1,4 +1,5 @@
 type RetryFn<T> = () => T | Promise<T>
+type ShouldDiscardFn = (error: any) => boolean
 
 /**
  * A utility that retries a function until it succeeds or the maximum number of retries is reached.
@@ -7,6 +8,7 @@ type RetryFn<T> = () => T | Promise<T>
  * @param interval - The time interval (in milliseconds) between each retry. Defaults to 1000.
  * @param maxRetries - The maximum number of retry attempts. Defaults to 3.
  * @param backoff - The backoff strategy to use: 'linear', 'exponential', or null.
+ * @param shouldDiscard - Optional function to determine if an error should be discarded (thrown immediately). If not provided, all errors trigger retries.
  * @returns {Promise<T>} - A promise that resolves to the result of the function.
  * @throws {Error} - Throws the last error if all retry attempts fail.
  */
@@ -15,6 +17,7 @@ export async function retry<T>(
   interval: number = 1000,
   maxRetries: number = 3,
   backoff: 'exponential' | 'linear' | null = 'linear',
+  shouldDiscard?: ShouldDiscardFn,
 ): Promise<T> {
   let attempt = 0
   let lastError: any = null
@@ -29,6 +32,12 @@ export async function retry<T>(
     } catch (error) {
       console.error(`Error on attempt ${attempt}:`, error)
       lastError = error
+
+      // shouldDiscard 함수가 있고, 에러를 버려야 하면 즉시 throw
+      if (shouldDiscard && shouldDiscard(error)) {
+        console.error(`Error should be discarded. Throwing immediately.`)
+        throw error
+      }
 
       // 마지막 시도에서 에러가 발생하면 에러를 던짐
       if (attempt === maxRetries) {

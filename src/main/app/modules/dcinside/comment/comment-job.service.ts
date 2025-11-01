@@ -11,6 +11,7 @@ import { BulkCommentJobCreateDto } from './dto/comment-excel-upload.dto'
 import { DcinsideCommentAutomationService } from './dcinside-comment-automation.service'
 import { HtmlTitleExtractor } from '@main/app/utils/html-title-extractor'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 
 @Injectable()
 export class CommentJobService implements JobProcessor {
@@ -20,7 +21,23 @@ export class CommentJobService implements JobProcessor {
     private readonly prismaService: PrismaService,
     private readonly jobLogsService: JobLogsService,
     private readonly commentAutomationService: DcinsideCommentAutomationService,
+    private readonly jobContext: JobContextService,
   ) {}
+
+  /**
+   * URL에서 galleryId 추출
+   * 예: https://gall.dcinside.com/board/view/?id=programming&no=1234 -> programming
+   * 예: https://gall.dcinside.com/mgallery/board/view/?id=baseball_new10&no=5678 -> baseball_new10
+   */
+  private extractGalleryId(postUrl: string): string {
+    try {
+      const match = postUrl.match(/[?&]id=([^&]+)/)
+      return match ? match[1] : 'unknown'
+    } catch (error) {
+      this.logger.warn(`Failed to extract galleryId from URL: ${postUrl}`)
+      return 'unknown'
+    }
+  }
 
   /**
    * DcException을 CustomHttpException으로 매핑
@@ -37,6 +54,10 @@ export class CommentJobService implements JobProcessor {
         return new CustomHttpException(ErrorCode.NICKNAME_REQUIRED, dcException.metadata)
       case DcExceptionType.CAPTCHA_SOLVE_FAILED:
         return new CustomHttpException(ErrorCode.CAPTCHA_SOLVE_FAILED, dcException.metadata)
+      case DcExceptionType.RECAPTCHA_SOLVE_FAILED:
+        return new CustomHttpException(ErrorCode.RECAPTCHA_SOLVE_FAILED, dcException.metadata)
+      case DcExceptionType.TWOCAPTCHA_API_KEY_REQUIRED:
+        return new CustomHttpException(ErrorCode.TWOCAPTCHA_API_KEY_REQUIRED, dcException.metadata)
       case DcExceptionType.CHROME_NOT_INSTALLED:
         return new CustomHttpException(ErrorCode.CHROME_NOT_INSTALLED, dcException.metadata)
       case DcExceptionType.AUTH_REQUIRED:
@@ -65,64 +86,67 @@ export class CommentJobService implements JobProcessor {
   async process(jobId: string): Promise<JobResult | void> {
     this.logger.log(`Processing comment job: ${jobId}`)
 
-    try {
-      // Job과 CommentJob 정보 조회
-      const job = await this.prismaService.job.findUnique({
-        where: { id: jobId },
-        include: { commentJob: true },
-      })
-
-      if (!job || !job.commentJob) {
-        throw new Error(`Comment job not found: ${jobId}`)
-      }
-
-      const commentJob = job.commentJob
-
-      this.logger.log(`Processing comment for post: ${commentJob.postUrl}`)
-
+    // JobContext를 설정하면서 작업 실행
+    return this.jobContext.runWithContext(jobId, JobType.COMMENT, async () => {
       try {
-        await this.commentAutomationService.commentOnPost(
-          commentJob.postUrl,
-          commentJob.comment,
-          commentJob.nickname,
-          commentJob.password,
-          commentJob.loginId,
-          commentJob.loginPassword,
-          jobId,
-        )
+        // Job과 CommentJob 정보 조회
+        const job = await this.prismaService.job.findUnique({
+          where: { id: jobId },
+          include: { commentJob: true },
+        })
 
-        const resultMessage = `댓글 작성 성공: ${commentJob.postUrl}`
+        if (!job || !job.commentJob) {
+          throw new Error(`Comment job not found: ${jobId}`)
+        }
 
-        // 작업 로그 기록
-        await this.jobLogsService.createJobLog(jobId, resultMessage, 'info')
+        const commentJob = job.commentJob
 
-        this.logger.log(`Comment job completed: ${jobId} - ${resultMessage}`)
+        this.logger.log(`Processing comment for post: ${commentJob.postUrl}`)
 
-        return {
-          resultMsg: resultMessage,
+        try {
+          // ✅ jobId 파라미터 제거 - JobContext에서 자동으로 가져옴
+          await this.commentAutomationService.commentOnPost(
+            commentJob.postUrl,
+            commentJob.comment,
+            commentJob.nickname,
+            commentJob.password,
+            commentJob.loginId,
+            commentJob.loginPassword,
+          )
+
+          const resultMessage = `댓글 작성 성공: ${commentJob.postUrl}`
+
+          // ✅ jobId 파라미터 제거 - JobContext에서 자동으로 가져옴
+          await this.jobLogsService.createJobLog(resultMessage, 'info')
+
+          this.logger.log(`Comment job completed: ${jobId} - ${resultMessage}`)
+
+          return {
+            resultMsg: resultMessage,
+          }
+        } catch (error) {
+          const resultMessage = `댓글 작성 실패: ${commentJob.postUrl} - ${error.message}`
+          this.logger.error(`Failed to write comment to post: ${error.message}`)
+
+          // ✅ jobId 파라미터 제거
+          await this.jobLogsService.createJobLog(resultMessage, 'error')
+
+          // DcException을 CustomHttpException으로 매핑
+          if (error instanceof DcException) {
+            throw this.mapDcExceptionToCustomHttpException(error)
+          }
+
+          throw error
         }
       } catch (error) {
-        const resultMessage = `댓글 작성 실패: ${commentJob.postUrl} - ${error.message}`
-        this.logger.error(`Failed to write comment to post: ${error.message}`)
+        this.logger.error(`Failed to process comment job ${jobId}: ${error.message}`, error.stack)
 
-        // 에러 로그 기록
-        await this.jobLogsService.createJobLog(jobId, resultMessage, 'error')
-
-        // DcException을 CustomHttpException으로 매핑
-        if (error instanceof DcException) {
-          throw this.mapDcExceptionToCustomHttpException(error)
-        }
+        // ✅ jobId 파라미터 제거
+        await this.jobLogsService.createJobLog(`댓글 작업 실패: ${error.message}`, 'error')
 
         throw error
       }
-    } catch (error) {
-      this.logger.error(`Failed to process comment job ${jobId}: ${error.message}`, error.stack)
-
-      // 에러 로그 기록
-      await this.jobLogsService.createJobLog(jobId, `댓글 작업 실패: ${error.message}`, 'error')
-
-      throw error
-    }
+    })
   }
 
   /**
@@ -138,6 +162,7 @@ export class CommentJobService implements JobProcessor {
     loginId?: string
     loginPassword?: string
     scheduledAt?: Date
+    status?: JobStatus
   }) {
     const jobs = []
 
@@ -149,12 +174,14 @@ export class CommentJobService implements JobProcessor {
       const postUrl = commentJobData.postUrls[i]
       // 실제 제목을 가져오되, 실패한 경우 기본값 사용
       const postTitle = actualTitles[i] || commentJobData.postTitles?.[i] || '알 수 없는 제목'
+      // URL에서 galleryId 추출
+      const galleryId = this.extractGalleryId(postUrl)
 
       const job = await this.prismaService.job.create({
         data: {
           type: JobType.COMMENT,
           subject: `[댓글] ${commentJobData.keyword}`,
-          status: JobStatus.PENDING,
+          status: commentJobData.status ?? JobStatus.PENDING,
           scheduledAt: commentJobData.scheduledAt || new Date(),
           commentJob: {
             create: {
@@ -162,6 +189,7 @@ export class CommentJobService implements JobProcessor {
               comment: commentJobData.comment,
               postUrl,
               postTitle,
+              galleryId, // 추가: 갤러리 ID
               nickname: commentJobData.nickname ?? null,
               password: commentJobData.password ?? null,
               loginId: commentJobData.loginId ?? null,
@@ -281,7 +309,12 @@ export class CommentJobService implements JobProcessor {
           logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
         }
       }
-      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+
+      // 에러 로그를 위한 context 설정
+      await this.jobContext.runWithContext(job.id, JobType.COMMENT, async () => {
+        await this.jobLogsService.createJobLog(logMessage, 'error')
+      })
+
       this.logger.error(logMessage, error.stack)
 
       await this.prismaService.job.update({

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus, JobType } from './job.types'
@@ -15,6 +16,7 @@ export class JobService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobLogsService: JobLogsService,
+    private readonly jobContext: JobContextService,
   ) {}
 
   private buildWhere(filters: JobFiltersDto): Prisma.JobWhereInput {
@@ -94,6 +96,7 @@ export class JobService {
         },
         postJob: true,
         commentJob: true,
+        coupasJob: true,
       },
       skip,
       take: limitNum,
@@ -656,7 +659,7 @@ export class JobService {
     })
 
     // 재시도 로그 추가
-    await this.jobLogsService.createJobLog(jobId, '삭제 재시도 요청')
+    await this.jobLogsService.createJobLog('삭제 재시도 요청')
 
     return { success: true, message: '삭제 재시도 요청이 완료되었습니다.' }
   }
@@ -727,8 +730,12 @@ export class JobService {
     await Promise.all(updatePromises)
     const updateResult = { count: failedDeleteJobs.length }
 
-    // 각 작업에 재시도 로그 추가
-    const logPromises = failedDeleteJobs.map(job => this.jobLogsService.createJobLog(job.id, '삭제 재시도 요청 (벌크)'))
+    // 각 작업에 재시도 로그 추가 (각각 context 설정)
+    const logPromises = failedDeleteJobs.map(job =>
+      this.jobContext.runWithContext(job.id, job.type, async () => {
+        await this.jobLogsService.createJobLog('삭제 재시도 요청 (벌크)')
+      }),
+    )
     await Promise.all(logPromises)
 
     return {

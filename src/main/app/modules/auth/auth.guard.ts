@@ -14,6 +14,7 @@ export enum Permission {
   POSTING = 'posting',
   TETHERING = 'tethering',
   COMMENT = 'comment',
+  USE_COUPANG_PARTNERS = 'coupas',
 }
 
 interface License {

@@ -7,18 +7,19 @@ import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { sleep } from '@main/app/utils/sleep'
-import { retry } from '@main/app/utils/retry'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { Settings, IpMode } from '@main/app/modules/settings/settings.types'
-import { DcException } from '@main/common/errors/dc.exception'
+import { DcException, DcExceptionType } from '@main/common/errors/dc.exception'
 import { DcinsideCommentSearchDto, SortType } from '@main/app/modules/dcinside/comment/dto/dcinside-comment-search.dto'
 import {
   DcinsidePostItemDto,
   PostSearchResponseDto,
 } from '@main/app/modules/dcinside/comment/dto/dcinside-post-item.dto'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
+import { retry } from '@main/app/utils/retry'
 import UserAgent from 'user-agents'
 
 @Injectable()
@@ -39,6 +40,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     browserManagerService: BrowserManagerService,
     tetheringService: TetheringService,
     jobLogsService: JobLogsService,
+    jobContext: JobContextService,
   ) {
     super(
       settingsService,
@@ -48,6 +50,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       browserManagerService,
       tetheringService,
       jobLogsService,
+      jobContext,
     )
   }
 
@@ -61,27 +64,24 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     password: string | null,
     loginId: string | null,
     loginPassword: string | null,
-    jobId: string,
   ): Promise<void> {
-    await this.jobLogsService.createJobLog(jobId, '브라우저 자동화 방식으로 댓글 작성 시작')
-
     const settings = await this.settingsService.getSettings()
 
-    // 1. 페이지 켜기 (브라우저 생성)
-    const { context, page, browserId } = await this._launchBrowser(jobId, settings)
+    // 1. 페이지 켜기 (브라우저 생성) - Retry 적용
+    const { context, page, browserId } = await retry(() => this._launchBrowser(settings), 2000, 3, 'linear')
 
     try {
       // 2. IP 변경 처리
-      await this._handleIpChange(jobId, settings)
+      await this._handleIpChange(settings)
 
       // 3. 로그인 처리
-      const isMember = await this._handleLogin(jobId, context, page, loginId, loginPassword)
+      const isMember = await this._handleLogin(context, page, loginId, loginPassword)
 
       // 4. 작업 간 딜레이
-      await this.applyTaskDelay(jobId, settings)
+      await this.applyTaskDelay(settings.taskDelay)
 
-      // 5. 댓글 작성 실행
-      await this._navigateToPost(page, postUrl)
+      // 5. 댓글 작성 실행 - Retry 적용
+      await retry(() => this._navigateToPost(page, postUrl), 2000, 3, 'linear')
 
       // 비정상(삭제/존재하지 않음) 페이지 감지 시 예외 발생
       await this.checkAbnormalPage(page)
@@ -95,17 +95,24 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
 
       await this._inputComment(page, comment)
 
-      await this._submitCommentWithRetry(page, postUrl)
+      // 6. 댓글 등록 (DC 캡챠 에러만 재시도, 나머지는 discard)
+      await retry(
+        () => this._submitComment(page, postUrl),
+        2000,
+        3,
+        'linear',
+        error => !(error.type === DcExceptionType.CAPTCHA_SOLVE_FAILED),
+      )
     } finally {
       // 브라우저 종료 (신규 생성 모드일 때만)
       if (!settings.reuseWindowBetweenTasks) {
-        await this._closeBrowser(jobId, browserId)
+        await this._closeBrowser(browserId)
       }
     }
   }
 
   /**
-   * 디시인사이드 게시물 검색 (모바일 기준)
+   * 디시인사이드 게시물 검색
    */
   async searchPosts(searchDto: DcinsideCommentSearchDto): Promise<PostSearchResponseDto> {
     try {
@@ -239,9 +246,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 1. 페이지 켜기 (브라우저 생성)
    */
   private async _launchBrowser(
-    jobId: string,
     settings: Settings,
   ): Promise<{ context: BrowserContext; page: Page; browserId: string }> {
+    const jobId = this.jobContext.getJobId()
+
     // 브라우저 ID 생성 (재사용 모드에 따라 결정)
     const browserId = settings.reuseWindowBetweenTasks
       ? DcinsideCommentAutomationService.BROWSER_IDS.DCINSIDE_REUSE
@@ -250,17 +258,17 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     // IP 모드에 따른 브라우저 실행
     switch (settings?.ipMode) {
       case IpMode.PROXY:
-        const { context, page } = await this.handleProxyMode(jobId, settings, browserId)
+        const { context, page } = await this.handleProxyMode(settings, browserId)
         return { context, page, browserId }
 
       case IpMode.TETHERING:
       case IpMode.NONE:
       default:
         if (settings.reuseWindowBetweenTasks) {
-          const { context, page } = await this.handleBrowserReuseMode(jobId, settings, browserId)
+          const { context, page } = await this.handleBrowserReuseMode(settings, browserId)
           return { context, page, browserId }
         } else {
-          const { context, page } = await this.handleBrowserNewMode(jobId, settings, browserId)
+          const { context, page } = await this.handleBrowserNewMode(settings, browserId)
           return { context, page, browserId }
         }
     }
@@ -269,9 +277,9 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 2. IP 변경 처리
    */
-  private async _handleIpChange(jobId: string, settings: Settings): Promise<void> {
+  private async _handleIpChange(settings: Settings): Promise<void> {
     if (settings?.ipMode === IpMode.TETHERING) {
-      await this.handleTetheringMode(jobId, settings)
+      await this.handleTetheringMode(settings)
     }
     // 프록시 모드는 브라우저 생성 시 이미 처리됨
   }
@@ -280,7 +288,6 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
    * 3. 로그인 처리
    */
   private async _handleLogin(
-    jobId: string,
     context: BrowserContext,
     page: Page,
     loginId: string | null,
@@ -288,13 +295,13 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   ): Promise<boolean> {
     let isMember = false
     if (loginId && loginPassword) {
-      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${loginId}`)
+      await this.jobLogsService.createJobLog(`로그인 시도: ${loginId}`)
       await this.handleBrowserLogin(context, page, loginId, loginPassword)
-      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      await this.jobLogsService.createJobLog('로그인 성공')
       isMember = true
     } else {
       this.logger.log(`비로그인 모드로 진행`)
-      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+      await this.jobLogsService.createJobLog('비로그인 모드로 진행')
     }
     return isMember
   }
@@ -302,10 +309,10 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 브라우저 종료
    */
-  private async _closeBrowser(jobId: string, browserId: string): Promise<void> {
+  private async _closeBrowser(browserId: string): Promise<void> {
     try {
       await this.browserManagerService.closeManagedBrowser(browserId)
-      await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+      await this.jobLogsService.createJobLog('브라우저 창 종료 완료')
     } catch (error) {
       this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
     }
@@ -431,57 +438,62 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   /**
    * 댓글 등록 (재시도 포함)
    */
-  private async _submitCommentWithRetry(page: Page, postUrl: string): Promise<void> {
-    await retry(
-      async () => {
-        // 캡차 확인
-        const captchaResult = await this._handleCaptcha(page)
-        if (!captchaResult.success) {
-          throw DcException.captchaSolveFailed({
-            message: `자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`,
-          })
-        }
+  private async _submitComment(page: Page, postUrl: string): Promise<void> {
+    // 캡차 확인
+    const captchaResult = await this._handleCaptcha(page)
+    if (!captchaResult.success) {
+      throw DcException.captchaSolveFailed({
+        message: `자동입력 방지코드가 일치하지 않습니다. (${captchaResult.error})`,
+      })
+    }
 
-        // 제출 전 댓글 개수 확인
-        const commentCountBefore = await this._getCommentCount(page)
-        this.logger.log(`제출 전 댓글 개수: ${commentCountBefore}`)
+    // 제출 전 댓글 개수 확인
+    const commentCountBefore = await this._getCommentCount(page)
+    this.logger.log(`제출 전 댓글 개수: ${commentCountBefore}`)
 
-        // 댓글 등록 전에 dialog 이벤트 리스너 등록
-        let alertMessage = ''
-        const dialogHandler = async (dialog: any) => {
-          alertMessage = dialog.message()
-          this.logger.log(`Alert detected: ${alertMessage}`)
-          await dialog.accept()
-        }
-        page.on('dialog', dialogHandler)
+    // 댓글 등록 전에 dialog 이벤트 리스너 등록
+    let alertMessage = ''
+    const dialogHandler = async (dialog: any) => {
+      alertMessage = dialog.message()
+      this.logger.log(`Alert detected: ${alertMessage}`)
+      await dialog.accept()
+    }
+    page.on('dialog', dialogHandler)
 
-        try {
-          const submitButton = await page.$(`.btn-comment-write`)
-          if (!submitButton) {
-            throw DcException.commentDisabledPage({
-              message: '댓글 작성 버튼을 찾을 수 없습니다.',
-            })
-          }
+    try {
+      const submitButton = await page.$(`.btn-comment-write`)
+      if (!submitButton) {
+        throw DcException.commentDisabledPage({
+          message: '댓글 작성 버튼을 찾을 수 없습니다.',
+        })
+      }
 
-          await submitButton.click()
-          this.logger.log('댓글 작성 버튼 클릭 완료')
+      await submitButton.click()
+      this.logger.log('댓글 작성 버튼 클릭 완료')
 
-          // 충분한 대기 시간 (5초)
-          await sleep(3000)
+      await sleep(3000)
 
-          // 댓글 등록 후 성공/실패 메시지 확인
-          await this._checkCommentSubmissionResult(alertMessage)
+      // 동적으로 생성된 캡챠 확인 (#bot_capcha)
+      const botCaptcha = await page.$('#bot_capcha')
+      if (botCaptcha) {
+        this.logger.log('동적 캡챠 감지됨, 캡챠 해결 후 재제출')
 
-          this.logger.log(`Comment posted successfully on: ${postUrl}`)
-        } finally {
-          // 이벤트 리스너 정리
-          page.removeAllListeners('dialog')
-        }
-      },
-      3000, // 3초 간격
-      3, // 최대 3회 재시도
-      'linear', // 선형 백오프
-    )
+        // 동적 캡챠 해결
+        await this.solveDcCaptcha(page, '#bot_capcha .code img', '#captcha_codeC')
+
+        await submitButton.click()
+
+        await sleep(3000)
+      }
+
+      // 댓글 등록 후 성공/실패 메시지 확인
+      await this._checkCommentSubmissionResult(alertMessage)
+
+      this.logger.log(`Comment posted successfully on: ${postUrl}`)
+    } finally {
+      // 이벤트 리스너 정리
+      page.removeAllListeners('dialog')
+    }
   }
 
   /**
@@ -542,7 +554,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
     }
 
     // 캡차 실패 체크
-    if (alertMessage.includes('자동입력 방지코드가 일치하지 않습니다')) {
+    if (alertMessage.includes('코드를 확인해 주십시오.')) {
       throw DcException.captchaSolveFailed({
         message: '자동입력 방지코드가 일치하지 않습니다.',
       })

@@ -13,6 +13,7 @@ export interface JobProcessor {
 export enum JobType {
   POST = 'post',
   COMMENT = 'comment',
+  COUPAS = 'coupas',
 }
 
 export enum JobStatus {

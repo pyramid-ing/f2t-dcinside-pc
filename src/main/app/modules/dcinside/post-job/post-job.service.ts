@@ -12,6 +12,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcExceptionMapper } from '@main/app/modules/dcinside/utils/dc-exception-mapper.util'
 import { DcException } from '@main/common/errors/dc.exception'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import * as XLSX from 'xlsx'
 
 @Injectable()
@@ -25,6 +26,7 @@ export class PostJobService implements JobProcessor {
     private readonly settingsService: SettingsService,
     private readonly tetheringService: TetheringService,
     private readonly browserManager: BrowserManagerService,
+    private readonly jobContext: JobContextService,
   ) {}
 
   canProcess(job: any): boolean {
@@ -84,7 +86,12 @@ export class PostJobService implements JobProcessor {
           logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
         }
       }
-      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
+
+      // 에러 로그를 위한 context 설정
+      await this.jobContext.runWithContext(job.id, JobType.POST, async () => {
+        await this.jobLogsService.createJobLog(logMessage, 'error')
+      })
+
       this.logger.error(logMessage, error.stack)
       await this.markJobAsStatus(job.id, JobStatus.FAILED, error.message)
     }
@@ -98,51 +105,54 @@ export class PostJobService implements JobProcessor {
       throw new Error('삭제할 게시글의 URL이 없습니다.')
     }
 
-    try {
-      // 삭제 시작 - DELETE_PROCESSING 상태로 변경
-      await this.prismaService.job.updateMany({
-        where: {
-          id: job.id,
-          status: JobStatus.DELETE_REQUEST, // DELETE_REQUEST 상태인 것만 처리
-        },
-        data: {
-          status: JobStatus.DELETE_PROCESSING,
-        },
-      })
+    // JobContext를 설정하면서 작업 실행
+    return this.jobContext.runWithContext(job.id, JobType.POST, async () => {
+      try {
+        // 삭제 시작 - DELETE_PROCESSING 상태로 변경
+        await this.prismaService.job.updateMany({
+          where: {
+            id: job.id,
+            status: JobStatus.DELETE_REQUEST, // DELETE_REQUEST 상태인 것만 처리
+          },
+          data: {
+            status: JobStatus.DELETE_PROCESSING,
+          },
+        })
 
-      this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
-      await this.jobLogsService.createJobLog(job.id, `게시글 삭제 시작: ${job.postJob.resultUrl}`)
+        this.logger.log(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
+        await this.jobLogsService.createJobLog(`게시글 삭제 시작: ${job.postJob.resultUrl}`)
 
-      await this.postingService.deleteArticleByResultUrl(job.postJob, job.id, this.browserManager)
+        await this.postingService.deleteArticleByResultUrl(job.postJob, this.browserManager)
 
-      // 삭제 성공 시 원본 작업의 deletedAt 업데이트
-      await this.prismaService.postJob.update({
-        where: { id: job.postJob.id },
-        data: { deletedAt: new Date() },
-      })
+        // 삭제 성공 시 원본 작업의 deletedAt 업데이트
+        await this.prismaService.postJob.update({
+          where: { id: job.postJob.id },
+          data: { deletedAt: new Date() },
+        })
 
-      await this.markJobAsStatus(job.id, JobStatus.DELETE_COMPLETED)
+        await this.markJobAsStatus(job.id, JobStatus.DELETE_COMPLETED)
 
-      this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
-    } catch (error) {
-      // DcException을 CustomHttpException으로 변환
-      if (error instanceof DcException) {
-        error = DcExceptionMapper.mapDcExceptionToCustomHttpException(error)
-      }
-
-      // ErrorCodeMap에서 매핑
-      let logMessage = `작업 처리 중 오류 발생: ${error.message}`
-      if (error instanceof CustomHttpException) {
-        const mapped = ErrorCodeMap[error.errorCode]
-        if (mapped) {
-          logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+        this.logger.log(`게시글 삭제 완료: ${job.postJob.resultUrl}`)
+      } catch (error) {
+        // DcException을 CustomHttpException으로 변환
+        if (error instanceof DcException) {
+          error = DcExceptionMapper.mapDcExceptionToCustomHttpException(error)
         }
-      }
-      await this.jobLogsService.createJobLog(job.id, logMessage, 'error')
-      this.logger.error(logMessage, error.stack)
 
-      await this.markJobAsStatus(job.id, JobStatus.DELETE_FAILED, `삭제 실패: ${error.message}`)
-    }
+        // ErrorCodeMap에서 매핑
+        let logMessage = `작업 처리 중 오류 발생: ${error.message}`
+        if (error instanceof CustomHttpException) {
+          const mapped = ErrorCodeMap[error.errorCode]
+          if (mapped) {
+            logMessage = `작업 처리 중 오류 발생: ${mapped.message(error.metadata)}`
+          }
+        }
+        await this.jobLogsService.createJobLog(logMessage, 'error')
+        this.logger.error(logMessage, error.stack)
+
+        await this.markJobAsStatus(job.id, JobStatus.DELETE_FAILED, `삭제 실패: ${error.message}`)
+      }
+    })
   }
 
   async markJobAsStatus(jobId: string, status: JobStatus, errorMsg?: string) {
@@ -157,45 +167,47 @@ export class PostJobService implements JobProcessor {
   }
 
   async process(jobId: string): Promise<void> {
-    const job = await this.prismaService.job.findUniqueOrThrow({
-      where: { id: jobId },
-      include: {
-        postJob: true,
-      },
-    })
-
-    // 통합된 포스팅 처리 (브라우저 모드 + IP 모드 + 로그인 포함)
-    const result = await this.postingService.postArticle(jobId, job.postJob)
-
-    await this.jobLogsService.createJobLog(jobId, `포스팅 완료: ${result.url}`)
-
-    // 포스팅 성공 시 resultUrl을 PostJob에 저장
-    if (result.url) {
-      const updateData: any = { resultUrl: result.url }
-
-      // autoDeleteMinutes가 설정되어 있으면 deleteAt 계산 (현재시간 기준)
-      const autoDeleteMinutes = job.postJob.autoDeleteMinutes
-      if (autoDeleteMinutes && autoDeleteMinutes > 0) {
-        const now = new Date()
-        const deleteAt = new Date(now.getTime() + autoDeleteMinutes * 60 * 1000)
-        updateData.deleteAt = deleteAt
-        await this.jobLogsService.createJobLog(
-          jobId,
-          `등록후자동삭제 설정: ${autoDeleteMinutes}분 후 (${deleteAt.toLocaleString()})`,
-        )
-      }
-
-      await this.prismaService.postJob.update({
-        where: { id: job.postJob.id },
-        data: updateData,
+    // JobContext를 설정하면서 작업 실행
+    return this.jobContext.runWithContext(jobId, JobType.POST, async () => {
+      const job = await this.prismaService.job.findUniqueOrThrow({
+        where: { id: jobId },
+        include: {
+          postJob: true,
+        },
       })
 
-      // 테더링 모드에서 포스팅 수 카운트 증가
-      const settings = await this.settingsService.getSettings()
-      if (settings?.ipMode === IpMode.TETHERING) {
-        this.tetheringService.onPostCompleted()
+      // 통합된 포스팅 처리 (브라우저 모드 + IP 모드 + 로그인 포함)
+      const result = await this.postingService.postArticle(job.postJob)
+
+      await this.jobLogsService.createJobLog(`포스팅 완료: ${result.url}`)
+
+      // 포스팅 성공 시 resultUrl을 PostJob에 저장
+      if (result.url) {
+        const updateData: any = { resultUrl: result.url }
+
+        // autoDeleteMinutes가 설정되어 있으면 deleteAt 계산 (현재시간 기준)
+        const autoDeleteMinutes = job.postJob.autoDeleteMinutes
+        if (autoDeleteMinutes && autoDeleteMinutes > 0) {
+          const now = new Date()
+          const deleteAt = new Date(now.getTime() + autoDeleteMinutes * 60 * 1000)
+          updateData.deleteAt = deleteAt
+          await this.jobLogsService.createJobLog(
+            `등록후자동삭제 설정: ${autoDeleteMinutes}분 후 (${deleteAt.toLocaleString()})`,
+          )
+        }
+
+        await this.prismaService.postJob.update({
+          where: { id: job.postJob.id },
+          data: updateData,
+        })
+
+        // 테더링 모드에서 포스팅 수 카운트 증가
+        const settings = await this.settingsService.getSettings()
+        if (settings?.ipMode === IpMode.TETHERING) {
+          this.tetheringService.onPostCompleted()
+        }
       }
-    }
+    })
   }
 
   // 예약 작업 목록 조회 (최신 업데이트가 위로 오게 정렬)

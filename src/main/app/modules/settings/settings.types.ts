@@ -53,6 +53,30 @@ export interface Settings {
       postCount?: number // 포스팅 수 기반: N개 포스팅 후 변경 (기본 5개)
     }
   }
+
+  /** 게시글 모니터링 설정 */
+  monitoring?: {
+    includeImagesInAiAnalysis?: boolean // AI 분석 시 이미지 포함 여부
+  }
+
+  /** 댓글 여러 개 설정 */
+  comments?: string[] // 댓글 목록
+  commentSelectionMethod?: 'random' | 'sequential' // 댓글 선택 방식 (랜덤 또는 순차)
+  commentPrefixes?: string[] // 댓글 접두어 템플릿 목록 (예: "좋은 정보", "유용한 글")
+  commentSuffixes?: string[] // 댓글 접미사 템플릿 목록 (예: "감사합니다", "도움됐어요")
+
+  /** 워드프레스 계정 목록 */
+  wordpressAccounts?: {
+    id: string // 계정 고유 ID
+    name: string // 계정 이름
+    url: string // 워드프레스 사이트 URL
+    wpUsername: string // 워드프레스 사용자명
+    apiKey: string // 워드프레스 API 키
+  }[]
+
+  /** 쿠팡 파트너스 설정 */
+  coupangPartnersAccessKey?: string // 쿠팡 파트너스 Access Key
+  coupangPartnersSecretKey?: string // 쿠팡 파트너스 Secret Key
 }
 
 export enum IpMode {

@@ -31,6 +31,7 @@ interface ExcelCommentData {
   로그인ID: string
   로그인비밀번호: string
   예약날짜: string
+  쿠파스: string
 }
 
 interface ParsedCommentData {
@@ -41,6 +42,7 @@ interface ParsedCommentData {
   loginId?: string
   loginPassword?: string
   scheduledAt?: Date
+  coupas?: string | number
 }
 
 const CommentManagement: React.FC = () => {
@@ -64,7 +66,7 @@ const CommentManagement: React.FC = () => {
   }
 
   // 샘플 엑셀 다운로드 핸들러
-  const handleSampleDownload = (type: 'nonMemberGallery' | 'nonMemberNickname' | 'member') => {
+  const handleSampleDownload = (type: 'nonMemberGallery' | 'nonMemberNickname' | 'member' | 'coupas') => {
     try {
       let fileName = ''
       switch (type) {
@@ -144,6 +146,9 @@ const CommentManagement: React.FC = () => {
             scheduledAt = parsed
           }
 
+          // 쿠파스 필드 파싱
+          const coupas = row['쿠파스'] || undefined
+
           return {
             postUrl: row['DC URL'],
             comment: row['댓글내용'],
@@ -152,6 +157,7 @@ const CommentManagement: React.FC = () => {
             loginId: row['로그인ID'] || undefined,
             loginPassword: row['로그인비밀번호'] || undefined,
             scheduledAt,
+            coupas,
           }
         })
 
@@ -175,18 +181,34 @@ const CommentManagement: React.FC = () => {
 
     setUploadLoading(true)
     try {
+      // 모든 작업을 commentJobs로 통합 (쿠파스 필드를 포함)
       const bulkRequest: BulkCommentJobRequest = {
         keyword: '엑셀 업로드',
-        commentJobs: excelData,
+        commentJobs: excelData.map(job => ({
+          postUrl: job.postUrl,
+          comment: job.comment,
+          nickname: job.nickname,
+          password: job.password,
+          loginId: job.loginId,
+          loginPassword: job.loginPassword,
+          scheduledAt: job.scheduledAt,
+          coupas: job.coupas === '1' || job.coupas === 1 ? 1 : 0, // 쿠파스 필드 추가 (0 또는 1)
+        })),
       }
 
       const jobs = await commentApi.createBulkCommentJobs(bulkRequest)
-      message.success(`${jobs.length}개의 댓글 작업이 생성되었습니다.`)
+
+      const coupasCount = excelData.filter(job => job.coupas === '1' || job.coupas === 1).length
+      const commentCount = excelData.length - coupasCount
+
+      message.success(
+        `총 ${jobs.length}개의 작업이 생성되었습니다. (쿠파스: ${coupasCount}개, 일반 댓글: ${commentCount}개)`,
+      )
 
       // 데이터 초기화
       setExcelData([])
     } catch (error) {
-      message.error('댓글 작업 생성에 실패했습니다.')
+      message.error('작업 생성에 실패했습니다.')
       console.error('Bulk job creation error:', error)
     } finally {
       setUploadLoading(false)
@@ -211,6 +233,13 @@ const CommentManagement: React.FC = () => {
       render: (comment: string) => (
         <span style={{ fontSize: '12px' }}>{comment.length > 30 ? `${comment.substring(0, 30)}...` : comment}</span>
       ),
+    },
+    {
+      title: '쿠파스',
+      dataIndex: 'coupas',
+      key: 'coupas',
+      width: 60,
+      render: (coupas: string | number) => (coupas === '1' || coupas === 1 ? '✅' : '-'),
     },
     {
       title: '닉네임',
@@ -257,7 +286,9 @@ const CommentManagement: React.FC = () => {
             • 비회원 (갤러리닉): 갤러리 닉네임 사용, 닉네임/비밀번호 불필요
             <br />
             • 비회원 (닉네임입력): 직접 닉네임 입력, 닉네임+비밀번호 필수
-            <br />• 회원: 로그인ID+로그인비밀번호 필수
+            <br />
+            • 회원: 로그인ID+로그인비밀번호 필수
+            <br />• 쿠파스 워크플로우: DC 게시글 → 쿠팡 제품 검색 → 워드프레스 포스팅 → 댓글 작성
           </Text>
         </Space>
       </UploadSection>

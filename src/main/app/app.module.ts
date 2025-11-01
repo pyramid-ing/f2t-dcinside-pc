@@ -13,6 +13,8 @@ import { UtilModule } from '@main/app/modules/util/util.module'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { JobModule } from '@main/app/modules/dcinside/job/job.module'
 import { AuthModule } from '@main/app/modules/auth/auth.module'
+import { CoupangWorkflowModule } from '@main/app/modules/coupang-workflow/coupang-workflow.module'
+import { NaverQRModule } from '@main/app/modules/naver-qr/naver-qr.module'
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { AuthModule } from '@main/app/modules/auth/auth.module'
     SettingsModule,
     DcinsideModule,
     AuthModule,
+    CoupangWorkflowModule,
+    NaverQRModule,
   ],
   providers: [
     {

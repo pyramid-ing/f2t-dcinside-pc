@@ -1,12 +1,14 @@
 export const JOB_TYPE = {
   POST: 'post',
   COMMENT: 'comment',
+  COUPAS: 'coupas',
 } as const
 
 export const JOB_TYPE_OPTIONS = [
   { value: '', label: '전체' },
   { value: JOB_TYPE.POST, label: '포스팅' },
   { value: JOB_TYPE.COMMENT, label: '댓글' },
+  { value: JOB_TYPE.COUPAS, label: '쿠파스' },
 ]
 
 export const JOB_STATUS = {
@@ -111,8 +113,6 @@ export interface PostJobDetail {
   deleteAt?: string
   deletedAt?: string
   autoDeleteMinutes?: number
-  viewCount?: number
-  viewCountUpdatedAt?: string
 
   createdAt?: Date
   updatedAt?: Date

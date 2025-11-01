@@ -18,6 +18,7 @@ import { TwoCaptchaService } from '@main/app/modules/util/two-captcha.service'
 import { DcCaptchaSolverService } from '@main/app/modules/dcinside/util/dc-captcha-solver.service'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import { sleep } from '@main/app/utils/sleep'
 import { retry } from '@main/app/utils/retry'
 import { IpMode, Settings } from '@main/app/modules/settings/settings.types'
@@ -56,6 +57,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     browserManagerService: BrowserManagerService,
     tetheringService: TetheringService,
     jobLogsService: JobLogsService,
+    jobContext: JobContextService,
   ) {
     super(
       settingsService,
@@ -65,33 +67,31 @@ export class DcinsidePostingService extends DcinsideBaseService {
       browserManagerService,
       tetheringService,
       jobLogsService,
+      jobContext,
     )
   }
 
   // Public methods
 
   // 통합된 삭제 로직 (브라우저 관리 및 로그인 처리 포함)
-  public async deleteArticleByResultUrl(post: PostJob, jobId: string, browserManager: any): Promise<void> {
-    await this.jobLogsService.createJobLog(jobId, '통합된 삭제 로직 시작')
+  public async deleteArticleByResultUrl(post: PostJob, browserManager: any): Promise<void> {
+    await this.jobLogsService.createJobLog('통합된 삭제 로직 시작')
 
     const maxRetries = 5
     const retryInterval = 10 * 1_000
 
-    await this.jobLogsService.createJobLog(
-      jobId,
-      `삭제 재시도 설정: 최대 ${maxRetries}회, 간격 ${retryInterval / 1000}초`,
-    )
+    await this.jobLogsService.createJobLog(`삭제 재시도 설정: 최대 ${maxRetries}회, 간격 ${retryInterval / 1000}초`)
 
     let attemptCount = 0
     await retry(
       async () => {
         attemptCount++
-        await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount}/${maxRetries}`)
+        await this.jobLogsService.createJobLog(`삭제 시도 ${attemptCount}/${maxRetries}`)
 
         // 통합된 삭제 처리 (브라우저 모드 + IP 모드 + 로그인 포함)
-        await this.deleteArticle(jobId, post)
+        await this.deleteArticle(post)
 
-        await this.jobLogsService.createJobLog(jobId, `삭제 시도 ${attemptCount} 성공`)
+        await this.jobLogsService.createJobLog(`삭제 시도 ${attemptCount} 성공`)
       },
       retryInterval,
       maxRetries,
@@ -102,99 +102,96 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 통합된 포스팅 처리 (순차적 함수 호출로 가독성 향상)
    */
-  public async postArticle(jobId: string, postJob: any): Promise<{ url: string }> {
+  public async postArticle(postJob: any): Promise<{ url: string }> {
     const settings = await this.settingsService.getSettings()
 
     // 1. 페이지 켜기 (브라우저 생성)
-    const { context, page, browserId } = await this._launchBrowser(jobId, settings, 'post')
+    const { context, page, browserId } = await this._launchBrowser(settings, 'post')
 
     try {
       // 2. IP 변경 처리
-      await this._handleIpChange(jobId, settings)
+      await this._handleIpChange(settings)
 
       // 3. 로그인 처리
-      const isMember = await this._handleLogin(jobId, context, page, postJob)
+      const isMember = await this._handleLogin(context, page, postJob)
 
       // 4. 작업 간 딜레이
-      await this.applyTaskDelay(jobId, settings)
+      await this.applyTaskDelay(settings.taskDelay)
 
       // 5. 글쓰기 실행
       // 0. PostJob 데이터 파싱
       const parsedPostJob = this._parsePostJobData(postJob)
-      await this.jobLogsService.createJobLog(jobId, 'PostJob 데이터 파싱 완료')
+      await this.jobLogsService.createJobLog('PostJob 데이터 파싱 완료')
 
       // 0-1. 앱 설정 가져오기 (이미지 업로드 실패 처리 방식)
       const appSettings = await this.settingsService.getSettings()
-      await this.jobLogsService.createJobLog(jobId, '앱 설정 가져오기 완료')
+      await this.jobLogsService.createJobLog('앱 설정 가져오기 완료')
 
       // 1. 갤러리 정보 추출 (id와 타입)
       const galleryInfo = this._extractGalleryInfo(parsedPostJob.galleryUrl)
-      await this.jobLogsService.createJobLog(
-        jobId,
-        `갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`,
-      )
+      await this.jobLogsService.createJobLog(`갤러리 정보 추출 완료: ${galleryInfo.type} 갤러리 (${galleryInfo.id})`)
 
-      await this.jobLogsService.createJobLog(jobId, '페이지 생성 완료')
+      await this.jobLogsService.createJobLog('페이지 생성 완료')
 
       // 2. 글쓰기 페이지 이동 (리스트 → 글쓰기 버튼 클릭)
       await this._navigateToWritePage(page, galleryInfo, isMember)
-      await this.jobLogsService.createJobLog(jobId, '글쓰기 페이지 이동 완료')
+      await this.jobLogsService.createJobLog('글쓰기 페이지 이동 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 3. 입력폼 채우기
       await this._inputTitle(page, parsedPostJob.title)
-      await this.jobLogsService.createJobLog(jobId, `제목 입력 완료: "${parsedPostJob.title}"`)
+      await this.jobLogsService.createJobLog(`제목 입력 완료: "${parsedPostJob.title}"`)
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       if (parsedPostJob.headtext) {
         await this._selectHeadtext(page, parsedPostJob.headtext)
-        await this.jobLogsService.createJobLog(jobId, `말머리 선택 완료: "${parsedPostJob.headtext}"`)
+        await this.jobLogsService.createJobLog(`말머리 선택 완료: "${parsedPostJob.headtext}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       await this._inputContent(page, parsedPostJob.contentHtml)
-      await this.jobLogsService.createJobLog(jobId, '글 내용 입력 완료')
+      await this.jobLogsService.createJobLog('글 내용 입력 완료')
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       // 이미지 등록 (imagePaths, 팝업 윈도우 방식)
       if (parsedPostJob.imagePaths && parsedPostJob.imagePaths.length > 0) {
-        await this.jobLogsService.createJobLog(jobId, `이미지 업로드 시작: ${parsedPostJob.imagePaths.length}개 이미지`)
+        await this.jobLogsService.createJobLog(`이미지 업로드 시작: ${parsedPostJob.imagePaths.length}개 이미지`)
         await this._uploadImages(page, context, parsedPostJob.imagePaths, parsedPostJob.imagePosition)
-        await this.jobLogsService.createJobLog(jobId, '이미지 업로드 완료')
+        await this.jobLogsService.createJobLog('이미지 업로드 완료')
       }
       await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
 
       if (!isMember && parsedPostJob.nickname) {
         await this._inputNickname(page, parsedPostJob.nickname)
-        await this.jobLogsService.createJobLog(jobId, `닉네임 입력 완료: "${parsedPostJob.nickname}"`)
+        await this.jobLogsService.createJobLog(`닉네임 입력 완료: "${parsedPostJob.nickname}"`)
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       if (!isMember && parsedPostJob.password) {
         await this._inputPassword(page, parsedPostJob.password)
-        await this.jobLogsService.createJobLog(jobId, '비밀번호 입력 완료')
+        await this.jobLogsService.createJobLog('비밀번호 입력 완료')
         await sleep(appSettings.actionDelay * 1000) // 초를 밀리초로 변환
       }
 
       // 캡챠(자동등록방지) 처리 및 등록 버튼 클릭을 최대 3회 재시도
-      await this.jobLogsService.createJobLog(jobId, '캡챠 처리 및 글 등록 시작')
-      await this._submitPostAndHandleErrors(page, jobId)
-      await this.jobLogsService.createJobLog(jobId, '글 등록 완료')
+      await this.jobLogsService.createJobLog('캡챠 처리 및 글 등록 시작')
+      await this._submitPostAndHandleErrors(page)
+      await this.jobLogsService.createJobLog('글 등록 완료')
 
       // 글 등록 완료 후 목록 페이지로 이동 대기
       await this._waitForListPageNavigation(page, galleryInfo)
-      await this.jobLogsService.createJobLog(jobId, '목록 페이지 이동 완료')
+      await this.jobLogsService.createJobLog('목록 페이지 이동 완료')
 
       // 글 등록이 성공하여 목록으로 이동했을 시점
       // 글 목록으로 이동 후, 최신글 URL 추출 시도
       const finalUrl = await this._extractPostUrl(page, parsedPostJob.title)
-      await this.jobLogsService.createJobLog(jobId, `최종 URL 추출 완료: ${finalUrl}`)
+      await this.jobLogsService.createJobLog(`최종 URL 추출 완료: ${finalUrl}`)
 
       return { url: finalUrl }
     } finally {
       // 브라우저 종료 (신규 생성 모드일 때만)
       if (!settings.reuseWindowBetweenTasks) {
-        await this._closeBrowser(jobId, browserId)
+        await this._closeBrowser(browserId)
       }
     }
   }
@@ -202,50 +199,50 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 통합된 삭제 처리 (순차적 함수 호출로 가독성 향상)
    */
-  public async deleteArticle(jobId: string, postJob: any): Promise<void> {
+  public async deleteArticle(postJob: any): Promise<void> {
     const settings = await this.settingsService.getSettings()
 
     // 1. 페이지 켜기 (브라우저 생성)
-    const { context, page, browserId } = await this._launchBrowser(jobId, settings, 'delete')
+    const { context, page, browserId } = await this._launchBrowser(settings, 'delete')
 
     try {
       // 2. IP 변경 처리
-      await this._handleIpChange(jobId, settings)
+      await this._handleIpChange(settings)
 
       // 3. 로그인 처리
-      const isMember = await this._handleLogin(jobId, context, page, postJob)
+      const isMember = await this._handleLogin(context, page, postJob)
 
       // 4. 작업 간 딜레이
-      await this.applyTaskDelay(jobId, settings)
+      await this.applyTaskDelay(settings.taskDelay)
 
       // 5. 삭제 실행
       // 1. 글쓰기 페이지 이동
-      await this._navigateToPostPage(page, postJob, jobId)
+      await this._navigateToPostPage(page, postJob)
 
       // 2. 비정상 페이지 체크
       try {
         await this.checkAbnormalPage(page)
       } catch (error) {
         // 이미 삭제된 경우 성공으로 처리
-        await this.jobLogsService.createJobLog(jobId, '이미 삭제된 게시물로 판단되어 성공 처리')
+        await this.jobLogsService.createJobLog('이미 삭제된 게시물로 판단되어 성공 처리')
         return
       }
 
       // 3. 삭제 버튼 찾기
-      await this._findAndClickDeleteButton(page, jobId)
+      await this._findAndClickDeleteButton(page)
 
       // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
-      await this._handleAuthentication(page, postJob, jobId, isMember)
+      await this._handleAuthentication(page, postJob, isMember)
 
       // 5. 삭제 버튼 클릭 및 삭제 처리
-      const alertMessage = await this._executeDeleteButtonClick(page, jobId)
+      const alertMessage = await this._executeDeleteButtonClick(page)
 
       // 6. 성공 여부 체크
-      await this._verifyDeleteSuccess(alertMessage, jobId)
+      await this._verifyDeleteSuccess(alertMessage)
     } finally {
       // 브라우저 종료 (신규 생성 모드일 때만)
       if (!settings.reuseWindowBetweenTasks) {
-        await this._closeBrowser(jobId, browserId)
+        await this._closeBrowser(browserId)
       }
     }
   }
@@ -254,10 +251,11 @@ export class DcinsidePostingService extends DcinsideBaseService {
    * 1. 페이지 켜기 (브라우저 생성)
    */
   private async _launchBrowser(
-    jobId: string,
     settings: Settings,
     operationType: 'post' | 'delete',
   ): Promise<{ context: BrowserContext; page: Page; browserId: string }> {
+    const jobId = this.jobContext.getJobId()
+
     // 브라우저 ID 생성 (재사용 모드에 따라 결정)
     const browserId = settings.reuseWindowBetweenTasks
       ? DcinsidePostingService.BROWSER_IDS.DCINSIDE_REUSE
@@ -268,17 +266,17 @@ export class DcinsidePostingService extends DcinsideBaseService {
     // IP 모드에 따른 브라우저 실행
     switch (settings?.ipMode) {
       case IpMode.PROXY:
-        const { context, page } = await this.handleProxyMode(jobId, settings, browserId)
+        const { context, page } = await this.handleProxyMode(settings, browserId)
         return { context, page, browserId }
 
       case IpMode.TETHERING:
       case IpMode.NONE:
       default:
         if (settings.reuseWindowBetweenTasks) {
-          const { context, page } = await this.handleBrowserReuseMode(jobId, settings, browserId)
+          const { context, page } = await this.handleBrowserReuseMode(settings, browserId)
           return { context, page, browserId }
         } else {
-          const { context, page } = await this.handleBrowserNewMode(jobId, settings, browserId)
+          const { context, page } = await this.handleBrowserNewMode(settings, browserId)
           return { context, page, browserId }
         }
     }
@@ -287,9 +285,9 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 2. IP 변경 처리
    */
-  private async _handleIpChange(jobId: string, settings: Settings): Promise<void> {
+  private async _handleIpChange(settings: Settings): Promise<void> {
     if (settings?.ipMode === IpMode.TETHERING) {
-      await this.handleTetheringMode(jobId, settings)
+      await this.handleTetheringMode(settings)
     }
     // 프록시 모드는 브라우저 생성 시 이미 처리됨
   }
@@ -297,16 +295,16 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 3. 로그인 처리
    */
-  private async _handleLogin(jobId: string, context: BrowserContext, page: Page, postJob: any): Promise<boolean> {
+  private async _handleLogin(context: BrowserContext, page: Page, postJob: any): Promise<boolean> {
     let isMember = false
     if (postJob.loginId && postJob.loginPassword) {
-      await this.jobLogsService.createJobLog(jobId, `로그인 시도: ${postJob.loginId}`)
+      await this.jobLogsService.createJobLog(`로그인 시도: ${postJob.loginId}`)
       await this.handleBrowserLogin(context, page, postJob.loginId, postJob.loginPassword)
-      await this.jobLogsService.createJobLog(jobId, '로그인 성공')
+      await this.jobLogsService.createJobLog('로그인 성공')
       isMember = true
     } else {
       this.logger.log(`비로그인 모드로 진행`)
-      await this.jobLogsService.createJobLog(jobId, '비로그인 모드로 진행')
+      await this.jobLogsService.createJobLog('비로그인 모드로 진행')
     }
     return isMember
   }
@@ -314,47 +312,47 @@ export class DcinsidePostingService extends DcinsideBaseService {
   /**
    * 브라우저 종료
    */
-  private async _closeBrowser(jobId: string, browserId: string): Promise<void> {
+  private async _closeBrowser(browserId: string): Promise<void> {
     try {
       await this.browserManagerService.closeManagedBrowser(browserId)
-      await this.jobLogsService.createJobLog(jobId, '브라우저 창 종료 완료')
+      await this.jobLogsService.createJobLog('브라우저 창 종료 완료')
     } catch (error) {
       this.logger.warn(`브라우저 종료 중 오류: ${error.message}`)
     }
   }
 
   // 1. 글쓰기 페이지 이동
-  private async _navigateToPostPage(page: Page, post: PostJob, jobId: string): Promise<void> {
-    await this.jobLogsService.createJobLog(jobId, `글 페이지 이동: ${post.resultUrl}`)
+  private async _navigateToPostPage(page: Page, post: PostJob): Promise<void> {
+    await this.jobLogsService.createJobLog(`글 페이지 이동: ${post.resultUrl}`)
 
     await page.goto(post.resultUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
     await sleep(2000)
 
-    await this.jobLogsService.createJobLog(jobId, '글 페이지 이동 완료')
+    await this.jobLogsService.createJobLog('글 페이지 이동 완료')
   }
 
   // 3. 삭제 버튼 찾기
-  private async _findAndClickDeleteButton(page: Page, jobId: string): Promise<void> {
-    await this.jobLogsService.createJobLog(jobId, '삭제 버튼 찾는 중...')
+  private async _findAndClickDeleteButton(page: Page): Promise<void> {
+    await this.jobLogsService.createJobLog('삭제 버튼 찾는 중...')
 
     try {
       await page.waitForSelector('[onclick^=board_delete]', { timeout: 60_000 })
-      await this.jobLogsService.createJobLog(jobId, '삭제 버튼 발견, 클릭 시도')
+      await this.jobLogsService.createJobLog('삭제 버튼 발견, 클릭 시도')
 
       await page.click('[onclick^=board_delete]')
       await sleep(2000)
 
-      await this.jobLogsService.createJobLog(jobId, '삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
+      await this.jobLogsService.createJobLog('삭제 버튼 클릭 완료, 삭제 페이지로 이동 대기')
     } catch (error) {
       const errorMessage = `삭제 버튼을 찾을 수 없습니다: ${error.message}`
       this.logger.warn(errorMessage)
-      await this.jobLogsService.createJobLog(jobId, errorMessage)
+      await this.jobLogsService.createJobLog(errorMessage)
       throw DcException.postSubmitFailed({ message: errorMessage })
     }
   }
 
   // 4. 인증 처리 (회원/비회원) 및 비밀번호 체크
-  private async _handleAuthentication(page: Page, post: PostJob, jobId: string, isMember?: boolean): Promise<void> {
+  private async _handleAuthentication(page: Page, post: PostJob, isMember?: boolean): Promise<void> {
     // 비회원인 경우 비밀번호 입력
     if (!isMember) {
       if (!post.password) {
@@ -367,12 +365,12 @@ export class DcinsidePostingService extends DcinsideBaseService {
       await page.fill('#board_pw', post.password)
       await sleep(1000)
 
-      await this.jobLogsService.createJobLog(jobId, '삭제 비밀번호 입력 완료')
+      await this.jobLogsService.createJobLog('삭제 비밀번호 입력 완료')
     }
   }
 
   // 5. 삭제 버튼 클릭 및 삭제 처리
-  private async _executeDeleteButtonClick(page: Page, jobId: string): Promise<string> {
+  private async _executeDeleteButtonClick(page: Page): Promise<string> {
     // 다이얼로그 처리
     let alertMessage = ''
 
@@ -453,13 +451,13 @@ export class DcinsidePostingService extends DcinsideBaseService {
       ])
 
       if (result === 'SUCCESS_BY_NAVIGATION') {
-        await this.jobLogsService.createJobLog(jobId, `삭제 성공: 갤러리 목록 페이지로 이동됨`)
+        await this.jobLogsService.createJobLog(`삭제 성공: 갤러리 목록 페이지로 이동됨`)
         return 'SUCCESS_BY_NAVIGATION'
       } else if (result === 'TIMEOUT') {
-        await this.jobLogsService.createJobLog(jobId, '삭제 처리 타임아웃')
+        await this.jobLogsService.createJobLog('삭제 처리 타임아웃')
         return 'TIMEOUT'
       } else {
-        await this.jobLogsService.createJobLog(jobId, `삭제 처리 완료, 알림 메시지: ${result}`)
+        await this.jobLogsService.createJobLog(`삭제 처리 완료, 알림 메시지: ${result}`)
         return result
       }
     } finally {
@@ -468,10 +466,10 @@ export class DcinsidePostingService extends DcinsideBaseService {
   }
 
   // 6. 성공 여부 체크
-  private async _verifyDeleteSuccess(alertMessage: string, jobId: string): Promise<void> {
+  private async _verifyDeleteSuccess(alertMessage: string): Promise<void> {
     // 페이지 이동을 통한 성공 확인
     if (alertMessage === 'SUCCESS_BY_NAVIGATION') {
-      await this.jobLogsService.createJobLog(jobId, '삭제 성공: 갤러리 목록 페이지로 이동됨')
+      await this.jobLogsService.createJobLog('삭제 성공: 갤러리 목록 페이지로 이동됨')
       return
     }
 
@@ -497,7 +495,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
     }
 
     // 알림 메시지가 없는 경우도 성공으로 처리 (alert 없이 페이지 이동으로 성공)
-    await this.jobLogsService.createJobLog(jobId, '삭제 성공: 알림 메시지 없이 완료됨')
+    await this.jobLogsService.createJobLog('삭제 성공: 알림 메시지 없이 완료됨')
   }
 
   private async _inputPassword(page: Page, password: string): Promise<void> {

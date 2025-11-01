@@ -8,9 +8,10 @@ import { DcCaptchaSolverService } from '../util/dc-captcha-solver.service'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
 import { JobLogsModule } from '@main/app/modules/dcinside/job-logs/job-logs.module'
+import { CommonModule } from '@main/app/modules/common/common.module'
 
 @Module({
-  imports: [SettingsModule, UtilModule, JobLogsModule],
+  imports: [SettingsModule, UtilModule, JobLogsModule, CommonModule],
   controllers: [DcinsideCommentController],
   providers: [
     CommentJobService,

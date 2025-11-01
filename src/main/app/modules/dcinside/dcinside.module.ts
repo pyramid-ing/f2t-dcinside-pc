@@ -4,6 +4,8 @@ import { DcinsideWorkflowModule } from './workflow/workflow.module'
 import { JobModule } from './job/job.module'
 import { DcinsideCommentModule } from 'src/main/app/modules/dcinside/comment/dcinsideCommentModule'
 import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinside-posting.module'
+import { DcinsidePostingCrawlerModule } from '@main/app/modules/dcinside/crawler/dcinside-posting-crawler.module'
+import { MonitoringModule } from '@main/app/modules/dcinside/monitoring/monitoring.module'
 
 @Module({
   imports: [
@@ -14,6 +16,7 @@ import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinsi
           { path: 'posting', module: DcinsidePostingModule },
           { path: 'workflow', module: DcinsideWorkflowModule },
           { path: 'comment', module: DcinsideCommentModule },
+          { path: 'monitoring', module: MonitoringModule },
         ],
       },
     ]),
@@ -21,6 +24,8 @@ import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinsi
     DcinsideWorkflowModule,
     JobModule,
     DcinsideCommentModule,
+    DcinsidePostingCrawlerModule,
+    MonitoringModule,
   ],
 })
 export class DcinsideModule {}

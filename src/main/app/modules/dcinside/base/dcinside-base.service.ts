@@ -14,6 +14,7 @@ import { ChromeNotInstalledError } from '@main/common/errors/chrome-not-installe
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { getExternalIp } from '@main/app/utils/ip'
+import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import { assertPermission } from '@main/app/utils/permission.assert'
 
 export enum GalleryType {
@@ -74,6 +75,7 @@ export async function detectRecaptcha(page: Page): Promise<{ found: boolean; sit
 @Injectable()
 export abstract class DcinsideBaseService {
   protected readonly logger: Logger
+  protected readonly jobContext: JobContextService
 
   constructor(
     protected readonly settingsService: SettingsService,
@@ -83,17 +85,10 @@ export abstract class DcinsideBaseService {
     protected readonly browserManagerService: BrowserManagerService,
     protected readonly tetheringService: TetheringService,
     protected readonly jobLogsService: JobLogsService,
+    jobContext: JobContextService,
   ) {
     this.logger = new Logger(this.constructor.name)
-  }
-
-  /**
-   * 권한 확인
-   */
-  private async checkPermission(permission: Permission): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-    const licenseCache = settings.licenseCache
-    assertPermission(licenseCache, permission)
+    this.jobContext = jobContext
   }
 
   /**
@@ -127,7 +122,10 @@ export abstract class DcinsideBaseService {
         }
         proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
         try {
-          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, headless, [proxyArg])
+          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
+            headless,
+            args: [proxyArg],
+          })
           if (options?.reuseExisting) {
             let context = browser.contexts()[0] || null
             let page: Page | null = null
@@ -156,7 +154,9 @@ export abstract class DcinsideBaseService {
     }
     // fallback: 프록시 없이 재시도
     try {
-      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, headless)
+      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
+        headless,
+      })
       if (options?.reuseExisting) {
         let context = browser.contexts()[0] || null
         let page: Page | null = null
@@ -413,12 +413,7 @@ export abstract class DcinsideBaseService {
   /**
    * DC 캡챠 해결
    */
-  protected async solveDcCaptcha(
-    page: Page,
-    captchaImgSelector: string,
-    inputSelector: string,
-    jobId?: string,
-  ): Promise<void> {
+  protected async solveDcCaptcha(page: Page, captchaImgSelector: string, inputSelector: string): Promise<void> {
     try {
       const captchaImg = page.locator(captchaImgSelector)
       const captchaCount = await captchaImg.count()
@@ -475,12 +470,9 @@ export abstract class DcinsideBaseService {
       const combined = abnormalInfo.combined || ''
 
       // 삭제/존재하지 않음 관련 패턴들 (한국어/영문 보조 문구 포함)
-      const deletionPatterns = [
-        '게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다',
-        'You will be redirected in a few seconds',
-      ]
+      const deletionPatterns = ['게시물 작성자가 삭제했거나 존재하지 않는 페이지입니다']
 
-      const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다', 'You will be redirected in a few seconds']
+      const redirectHints = ['잠시 후 갤러리 리스트로 이동됩니다']
 
       const deletionDetected = deletionPatterns.some(p => combined.includes(p))
       const redirectDetected = redirectHints.some(p => combined.includes(p))
@@ -567,8 +559,8 @@ export abstract class DcinsideBaseService {
   /**
    * 테더링 모드 처리
    */
-  public async handleTetheringMode(jobId: string, settings: Settings): Promise<void> {
-    await this.checkPermission(Permission.TETHERING)
+  public async handleTetheringMode(settings: Settings): Promise<void> {
+    await this._checkPermission(Permission.TETHERING)
 
     // IP 변경이 필요한지 확인
     const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
@@ -576,15 +568,15 @@ export abstract class DcinsideBaseService {
     if (shouldChange) {
       try {
         const prev = this.tetheringService.getCurrentIp()
-        await this.jobLogsService.createJobLog(jobId, `테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
+        await this.jobLogsService.createJobLog(`테더링 전 현재 IP: ${prev.ip || '조회 실패'}`)
         const changed = await this.tetheringService.checkIpChanged(prev)
-        await this.jobLogsService.createJobLog(jobId, `테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
+        await this.jobLogsService.createJobLog(`테더링으로 IP 변경됨: ${prev.ip} → ${changed.ip}`)
       } catch (e: any) {
-        await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 실패: ${e?.message || e}`)
+        await this.jobLogsService.createJobLog(`테더링 IP 변경 실패: ${e?.message || e}`)
         throw DcException.postSubmitFailed({ message: '테더링 IP 변경 실패' })
       }
     } else {
-      await this.jobLogsService.createJobLog(jobId, `테더링 IP 변경 주기에 따라 변경하지 않음`)
+      await this.jobLogsService.createJobLog(`테더링 IP 변경 주기에 따라 변경하지 않음`)
     }
   }
 
@@ -592,7 +584,6 @@ export abstract class DcinsideBaseService {
    * 프록시 모드 처리
    */
   public async handleProxyMode(
-    jobId: string,
     settings: Settings,
     browserId: string,
   ): Promise<{ browser: any; context: BrowserContext; page: Page; proxyInfo: any }> {
@@ -608,13 +599,13 @@ export abstract class DcinsideBaseService {
       const proxyStr = proxyInfo.id
         ? `${proxyInfo.id}@${proxyInfo.ip}:${proxyInfo.port}`
         : `${proxyInfo.ip}:${proxyInfo.port}`
-      await this.jobLogsService.createJobLog(jobId, `프록시 적용: ${proxyStr}`)
+      await this.jobLogsService.createJobLog(`프록시 적용: ${proxyStr}`)
     } else {
-      await this.jobLogsService.createJobLog(jobId, '프록시 미적용')
+      await this.jobLogsService.createJobLog('프록시 미적용')
     }
 
     // 실제 외부 IP 로깅
-    await this.logExternalIp(jobId, page)
+    await this.logExternalIp(page)
 
     return { browser, context, page, proxyInfo }
   }
@@ -623,7 +614,6 @@ export abstract class DcinsideBaseService {
    * 브라우저 재사용 모드 처리
    */
   public async handleBrowserReuseMode(
-    jobId: string,
     settings: Settings,
     browserId: string,
   ): Promise<{ context: BrowserContext; page: Page }> {
@@ -635,7 +625,7 @@ export abstract class DcinsideBaseService {
     })
 
     // 실제 외부 IP 로깅
-    await this.logExternalIp(jobId, page)
+    await this.logExternalIp(page)
 
     return { context, page }
   }
@@ -644,7 +634,6 @@ export abstract class DcinsideBaseService {
    * 브라우저 신규 생성 모드 처리
    */
   public async handleBrowserNewMode(
-    jobId: string,
     settings: Settings,
     browserId: string,
   ): Promise<{ context: BrowserContext; page: Page }> {
@@ -656,7 +645,7 @@ export abstract class DcinsideBaseService {
     })
 
     // 실제 외부 IP 로깅
-    await this.logExternalIp(jobId, page)
+    await this.logExternalIp(page)
 
     return { context, page }
   }
@@ -664,22 +653,22 @@ export abstract class DcinsideBaseService {
   /**
    * 외부 IP 로깅
    */
-  public async logExternalIp(jobId: string, target: Page): Promise<void> {
+  public async logExternalIp(target: Page): Promise<void> {
     try {
       const externalIp = await getExternalIp(target)
-      await this.jobLogsService.createJobLog(jobId, `실제 외부 IP: ${externalIp}`)
+      await this.jobLogsService.createJobLog(`실제 외부 IP: ${externalIp}`)
     } catch (e) {
-      await this.jobLogsService.createJobLog(jobId, `외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
+      await this.jobLogsService.createJobLog(`외부 IP 조회 실패: ${e instanceof Error ? e.message : e}`)
     }
   }
 
   /**
    * 작업 간 딜레이 적용
    */
-  public async applyTaskDelay(jobId: string, settings: Settings): Promise<void> {
-    if (settings?.taskDelay > 0) {
-      await this.jobLogsService.createJobLog(jobId, `작업 간 딜레이: ${settings.taskDelay}초`)
-      await sleep(settings.taskDelay * 1000)
+  public async applyTaskDelay(taskDelaySeconds: number): Promise<void> {
+    if (taskDelaySeconds > 0) {
+      await this.jobLogsService.createJobLog(`작업 간 딜레이: ${taskDelaySeconds}초`)
+      await sleep(taskDelaySeconds * 1000)
     }
   }
 
@@ -898,5 +887,14 @@ export abstract class DcinsideBaseService {
       default:
         return null
     }
+  }
+
+  /**
+   * 권한 확인
+   */
+  private async _checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+    const licenseCache = settings.licenseCache
+    assertPermission(licenseCache, permission)
   }
 }

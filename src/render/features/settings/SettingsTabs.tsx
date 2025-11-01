@@ -5,6 +5,8 @@ import OpenAISettingsForm from './OpenAISettingsForm'
 import TwoCaptchaSettingsForm from './TwoCaptchaSettingsForm'
 import SettingsForm from './SettingsForm'
 import IpSettingsForm from './ip/IpSettingsForm'
+import WordPressSettingsForm from './WordPressSettingsForm'
+import CoupangPartnersSettingsForm from './CoupangPartnersSettingsForm'
 
 const SettingsTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState('app')
@@ -49,6 +51,16 @@ const SettingsTabs: React.FC = () => {
           key: '2captcha',
           label: '2captcha',
           children: <TwoCaptchaSettingsForm />,
+        },
+        {
+          key: 'wordpress',
+          label: '워드프레스',
+          children: <WordPressSettingsForm />,
+        },
+        {
+          key: 'coupang',
+          label: '쿠팡 파트너스',
+          children: <CoupangPartnersSettingsForm />,
         },
       ]}
     />

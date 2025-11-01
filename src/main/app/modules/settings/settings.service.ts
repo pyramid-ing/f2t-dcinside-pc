@@ -39,6 +39,13 @@ export class SettingsService {
           postCount: 5,
         },
       },
+      monitoring: {
+        includeImagesInAiAnalysis: true, // 기본값: 이미지 포함
+      },
+      comments: [],
+      commentSelectionMethod: 'random',
+      coupangPartnersAccessKey: '',
+      coupangPartnersSecretKey: '',
     }
     const merged = {
       ...defaultSettings,

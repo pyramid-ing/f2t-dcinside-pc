@@ -9,6 +9,7 @@ import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { DcinsidePostingModule } from '@main/app/modules/dcinside/posting/dcinside-posting.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
 import { DcinsideCommentModule } from '@main/app/modules/dcinside/comment/dcinsideCommentModule'
+import { CoupasJobModule } from '@main/app/modules/dcinside/coupas-job/coupas-job.module'
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DcinsideCommentModule } from '@main/app/modules/dcinside/comment/dcinsi
     DcinsidePostingModule,
     UtilModule,
     DcinsideCommentModule,
+    CoupasJobModule,
   ],
   providers: [JobQueueProcessor, JobService],
   controllers: [JobController],

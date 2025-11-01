@@ -7,6 +7,8 @@ export enum DcExceptionType {
   NICKNAME_REQUIRED_GALLERY = 'NICKNAME_REQUIRED_GALLERY',
   NICKNAME_REQUIRED = 'NICKNAME_REQUIRED',
   CAPTCHA_SOLVE_FAILED = 'CAPTCHA_SOLVE_FAILED',
+  RECAPTCHA_SOLVE_FAILED = 'RECAPTCHA_SOLVE_FAILED',
+  TWOCAPTCHA_API_KEY_REQUIRED = 'TWOCAPTCHA_API_KEY_REQUIRED',
   CHROME_NOT_INSTALLED = 'CHROME_NOT_INSTALLED',
   AUTH_REQUIRED = 'AUTH_REQUIRED',
   POST_PARAM_INVALID = 'POST_PARAM_INVALID',
@@ -64,6 +66,20 @@ export class DcException extends Error {
    */
   static captchaSolveFailed(metadata?: Record<string, any>): DcException {
     return new DcException(DcExceptionType.CAPTCHA_SOLVE_FAILED, metadata)
+  }
+
+  /**
+   * 리캡챠 해결 실패 예외
+   */
+  static recaptchaSolveFailed(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.RECAPTCHA_SOLVE_FAILED, metadata)
+  }
+
+  /**
+   * 2captcha API 키 필수 예외
+   */
+  static twoCaptchaApiKeyRequired(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.TWOCAPTCHA_API_KEY_REQUIRED, metadata)
   }
 
   /**

@@ -40,6 +40,9 @@ model Job {
 
   // 댓글 작업 관련 데이터
   commentJob CommentJob?
+
+  // 쿠파스 작업 관련 데이터
+  coupasJob CoupasJob?
 }
 
 model JobLog {
@@ -59,21 +62,21 @@ model JobLog {
 model PostJob {
   id String @id @default(uuid())
 
-  galleryUrl        String
-  title             String
-  contentHtml       String
-  password          String?
-  nickname          String?
-  headtext          String?
-  imagePaths        String? // JSON stringified array
-  loginId           String?
-  loginPassword     String?
-  imagePosition     String? // '상단' 또는 '하단'
-  resultUrl         String? // 결과 URL
-  deleteAt          DateTime?
-  deletedAt         DateTime?
-  autoDeleteMinutes Int? // 등록후자동삭제(분)
-  viewCount         Int? // 조회수
+  galleryUrl         String
+  title              String
+  contentHtml        String
+  password           String?
+  nickname           String?
+  headtext           String?
+  imagePaths         String? // JSON stringified array
+  loginId            String?
+  loginPassword      String?
+  imagePosition      String? // '상단' 또는 '하단'
+  resultUrl          String? // 결과 URL
+  deleteAt           DateTime?
+  deletedAt          DateTime?
+  autoDeleteMinutes  Int? // 등록후자동삭제(분)
+  viewCount          Int? // 조회수
   viewCountUpdatedAt DateTime? // 조회수 마지막 업데이트 시간
 
   createdAt DateTime @default(now())
@@ -86,13 +89,14 @@ model PostJob {
 model CommentJob {
   id String @id @default(uuid())
 
-  keyword   String
-  comment   String
-  postUrl   String // 단일 포스트 URL
-  postTitle String // 포스트 제목
-  nickname  String?
-  password  String?
-  loginId    String?
+  keyword       String
+  comment       String
+  postUrl       String // 단일 포스트 URL
+  postTitle     String // 포스트 제목
+  galleryId     String  @default("unknown") // 갤러리 ID (예: programming, baseball_new10)
+  nickname      String?
+  password      String?
+  loginId       String?
   loginPassword String?
 
   createdAt DateTime @default(now())
@@ -100,4 +104,119 @@ model CommentJob {
 
   jobId String @unique // Job 모델과 1:1 관계
   job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([galleryId])
+}
+
+model CoupasJob {
+  id String @id @default(uuid())
+
+  postUrl           String // 디시인사이드 포스트 URL
+  wordpressUrl      String // 워드프레스 사이트 URL
+  wordpressUsername String // 워드프레스 사용자명
+  wordpressApiKey   String // 워드프레스 API 키
+
+  // 댓글 작성 관련 필드
+  nickname      String? // 비회원 닉네임
+  password      String? // 비회원 비밀번호
+  loginId       String? // 회원 로그인 ID
+  loginPassword String? // 회원 로그인 비밀번호
+
+  resultBlogLink String? // 생성된 블로그 링크
+  resultComment  String? // 생성된 댓글 텍스트
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobId String @unique // Job 모델과 1:1 관계
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+// 모니터링 중인 갤러리
+model MonitoredGallery {
+  id String @id @default(uuid())
+
+  type       String  @default("gallery") // 'gallery' | 'search'
+  actionType String? // 'coupas' | 'fixed_comment' (nullable: 설정되지 않으면 작업 생성 안함)
+
+  galleryUrl  String  @unique // 갤러리 URL
+  galleryId   String // 갤러리 ID (예: programming)
+  galleryName String? // 갤러리 이름
+  commentText String? // 이 갤러리에 달 댓글 내용 (없으면 기본값 사용)
+  isActive    Boolean @default(true) // 활성화 여부
+
+  // 검색 타입 전용 필드
+  searchKeyword String? // 검색 키워드 (search 타입용)
+  searchSort    String? @default("latest") // 'latest' | 'accuracy' (search 타입용)
+
+  // AI 적합성 검사 (coupas 타입용)
+  aiPromptCode String? // AI 프롬프트 코드명 (예: 'product-recommendation', 'tech-advice')
+
+  // 로그인 정보
+  loginId       String? // 회원 로그인 ID
+  loginPassword String? // 회원 로그인 비밀번호
+  nickname      String? // 비회원 닉네임
+  password      String? // 비회원 비밀번호
+
+  lastCheckedAt DateTime? // 마지막 확인 시각
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 발견된 게시글들
+  posts MonitoredPost[]
+
+  @@index([isActive])
+  @@index([type])
+  @@index([actionType])
+}
+
+// 블랙리스트 갤러리 (모니터링에서 제외할 갤러리)
+model BlacklistedGallery {
+  id String @id @default(uuid())
+
+  galleryUrl  String  @unique // 갤러리 URL (unique key)
+  galleryId   String // 갤러리 ID (예: programming)
+  galleryName String? // 갤러리 이름
+  remarks     String? // 비고
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([galleryId])
+}
+
+// AI 검증 상태
+enum ApprovedStatus {
+  PENDING // 검사 대기
+  PROCESSING // 검사 진행 중
+  APPROVED // 승인됨
+  REJECTED // 거부됨
+  FAILED // 에러 발생
+}
+
+// 모니터링으로 발견된 게시글
+model MonitoredPost {
+  id String @id @default(uuid())
+
+  postUrl    String    @unique // 게시글 URL (unique key)
+  postTitle  String // 게시글 제목
+  postId     String // 게시글 ID
+  headtext   String? // 말머리 (일반, 🎬영상, 🖼️사진 등)
+  authorName String? // 작성자
+  answered   Boolean   @default(false) // 댓글 달았는지 여부
+  answeredAt DateTime? // 댓글 단 시각
+
+  // AI 적합성 검사 결과
+  approvedStatus ApprovedStatus @default(PENDING) // AI 검증 상태
+  aiReason       String? // AI 판단 이유
+
+  galleryId String
+  gallery   MonitoredGallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([galleryId, answered])
+  @@index([answered])
+  @@index([approvedStatus])
 }

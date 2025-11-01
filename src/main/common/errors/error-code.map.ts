@@ -56,6 +56,11 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.NICKNAME_REQUIRED_GALLERY]: { status: 400, message: m => m?.message || '닉네임이 필수인 갤러리입니다' },
   [ErrorCode.NICKNAME_REQUIRED]: { status: 400, message: m => m?.message || '닉네임을 입력해주세요' },
   [ErrorCode.CAPTCHA_SOLVE_FAILED]: { status: 400, message: m => m?.message || '캡차 해결에 실패했습니다' },
+  [ErrorCode.RECAPTCHA_SOLVE_FAILED]: { status: 400, message: m => m?.message || '리캡챠 해결에 실패했습니다' },
+  [ErrorCode.TWOCAPTCHA_API_KEY_REQUIRED]: {
+    status: 400,
+    message: m => m?.message || '2captcha API 키가 설정되지 않았습니다',
+  },
 
   [ErrorCode.JOB_NOT_FOUND]: { status: 404, message: () => '작업을 찾을 수 없습니다.' },
   [ErrorCode.JOB_ID_REQUIRED]: { status: 400, message: () => '작업 ID가 제공되지 않았습니다.' },
@@ -77,6 +82,20 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.CHROME_NOT_INSTALLED]: {
     status: 500,
     message: () => 'Chrome 브라우저가 설치되어 있지 않습니다. Chrome을 설치한 후 다시 시도해주세요.',
+  },
+
+  // 쿠팡 파트너스 관련
+  [ErrorCode.COUPANG_PARTNERS_INVALID_URL]: {
+    status: 400,
+    message: () => '유효하지 않은 쿠팡 상품 URL입니다.',
+  },
+  [ErrorCode.COUPANG_PARTNERS_API_ERROR]: {
+    status: 400,
+    message: m => m?.message || '쿠팡 파트너스 API 오류가 발생했습니다.',
+  },
+  [ErrorCode.COUPANG_PARTNERS_LINK_FAILED]: {
+    status: 500,
+    message: () => '어필리에이트 링크 생성에 실패했습니다.',
   },
 
   // 요청 관련

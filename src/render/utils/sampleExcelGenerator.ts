@@ -120,6 +120,10 @@ export const generateAutoCommentSampleNonMemberGallery = () => {
       로그인ID: '',
       로그인비밀번호: '',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
     {
       'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
@@ -129,6 +133,10 @@ export const generateAutoCommentSampleNonMemberGallery = () => {
       로그인ID: '',
       로그인비밀번호: '',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
   ]
 
@@ -146,6 +154,10 @@ export const generateAutoCommentSampleNonMemberNickname = () => {
       로그인ID: '',
       로그인비밀번호: '',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
     {
       'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
@@ -155,6 +167,10 @@ export const generateAutoCommentSampleNonMemberNickname = () => {
       로그인ID: '',
       로그인비밀번호: '',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
   ]
 
@@ -172,6 +188,10 @@ export const generateAutoCommentSampleMember = () => {
       로그인ID: '로그인 아이디',
       로그인비밀번호: '로그인 비밀번호',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
     {
       'DC URL': 'https://m.dcinside.com/board/maplestory_new/1234',
@@ -181,10 +201,48 @@ export const generateAutoCommentSampleMember = () => {
       로그인ID: '로그인 아이디',
       로그인비밀번호: '로그인 비밀번호',
       예약날짜: '',
+      쿠파스: '0',
+      워드프레스URL: '',
+      워드프레스사용자명: '',
+      워드프레스API키: '',
     },
   ]
 
   return createExcelFile(sampleData, '자동댓글_회원_샘플')
+}
+
+// 쿠파스 워크플로우 샘플 데이터
+export const generateAutoCommentSampleCoupas = () => {
+  const sampleData = [
+    {
+      'DC URL': 'https://gall.dcinside.com/board/view/?id=football_new9&no=12345',
+      댓글내용: '쿠파스 워크플로우: DC 게시글 → 쿠팡 검색 → 워드프레스 포스팅 → 댓글 작성',
+      닉네임: '테스트닉네임',
+      비밀번호: '1234',
+      로그인ID: '',
+      로그인비밀번호: '',
+      예약날짜: '',
+      쿠파스: '1',
+      워드프레스URL: 'https://your-wordpress-site.com',
+      워드프레스사용자명: 'admin',
+      워드프레스API키: 'your-wordpress-api-key',
+    },
+    {
+      'DC URL': 'https://gall.dcinside.com/board/view/?id=maplestory_new&no=12346',
+      댓글내용: '두 번째 쿠파스 작업입니다.',
+      닉네임: '',
+      비밀번호: '',
+      로그인ID: '로그인 아이디',
+      로그인비밀번호: '로그인 비밀번호',
+      예약날짜: '',
+      쿠파스: '1',
+      워드프레스URL: 'https://your-wordpress-site.com',
+      워드프레스사용자명: 'admin',
+      워드프레스API키: 'your-wordpress-api-key',
+    },
+  ]
+
+  return createExcelFile(sampleData, '자동댓글_쿠파스_샘플')
 }
 
 // 엑셀 파일 생성 및 다운로드

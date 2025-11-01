@@ -1,4 +1,11 @@
-import { KeyOutlined, SettingOutlined, UnorderedListOutlined, MessageOutlined } from '@ant-design/icons'
+import {
+  KeyOutlined,
+  SettingOutlined,
+  UnorderedListOutlined,
+  MessageOutlined,
+  ShoppingOutlined,
+  QrcodeOutlined,
+} from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -131,7 +138,9 @@ const AppSidebar: React.FC = () => {
   const getSelectedKey = () => {
     if (location.pathname === '/') return '1'
     if (location.pathname === '/comment-management') return '2'
-    if (location.pathname === '/settings') return '3'
+    if (location.pathname === '/coupas-management') return '3'
+    if (location.pathname === '/naver-qr') return '5'
+    if (location.pathname === '/settings') return '4'
     if (location.pathname === '/license') return 'license-settings'
     return '1'
   }
@@ -157,6 +166,16 @@ const AppSidebar: React.FC = () => {
           },
           {
             key: '3',
+            icon: <ShoppingOutlined />,
+            label: <NavLink to="/coupas-management">쿠파스</NavLink>,
+          },
+          {
+            key: '5',
+            icon: <QrcodeOutlined />,
+            label: <NavLink to="/naver-qr">네이버 QR</NavLink>,
+          },
+          {
+            key: '4',
             icon: <SettingOutlined />,
             label: <NavLink to="/settings">설정</NavLink>,
           },
