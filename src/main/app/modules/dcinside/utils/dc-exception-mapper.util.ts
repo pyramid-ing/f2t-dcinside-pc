@@ -35,6 +35,8 @@ export class DcExceptionMapper {
         return new CustomHttpException(ErrorCode.RECAPTCHA_NOT_SUPPORTED, dcException.metadata)
       case DcExceptionType.CAPTCHA_FAILED:
         return new CustomHttpException(ErrorCode.CAPTCHA_FAILED, dcException.metadata)
+      case DcExceptionType.CAPTCHA_DISABLED:
+        return new CustomHttpException(ErrorCode.CAPTCHA_DISABLED, dcException.metadata)
       case DcExceptionType.GALLERY_TYPE_UNSUPPORTED:
         return new CustomHttpException(ErrorCode.GALLERY_TYPE_UNSUPPORTED, dcException.metadata)
       default:

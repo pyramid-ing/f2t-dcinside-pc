@@ -5,7 +5,7 @@ import { Injectable } from '@nestjs/common'
 import { BrowserContext, Page } from 'playwright'
 import { ZodError } from 'zod/v4'
 import { PostJob } from '@prisma/client'
-import { DcException } from '@main/common/errors/dc.exception'
+import { DcException, DcExceptionType } from '@main/common/errors/dc.exception'
 import {
   DcinsideBaseService,
   detectRecaptcha,
@@ -724,143 +724,144 @@ export class DcinsidePostingService extends DcinsideBaseService {
   }
 
   private async _submitPostAndHandleErrors(page: Page, jobId?: string): Promise<void> {
+    // 글 등록 실행 (캡챠 에러만 재시도, 나머지는 discard)
+    await retry(
+      () => this._attemptPostSubmission(page, jobId),
+      2000,
+      3,
+      'linear',
+      error => error.type !== DcExceptionType.CAPTCHA_FAILED,
+    )
+  }
+
+  private async _attemptPostSubmission(page: Page, jobId?: string): Promise<void> {
     const captchaErrorMessages = ['자동입력 방지코드가 일치하지 않습니다.', 'code은(는) 영문-숫자 조합이어야 합니다.']
-    let captchaTryCount = 0
 
-    while (true) {
-      // 1. 리캡챠 감지 및 처리: 등록 시도 전 검사 (모든 프레임)
-      const recaptchaResult = await detectRecaptcha(page)
-      if (recaptchaResult.found) {
-        if (!recaptchaResult.siteKey) {
-          throw DcException.recaptchaNotSupported({
-            message: 'reCAPTCHA 사이트 키를 찾을 수 없습니다.',
-          })
-        }
-
-        const settings = await this.settingsService.getSettings()
-        if (!settings.twoCaptchaApiKey) {
-          throw DcException.recaptchaNotSupported({
-            message: 'reCAPTCHA가 감지되었지만 2captcha API 키가 설정되지 않았습니다.',
-          })
-        }
-
-        // 2captcha를 이용한 reCAPTCHA 해결
-        await this.solveRecaptchaWith2Captcha(page, recaptchaResult.siteKey, jobId)
+    // 1. 리캡챠 감지 및 처리: 등록 시도 전 검사 (모든 프레임)
+    const recaptchaResult = await detectRecaptcha(page)
+    if (recaptchaResult.found) {
+      if (!recaptchaResult.siteKey) {
+        throw DcException.recaptchaNotSupported({
+          message: 'reCAPTCHA 사이트 키를 찾을 수 없습니다.',
+        })
       }
 
-      // 2. DC 일반 캡챠 감지 및 처리 (리캡챠와 독립적으로 확인)
-      // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
-      await this.solveDcCaptcha(page, '#kcaptcha', 'input[name=kcaptcha_code]')
+      const settings = await this.settingsService.getSettings()
+      if (!settings.twoCaptchaApiKey) {
+        throw DcException.recaptchaNotSupported({
+          message: 'reCAPTCHA가 감지되었지만 2captcha API 키가 설정되지 않았습니다.',
+        })
+      }
 
-      let dialogHandler: ((dialog: any) => Promise<void>) | null = null
-      let timeoutId: NodeJS.Timeout | null = null
+      // 2captcha를 이용한 reCAPTCHA 해결
+      await this.solveRecaptchaWith2Captcha(page, recaptchaResult.siteKey, jobId)
+    }
 
-      try {
-        // dialog(알림창) 대기 프로미스
-        const dialogPromise: Promise<string | null> = new Promise(resolve => {
-          let dialogHandled = false // 다이얼로그 처리 여부 플래그
+    // 2. DC 일반 캡챠 감지 및 처리 (리캡챠와 독립적으로 확인)
+    // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
+    await this.solveDcCaptcha(page, '#kcaptcha', 'input[name=kcaptcha_code]', '#kcaptcha')
 
-          dialogHandler = async (dialog: any) => {
-            if (dialogHandled) {
-              this.logger.warn('다이얼로그가 이미 처리되었습니다.')
-              resolve(null)
-              return
-            }
+    let dialogHandler: ((dialog: any) => Promise<void>) | null = null
+    let timeoutId: NodeJS.Timeout | null = null
 
-            try {
-              dialogHandled = true
-              const msg = dialog.message()
+    try {
+      // dialog(알림창) 대기 프로미스
+      const dialogPromise: Promise<string | null> = new Promise(resolve => {
+        let dialogHandled = false // 다이얼로그 처리 여부 플래그
 
-              // dialog가 이미 처리되었는지 확인 (Puppeteer 내부 상태)
-              if (!dialog._handled) {
-                await dialog.accept()
-              } else {
-                this.logger.warn('다이얼로그가 이미 처리된 상태입니다.')
-              }
-
-              resolve(msg)
-            } catch (error) {
-              // "Cannot accept dialog which is already handled!" 오류는 무시
-              if (error.message.includes('already handled')) {
-                this.logger.warn('다이얼로그가 이미 처리된 상태에서 accept 시도됨 (무시)')
-                resolve(null)
-              } else {
-                this.logger.warn(`다이얼로그 처리 중 오류: ${error.message}`)
-                resolve(null)
-              }
-            }
+        dialogHandler = async (dialog: any) => {
+          if (dialogHandled) {
+            this.logger.warn('다이얼로그가 이미 처리되었습니다.')
+            resolve(null)
+            return
           }
 
-          page.once('dialog', dialogHandler)
+          try {
+            dialogHandled = true
+            const msg = dialog.message()
+
+            // dialog가 이미 처리되었는지 확인 (Puppeteer 내부 상태)
+            if (!dialog._handled) {
+              await dialog.accept()
+            } else {
+              this.logger.warn('다이얼로그가 이미 처리된 상태입니다.')
+            }
+
+            resolve(msg)
+          } catch (error) {
+            // "Cannot accept dialog which is already handled!" 오류는 무시
+            if (error.message.includes('already handled')) {
+              this.logger.warn('다이얼로그가 이미 처리된 상태에서 accept 시도됨 (무시)')
+              resolve(null)
+            } else {
+              this.logger.warn(`다이얼로그 처리 중 오류: ${error.message}`)
+              resolve(null)
+            }
+          }
+        }
+
+        page.once('dialog', dialogHandler)
+      })
+
+      const timeoutPromise: Promise<null> = new Promise(resolve => {
+        timeoutId = setTimeout(() => {
+          resolve(null)
+        }, 60_000)
+      })
+
+      // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
+      await page.click('.wrt-tit-box button')
+
+      // 커스텀 팝업 대기 프로미스
+      const customPopupPromise = this.waitForCustomPopup(page)
+
+      // dialog, timeout, navigation, custom popup 중 먼저 완료되는 것을 대기
+      const result = await Promise.race([
+        dialogPromise,
+        timeoutPromise,
+        customPopupPromise,
+        page
+          .waitForURL(/\/board\/[^\/]+$/, { timeout: 60_000 })
+          .then(() => null)
+          .catch(() => null),
+      ])
+
+      // 커스텀 팝업 결과 처리
+      if (result && typeof result === 'object' && 'isCustomPopup' in result) {
+        throw DcException.postSubmitFailed({
+          message: `글 등록 실패: ${result.message}`,
         })
+      }
 
-        const timeoutPromise: Promise<null> = new Promise(resolve => {
-          timeoutId = setTimeout(() => {
-            resolve(null)
-          }, 60_000)
-        })
+      const dialogMessage = result
 
-        // 등록 버튼 클릭 후, alert 또는 정상 이동 여부 확인
-        await page.click('.wrt-tit-box button')
+      // 알림창이 떴을 경우 처리
+      if (dialogMessage) {
+        // 캡챠 오류 메시지일 경우에만 재시도
+        if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
+          // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
+          try {
+            await page.evaluate(() => {
+              const img = document.getElementById('kcaptcha') as HTMLImageElement | null
+              if (img) img.click()
+            })
+          } catch {}
 
-        // 커스텀 팝업 대기 프로미스
-        const customPopupPromise = this.waitForCustomPopup(page)
-
-        // dialog, timeout, navigation, custom popup 중 먼저 완료되는 것을 대기
-        const result = await Promise.race([
-          dialogPromise,
-          timeoutPromise,
-          customPopupPromise,
-          page
-            .waitForURL(/\/board\/[^\/]+$/, { timeout: 60_000 })
-            .then(() => null)
-            .catch(() => null),
-        ])
-
-        // 커스텀 팝업 결과 처리
-        if (result && typeof result === 'object' && 'isCustomPopup' in result) {
+          throw DcException.captchaFailed({ message: dialogMessage })
+        } else {
+          // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
           throw DcException.postSubmitFailed({
-            message: `글 등록 실패: ${result.message}`,
+            message: `글 등록 실패: ${dialogMessage}`,
           })
         }
-
-        const dialogMessage = result
-
-        // 알림창이 떴을 경우 처리
-        if (dialogMessage) {
-          // 캡챠 오류 메시지일 경우에만 재시도
-          if (captchaErrorMessages.some(m => dialogMessage.includes(m))) {
-            captchaTryCount += 1
-            if (captchaTryCount >= 3) throw DcException.captchaFailed()
-
-            // 새 캡챠 이미지를 로드하기 위해 이미지 클릭
-            try {
-              await page.evaluate(() => {
-                const img = document.getElementById('kcaptcha') as HTMLImageElement | null
-                if (img) img.click()
-              })
-            } catch {}
-
-            await sleep(1000)
-            continue // while – 다시 등록 버튼 클릭 시도
-          } else {
-            // 캡챠 오류가 아닌 다른 오류 (IP 블락, 권한 없음 등) - 즉시 실패 처리
-            throw DcException.postSubmitFailed({
-              message: `글 등록 실패: ${dialogMessage}`,
-            })
-          }
-        }
-
-        // dialog가 없으면 성공으로 간주하고 루프 탈출
-        break
-      } finally {
-        // 다이얼로그 이벤트 리스너와 타이머 정리
-        if (dialogHandler) {
-          page.removeListener('dialog', dialogHandler)
-        }
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
+      }
+    } finally {
+      // 다이얼로그 이벤트 리스너와 타이머 정리
+      if (dialogHandler) {
+        page.removeListener('dialog', dialogHandler)
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
     }
   }

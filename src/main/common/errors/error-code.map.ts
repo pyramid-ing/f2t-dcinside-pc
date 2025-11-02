@@ -46,6 +46,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 400,
     message: meta => meta?.message || '예약날짜 형식이 잘못되었습니다.',
   },
+  [ErrorCode.CAPTCHA_DISABLED]: {
+    status: 400,
+    message: m => m?.message || '디시인사이드 캡챠가 비활성화되어 있습니다.',
+  },
 
   // 디시인사이드 댓글 관련
   [ErrorCode.COMMENT_DISABLED_PAGE]: { status: 400, message: m => m?.message || '댓글 작성이 불가능한 페이지입니다' },

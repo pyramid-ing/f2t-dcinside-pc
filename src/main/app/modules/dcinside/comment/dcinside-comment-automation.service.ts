@@ -67,8 +67,8 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
   ): Promise<void> {
     const settings = await this.settingsService.getSettings()
 
-    // 1. 페이지 켜기 (브라우저 생성) - Retry 적용
-    const { context, page, browserId } = await retry(() => this._launchBrowser(settings), 2000, 3, 'linear')
+    // 1. 페이지 켜기 (브라우저 생성)
+    const { context, page, browserId } = await this._launchBrowser(settings)
 
     try {
       // 2. IP 변경 처리
@@ -80,8 +80,8 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       // 4. 작업 간 딜레이
       await this.applyTaskDelay(settings.taskDelay)
 
-      // 5. 댓글 작성 실행 - Retry 적용
-      await retry(() => this._navigateToPost(page, postUrl), 2000, 3, 'linear')
+      // 5. 댓글 작성 실행
+      await this._navigateToPost(page, postUrl)
 
       // 비정상(삭제/존재하지 않음) 페이지 감지 시 예외 발생
       await this.checkAbnormalPage(page)
@@ -101,7 +101,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         2000,
         3,
         'linear',
-        error => !(error.type === DcExceptionType.CAPTCHA_SOLVE_FAILED),
+        error => error.type !== DcExceptionType.CAPTCHA_SOLVE_FAILED,
       )
     } finally {
       // 브라우저 종료 (신규 생성 모드일 때만)
@@ -479,7 +479,7 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
         this.logger.log('동적 캡챠 감지됨, 캡챠 해결 후 재제출')
 
         // 동적 캡챠 해결
-        await this.solveDcCaptcha(page, '#bot_capcha .code img', '#captcha_codeC')
+        await this.solveDcCaptcha(page, '#bot_capcha .code img', '#captcha_codeC', '.comment-write .code .sp-reload')
 
         await submitButton.click()
 
@@ -521,16 +521,8 @@ export class DcinsideCommentAutomationService extends DcinsideBaseService {
       if (captchaCount > 0) {
         this.logger.log('모바일 댓글용 캡차 감지됨, 해결 시작')
 
-        // 캡챠 새로고침 버튼 클릭 (댓글용)
-        const refreshButton = page.locator('.comment-write .code .sp-reload')
-        if ((await refreshButton.count()) > 0) {
-          this.logger.log('댓글용 캡챠 새로고침 버튼 클릭')
-          await refreshButton.click()
-          await sleep(1000) // 새로고침 후 잠시 대기
-        }
-
         // 모바일 댓글용 캡차 해결
-        await this.solveDcCaptcha(page, '.comment-write .code img', '#captcha_codeC')
+        await this.solveDcCaptcha(page, '.comment-write .code img', '#captcha_codeC', '.comment-write .code .sp-reload')
       } else {
         this.logger.log('모바일 댓글용 캡차가 감지되지 않음')
       }

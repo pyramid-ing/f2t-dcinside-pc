@@ -413,40 +413,50 @@ export abstract class DcinsideBaseService {
   /**
    * DC 캡챠 해결
    */
-  protected async solveDcCaptcha(page: Page, captchaImgSelector: string, inputSelector: string): Promise<void> {
-    try {
-      // 캡챠 활성 여부 확인
-      const settings = await this.settingsService.getSettings()
-      if (settings.dcCaptchaEnabled === false) {
-        throw DcException.captchaSolveFailed({
-          message: '디시인사이드 캡챠가 비활성화되어 있어 사용할 수 없습니다.',
-        })
-      }
+  protected async solveDcCaptcha(
+    page: Page,
+    captchaImgSelector: string,
+    inputSelector: string,
+    refreshSelector: string,
+  ): Promise<void> {
+    // 캡챠 활성 여부 확인
+    const settings = await this.settingsService.getSettings()
+    if (settings.dcCaptchaEnabled === false) {
+      throw DcException.captchaDisabled({
+        message: '디시인사이드 캡챠가 비활성화되어 있어 사용할 수 없습니다.',
+      })
+    }
 
-      const captchaImg = page.locator(captchaImgSelector)
-      const captchaCount = await captchaImg.count()
+    const captchaImg = page.locator(captchaImgSelector)
+    const captchaCount = await captchaImg.count()
 
-      if (captchaCount > 0) {
-        this.logger.log('DC 캡챠 감지됨, 해결 시작')
+    if (captchaCount > 0) {
+      this.logger.log('DC 캡챠 감지됨, 해결 시작')
 
-        // 캡챠 이미지 추출
-        const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, captchaImgSelector)
-
-        // 캡챠 해결
-        const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
-
-        // 캡챠 입력 필드에 답안 입력
-        const captchaInput = page.locator(inputSelector)
-        if ((await captchaInput.count()) > 0) {
-          await captchaInput.fill(answer)
-          this.logger.log(`캡챠 답안 입력 완료: ${answer}`)
+      // 캡챠 새로고침 버튼 클릭 (있는 경우)
+      if (refreshSelector) {
+        const refreshButton = page.locator(refreshSelector)
+        if ((await refreshButton.count()) > 0) {
+          this.logger.log('캡챠 새로고침 버튼 클릭')
+          await refreshButton.click()
+          await sleep(1000) // 새로고침 후 잠시 대기
         }
-      } else {
-        this.logger.log('캡챠가 존재하지 않음')
       }
-    } catch (error) {
-      this.logger.error(`캡챠 처리 실패: ${error.message}`)
-      throw DcException.captchaSolveFailed({ message: error.message })
+
+      // 캡챠 이미지 추출
+      const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, captchaImgSelector)
+
+      // 캡챠 해결
+      const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
+
+      // 캡챠 입력 필드에 답안 입력
+      const captchaInput = page.locator(inputSelector)
+      if ((await captchaInput.count()) > 0) {
+        await captchaInput.fill(answer)
+        this.logger.log(`캡챠 답안 입력 완료: ${answer}`)
+      }
+    } else {
+      this.logger.log('캡챠가 존재하지 않음')
     }
   }
 

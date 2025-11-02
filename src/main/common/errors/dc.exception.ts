@@ -18,6 +18,7 @@ export enum DcExceptionType {
   CAPTCHA_FAILED = 'CAPTCHA_FAILED',
   GALLERY_TYPE_UNSUPPORTED = 'GALLERY_TYPE_UNSUPPORTED',
   VIEW_COUNT_FETCH_FAILED = 'VIEW_COUNT_FETCH_FAILED',
+  CAPTCHA_DISABLED = 'CAPTCHA_DISABLED',
 }
 
 /**
@@ -143,5 +144,12 @@ export class DcException extends Error {
    */
   static viewCountFetchFailed(metadata?: Record<string, any>): DcException {
     return new DcException(DcExceptionType.VIEW_COUNT_FETCH_FAILED, metadata)
+  }
+
+  /**
+   * 캡챠 비활성화 예외
+   */
+  static captchaDisabled(metadata?: Record<string, any>): DcException {
+    return new DcException(DcExceptionType.CAPTCHA_DISABLED, metadata)
   }
 }
