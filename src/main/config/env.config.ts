@@ -17,6 +17,8 @@ export class EnvConfig {
     ? path.join(EnvConfig.userDataPath, 'f2t')
     : path.join(process.cwd(), 'static')
   public static resourcePath = EnvConfig.isPackaged ? process.resourcesPath : process.cwd()
+  public static exportsDir = path.join(EnvConfig.userDataCustomPath, 'exports')
+  public static tempDir = path.join(EnvConfig.userDataCustomPath, 'temp')
 
   // 패키지된 앱에서는 userData 폴더에 DB를 저장
   public static dbPath = EnvConfig.isPackaged ? path.join(EnvConfig.userDataCustomPath, 'app.sqlite') : './db.sqlite'
@@ -58,6 +60,7 @@ export class EnvConfig {
 
       this.initializeDatabase()
       this.initializeAdb()
+      this.initializeDirectories()
 
       LoggerConfig.info('=== Application Start ===')
       LoggerConfig.logSystemInfo()
@@ -190,6 +193,20 @@ export class EnvConfig {
     }
   }
 
+  private static initializeDirectories() {
+    // tempDir 생성
+    if (!fs.existsSync(this.tempDir)) {
+      fs.mkdirSync(this.tempDir, { recursive: true })
+      LoggerConfig.info(`Temp 디렉토리 생성 완료: ${this.tempDir}`)
+    }
+
+    // exportsDir 생성
+    if (!fs.existsSync(this.exportsDir)) {
+      fs.mkdirSync(this.exportsDir, { recursive: true })
+      LoggerConfig.info(`Exports 디렉토리 생성 완료: ${this.exportsDir}`)
+    }
+  }
+
   public static getPrismaConfig() {
     return {
       isDev: this.isDev,
@@ -201,6 +218,8 @@ export class EnvConfig {
       isElectron: this.isElectron,
       isPackaged: this.isPackaged,
       resourcePath: this.resourcePath,
+      tempDir: this.tempDir,
+      exportsDir: this.exportsDir,
       adbPath: this.adbPath,
     }
   }
