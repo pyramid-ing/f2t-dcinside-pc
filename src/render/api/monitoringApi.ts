@@ -127,7 +127,7 @@ export interface MonitoringStatus {
  * 모든 갤러리 조회
  */
 export async function getAllGalleries(): Promise<MonitoredGallery[]> {
-  const response = await api.get('/api/dcinside/monitoring/galleries')
+  const response = await api.get('/dcinside/monitoring/galleries')
   return response.data
 }
 
@@ -135,7 +135,7 @@ export async function getAllGalleries(): Promise<MonitoredGallery[]> {
  * 갤러리 단일 조회
  */
 export async function getGalleryById(id: string): Promise<MonitoredGallery> {
-  const response = await api.get(`/api/dcinside/monitoring/galleries/${id}`)
+  const response = await api.get(`/dcinside/monitoring/galleries/${id}`)
   return response.data
 }
 
@@ -143,7 +143,7 @@ export async function getGalleryById(id: string): Promise<MonitoredGallery> {
  * 갤러리 생성
  */
 export async function createGallery(dto: CreateMonitoredGalleryDto): Promise<MonitoredGallery> {
-  const response = await api.post('/api/dcinside/monitoring/galleries', dto)
+  const response = await api.post('/dcinside/monitoring/galleries', dto)
   return response.data
 }
 
@@ -151,7 +151,7 @@ export async function createGallery(dto: CreateMonitoredGalleryDto): Promise<Mon
  * 갤러리 일괄 생성
  */
 export async function createBulkGalleries(dto: BulkCreateMonitoredGalleryDto): Promise<MonitoredGallery[]> {
-  const response = await api.post('/api/dcinside/monitoring/galleries/bulk', dto)
+  const response = await api.post('/dcinside/monitoring/galleries/bulk', dto)
   return response.data
 }
 
@@ -159,7 +159,7 @@ export async function createBulkGalleries(dto: BulkCreateMonitoredGalleryDto): P
  * 갤러리 수정
  */
 export async function updateGallery(id: string, dto: UpdateMonitoredGalleryDto): Promise<MonitoredGallery> {
-  const response = await api.put(`/api/dcinside/monitoring/galleries/${id}`, dto)
+  const response = await api.put(`/dcinside/monitoring/galleries/${id}`, dto)
   return response.data
 }
 
@@ -167,14 +167,14 @@ export async function updateGallery(id: string, dto: UpdateMonitoredGalleryDto):
  * 갤러리 삭제
  */
 export async function deleteGallery(id: string): Promise<void> {
-  await api.delete(`/api/dcinside/monitoring/galleries/${id}`)
+  await api.delete(`/dcinside/monitoring/galleries/${id}`)
 }
 
 /**
  * 갤러리 활성화/비활성화 토글
  */
 export async function toggleGalleryActive(id: string): Promise<MonitoredGallery> {
-  const response = await api.post(`/api/dcinside/monitoring/galleries/${id}/toggle`)
+  const response = await api.post(`/dcinside/monitoring/galleries/${id}/toggle`)
   return response.data
 }
 
@@ -182,7 +182,7 @@ export async function toggleGalleryActive(id: string): Promise<MonitoredGallery>
  * 갤러리 일괄 상태 변경
  */
 export async function bulkUpdateGalleryStatus(dto: BulkUpdateGalleryStatusDto): Promise<{ updatedCount: number }> {
-  const response = await api.post('/api/dcinside/monitoring/galleries/bulk/status', dto)
+  const response = await api.post('/dcinside/monitoring/galleries/bulk/status', dto)
   return response.data
 }
 
@@ -192,7 +192,7 @@ export async function bulkUpdateGalleryStatus(dto: BulkUpdateGalleryStatusDto): 
  * 포스트 목록 조회
  */
 export async function getPosts(filter?: GetMonitoredPostsDto): Promise<MonitoredPost[]> {
-  const response = await api.get('/api/dcinside/monitoring/posts', { params: filter })
+  const response = await api.get('/dcinside/monitoring/posts', { params: filter })
   return response.data
 }
 
@@ -200,7 +200,7 @@ export async function getPosts(filter?: GetMonitoredPostsDto): Promise<Monitored
  * 포스트 단일 조회
  */
 export async function getPostById(id: string): Promise<MonitoredPost> {
-  const response = await api.get(`/api/dcinside/monitoring/posts/${id}`)
+  const response = await api.get(`/dcinside/monitoring/posts/${id}`)
   return response.data
 }
 
@@ -208,14 +208,14 @@ export async function getPostById(id: string): Promise<MonitoredPost> {
  * 포스트 삭제
  */
 export async function deletePost(id: string): Promise<void> {
-  await api.delete(`/api/dcinside/monitoring/posts/${id}`)
+  await api.delete(`/dcinside/monitoring/posts/${id}`)
 }
 
 /**
  * 포스트 일괄 삭제
  */
 export async function bulkDeletePosts(postIds: string[]): Promise<{ deletedCount: number }> {
-  const response = await api.post('/api/dcinside/monitoring/posts/bulk/delete', { postIds })
+  const response = await api.post('/dcinside/monitoring/posts/bulk/delete', { postIds })
   return response.data
 }
 
@@ -225,7 +225,7 @@ export async function bulkDeletePosts(postIds: string[]): Promise<{ deletedCount
 export async function bulkAnswerPosts(
   dto: BulkAnswerMonitoredPostsDto,
 ): Promise<{ answeredCount: number; failedCount: number }> {
-  const response = await api.post('/api/dcinside/monitoring/posts/bulk/answer', dto)
+  const response = await api.post('/dcinside/monitoring/posts/bulk/answer', dto)
   return response.data
 }
 
@@ -233,7 +233,7 @@ export async function bulkAnswerPosts(
  * 포스트에 댓글 달기
  */
 export async function answerPost(dto: AnswerMonitoredPostDto): Promise<MonitoredPost> {
-  const response = await api.post(`/api/dcinside/monitoring/posts/${dto.postId}/answer`, dto)
+  const response = await api.post(`/dcinside/monitoring/posts/${dto.postId}/answer`, dto)
   return response.data
 }
 
@@ -241,7 +241,7 @@ export async function answerPost(dto: AnswerMonitoredPostDto): Promise<Monitored
  * AI 검증 재시도
  */
 export async function retryAiCheck(postId: string): Promise<MonitoredPost> {
-  const response = await api.post(`/api/dcinside/monitoring/posts/${postId}/retry-ai`)
+  const response = await api.post(`/dcinside/monitoring/posts/${postId}/retry-ai`)
   return response.data
 }
 
@@ -255,7 +255,7 @@ export async function crawlGalleries(ids: string[]): Promise<{
   failedCount: number
   results: Array<{ id: string; success: boolean; newPostCount?: number; error?: string }>
 }> {
-  const response = await api.post('/api/dcinside/monitoring/galleries/crawl', { ids })
+  const response = await api.post('/dcinside/monitoring/galleries/crawl', { ids })
   return response.data
 }
 
@@ -265,21 +265,21 @@ export async function crawlGalleries(ids: string[]): Promise<{
  * 크롤링 시작
  */
 export async function startCrawling(): Promise<void> {
-  await api.post('/api/dcinside/monitoring/crawling/start')
+  await api.post('/dcinside/monitoring/crawling/start')
 }
 
 /**
  * 크롤링 중지
  */
 export async function stopCrawling(): Promise<void> {
-  await api.post('/api/dcinside/monitoring/crawling/stop')
+  await api.post('/dcinside/monitoring/crawling/stop')
 }
 
 /**
  * 크롤링 상태 조회
  */
 export async function getCrawlingStatus(): Promise<{ isRunning: boolean }> {
-  const response = await api.get('/api/dcinside/monitoring/crawling/status')
+  const response = await api.get('/dcinside/monitoring/crawling/status')
   return response.data
 }
 
@@ -289,28 +289,28 @@ export async function getCrawlingStatus(): Promise<{ isRunning: boolean }> {
  * 자동 댓글 시작
  */
 export async function startAutoComment(comments?: string[]): Promise<void> {
-  await api.post('/api/dcinside/monitoring/auto-comment/start', { comments })
+  await api.post('/dcinside/monitoring/auto-comment/start', { comments })
 }
 
 /**
  * 자동 댓글 중지
  */
 export async function stopAutoComment(): Promise<void> {
-  await api.post('/api/dcinside/monitoring/auto-comment/stop')
+  await api.post('/dcinside/monitoring/auto-comment/stop')
 }
 
 /**
  * 자동 댓글 기본 텍스트 설정
  */
 export async function setDefaultCommentText(text: string): Promise<void> {
-  await api.post('/api/dcinside/monitoring/auto-comment/default-text', { text })
+  await api.post('/dcinside/monitoring/auto-comment/default-text', { text })
 }
 
 /**
  * 자동 댓글 상태 조회
  */
 export async function getAutoCommentStatus(): Promise<{ isRunning: boolean; comments: string[] }> {
-  const response = await api.get('/api/dcinside/monitoring/auto-comment/status')
+  const response = await api.get('/dcinside/monitoring/auto-comment/status')
   return response.data
 }
 
@@ -320,7 +320,7 @@ export async function getAutoCommentStatus(): Promise<{ isRunning: boolean; comm
  * 모니터링 전체 상태 조회
  */
 export async function getMonitoringStatus(): Promise<MonitoringStatus> {
-  const response = await api.get('/api/dcinside/monitoring/status')
+  const response = await api.get('/dcinside/monitoring/status')
   return response.data
 }
 
@@ -336,7 +336,7 @@ export interface AiPromptOption {
  * 사용 가능한 AI 프롬프트 목록 조회
  */
 export async function getAiPrompts(): Promise<AiPromptOption[]> {
-  const response = await api.get('/api/dcinside/monitoring/ai-prompts')
+  const response = await api.get('/dcinside/monitoring/ai-prompts')
   return response.data
 }
 
@@ -346,7 +346,7 @@ export async function getAiPrompts(): Promise<AiPromptOption[]> {
  * 갤러리 목록 엑셀 다운로드
  */
 export async function downloadGalleriesExcel(): Promise<void> {
-  const response = await api.get('/api/dcinside/monitoring/galleries/download', {
+  const response = await api.get('/dcinside/monitoring/galleries/download', {
     responseType: 'blob',
   })
 
@@ -406,7 +406,7 @@ export interface UpdateBlacklistedGalleryDto {
  * 모든 블랙리스트 조회
  */
 export async function getAllBlacklistedGalleries(): Promise<BlacklistedGallery[]> {
-  const response = await api.get('/api/dcinside/monitoring/blacklist')
+  const response = await api.get('/dcinside/monitoring/blacklist')
   return response.data
 }
 
@@ -414,7 +414,7 @@ export async function getAllBlacklistedGalleries(): Promise<BlacklistedGallery[]
  * 블랙리스트 단일 조회
  */
 export async function getBlacklistedGalleryById(id: string): Promise<BlacklistedGallery> {
-  const response = await api.get(`/api/dcinside/monitoring/blacklist/${id}`)
+  const response = await api.get(`/dcinside/monitoring/blacklist/${id}`)
   return response.data
 }
 
@@ -422,7 +422,7 @@ export async function getBlacklistedGalleryById(id: string): Promise<Blacklisted
  * 블랙리스트 생성
  */
 export async function createBlacklistedGallery(dto: CreateBlacklistedGalleryDto): Promise<BlacklistedGallery> {
-  const response = await api.post('/api/dcinside/monitoring/blacklist', dto)
+  const response = await api.post('/dcinside/monitoring/blacklist', dto)
   return response.data
 }
 
@@ -433,7 +433,7 @@ export async function updateBlacklistedGallery(
   id: string,
   dto: UpdateBlacklistedGalleryDto,
 ): Promise<BlacklistedGallery> {
-  const response = await api.put(`/api/dcinside/monitoring/blacklist/${id}`, dto)
+  const response = await api.put(`/dcinside/monitoring/blacklist/${id}`, dto)
   return response.data
 }
 
@@ -441,14 +441,14 @@ export async function updateBlacklistedGallery(
  * 블랙리스트 삭제
  */
 export async function deleteBlacklistedGallery(id: string): Promise<void> {
-  await api.delete(`/api/dcinside/monitoring/blacklist/${id}`)
+  await api.delete(`/dcinside/monitoring/blacklist/${id}`)
 }
 
 /**
  * 블랙리스트 일괄 삭제
  */
 export async function bulkDeleteBlacklistedGalleries(ids: string[]): Promise<{ deletedCount: number }> {
-  const response = await api.post('/api/dcinside/monitoring/blacklist/bulk/delete', { ids })
+  const response = await api.post('/dcinside/monitoring/blacklist/bulk/delete', { ids })
   return response.data
 }
 
@@ -465,6 +465,6 @@ export async function executeManualCoupas(dto: {
   nickname?: string
   password?: string
 }): Promise<{ jobId: string; coupasJobId: string; message: string }> {
-  const response = await api.post('/api/dcinside/monitoring/coupas/manual', dto)
+  const response = await api.post('/dcinside/monitoring/coupas/manual', dto)
   return response.data
 }

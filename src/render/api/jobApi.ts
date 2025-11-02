@@ -27,7 +27,7 @@ export async function getJobs(params?: {
   page?: number
   limit?: number
 }): Promise<PaginatedResponse<Job>> {
-  const response = await api.get('/api/jobs', { params })
+  const response = await api.get('/jobs', { params })
   return response.data
 }
 
@@ -35,7 +35,7 @@ export async function getJobs(params?: {
  * 특정 작업의 로그 목록을 조회합니다.
  */
 export async function getJobLogs(jobId: string): Promise<JobLog[]> {
-  const response = await api.get(`/api/jobs/${jobId}/logs`)
+  const response = await api.get(`/jobs/${jobId}/logs`)
   return response.data
 }
 
@@ -43,7 +43,7 @@ export async function getJobLogs(jobId: string): Promise<JobLog[]> {
  * 특정 작업의 최신 로그를 조회합니다.
  */
 export async function getLatestJobLog(jobId: string): Promise<JobLog | null> {
-  const response = await api.get(`/api/jobs/${jobId}/logs/latest`)
+  const response = await api.get(`/jobs/${jobId}/logs/latest`)
   return response.data
 }
 
@@ -51,7 +51,7 @@ export async function getLatestJobLog(jobId: string): Promise<JobLog | null> {
  * 실패한 작업을 재시도합니다.
  */
 export async function retryJob(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/retry`)
+  const response = await api.post(`/jobs/${jobId}/retry`)
   return response.data
 }
 
@@ -59,7 +59,7 @@ export async function retryJob(jobId: string): Promise<ApiResponse> {
  * 삭제 실패한 작업을 재시도합니다.
  */
 export async function retryDeleteJob(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/retry-delete`)
+  const response = await api.post(`/jobs/${jobId}/retry-delete`)
   return response.data
 }
 
@@ -67,7 +67,7 @@ export async function retryDeleteJob(jobId: string): Promise<ApiResponse> {
  * 작업을 삭제합니다.
  */
 export async function deleteJob(jobId: string): Promise<ApiResponse> {
-  const response = await api.delete(`/api/jobs/${jobId}`)
+  const response = await api.delete(`/jobs/${jobId}`)
   return response.data
 }
 
@@ -75,7 +75,7 @@ export async function deleteJob(jobId: string): Promise<ApiResponse> {
  * 여러 작업을 재시도합니다.
  */
 export async function retryJobs(request: BulkActionRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/retry', request)
+  const response = await api.post('/jobs/bulk/retry', request)
   return response.data
 }
 
@@ -83,7 +83,7 @@ export async function retryJobs(request: BulkActionRequest): Promise<ApiResponse
  * 여러 삭제 실패한 작업을 재시도합니다.
  */
 export async function bulkRetryDeleteJobs(request: BulkRetryDeleteRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/retry-delete', request)
+  const response = await api.post('/jobs/bulk/retry-delete', request)
   return response.data
 }
 
@@ -91,7 +91,7 @@ export async function bulkRetryDeleteJobs(request: BulkRetryDeleteRequest): Prom
  * 여러 작업을 삭제합니다.
  */
 export async function deleteJobs(request: BulkActionRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/delete', request)
+  const response = await api.post('/jobs/bulk/delete', request)
   return response.data
 }
 
@@ -99,7 +99,7 @@ export async function deleteJobs(request: BulkActionRequest): Promise<ApiRespons
  * 여러 작업의 등록후자동삭제(분)을 설정합니다.
  */
 export async function bulkUpdateAutoDelete(request: BulkActionRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/auto-delete', request)
+  const response = await api.post('/jobs/bulk/auto-delete', request)
   return response.data
 }
 
@@ -107,7 +107,7 @@ export async function bulkUpdateAutoDelete(request: BulkActionRequest): Promise<
  * 여러 작업에 등록 간격을 적용합니다.
  */
 export async function bulkApplyInterval(request: BulkActionRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/apply-interval', request)
+  const response = await api.post('/jobs/bulk/apply-interval', request)
   return response.data
 }
 
@@ -115,7 +115,7 @@ export async function bulkApplyInterval(request: BulkActionRequest): Promise<Api
  * 여러 작업을 등록대기에서 등록요청으로 일괄 변경합니다.
  */
 export async function bulkPendingToRequest(request: BulkActionRequest): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/pending-to-request', request)
+  const response = await api.post('/jobs/bulk/pending-to-request', request)
   return response.data
 }
 
@@ -123,7 +123,7 @@ export async function bulkPendingToRequest(request: BulkActionRequest): Promise<
  * 등록대기(pending) 상태를 등록요청(request)으로 변경
  */
 export async function pendingToRequest(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/pending-to-request`)
+  const response = await api.post(`/jobs/${jobId}/pending-to-request`)
   return response.data
 }
 
@@ -139,7 +139,7 @@ export async function updateJobAutoDeleteMinutes(
   if (deleteAt !== undefined) {
     data.deleteAt = deleteAt
   }
-  const response = await api.patch(`/api/jobs/${jobId}`, data)
+  const response = await api.patch(`/jobs/${jobId}`, data)
   return response.data
 }
 
@@ -147,7 +147,7 @@ export async function updateJobAutoDeleteMinutes(
  * 작업의 예약시간을 설정합니다.
  */
 export async function updateJobScheduledAt(jobId: string, scheduledAt: string | null): Promise<ApiResponse> {
-  const response = await api.patch(`/api/jobs/${jobId}`, { scheduledAt })
+  const response = await api.patch(`/jobs/${jobId}`, { scheduledAt })
   return response.data
 }
 
@@ -157,7 +157,7 @@ export async function updateJobScheduledAt(jobId: string, scheduledAt: string | 
 export async function updateViewCounts(
   jobIds: string[],
 ): Promise<{ success: boolean; updated: number; failed: number; results: any[] }> {
-  const response = await api.post('/api/post-jobs/update-view-counts', { jobIds })
+  const response = await api.post('/post-jobs/update-view-counts', { jobIds })
   return response.data
 }
 
@@ -166,7 +166,7 @@ export async function updateViewCounts(
  */
 export async function exportJobsToExcel(jobIds: string[]): Promise<Blob> {
   const response = await api.post(
-    '/api/post-jobs/export-excel',
+    '/post-jobs/export-excel',
     { jobIds },
     {
       responseType: 'blob',

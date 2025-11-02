@@ -78,7 +78,7 @@ export const commentApi = {
    * 게시물 검색
    */
   async searchPosts(request: CommentSearchRequest): Promise<PostSearchResponse> {
-    const response = await apiClient.post('/api/dcinside/comment/search', request)
+    const response = await apiClient.post('/dcinside/comment/search', request)
     return response.data
   },
 
@@ -86,7 +86,7 @@ export const commentApi = {
    * 댓글 작업 생성
    */
   async createCommentJob(request: CreateCommentJobRequest): Promise<CommentJob[]> {
-    const response = await apiClient.post('/api/dcinside/comment/jobs', request)
+    const response = await apiClient.post('/dcinside/comment/jobs', request)
     return response.data
   },
 
@@ -94,7 +94,7 @@ export const commentApi = {
    * 댓글 작업 목록 조회
    */
   async getCommentJobs(): Promise<CommentJob[]> {
-    const response = await apiClient.get('/api/dcinside/comment/jobs')
+    const response = await apiClient.get('/dcinside/comment/jobs')
     return response.data
   },
 
@@ -102,14 +102,14 @@ export const commentApi = {
    * 댓글 작업 상태 업데이트
    */
   async updateJobStatus(jobId: string, status: 'RUNNING' | 'STOPPED'): Promise<void> {
-    await apiClient.patch(`/api/dcinside/comment/jobs/${jobId}/status`, { status })
+    await apiClient.patch(`/dcinside/comment/jobs/${jobId}/status`, { status })
   },
 
   /**
    * 엑셀 파일로 댓글 작업 일괄 생성
    */
   async createBulkCommentJobs(request: BulkCommentJobRequest): Promise<CommentJob[]> {
-    const response = await apiClient.post('/api/dcinside/comment/jobs/bulk', request)
+    const response = await apiClient.post('/dcinside/comment/jobs/bulk', request)
     return response.data
   },
 }

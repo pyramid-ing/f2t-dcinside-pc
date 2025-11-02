@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { errorNormalizer } from './errorHelpers'
 
-const API_BASE_URL = 'http://localhost:3554'
+const API_BASE_URL = 'http://localhost:3554/api'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
