@@ -419,19 +419,19 @@ export abstract class DcinsideBaseService {
     inputSelector: string,
     refreshSelector: string,
   ): Promise<void> {
-    // 캡챠 활성 여부 확인
-    const settings = await this.settingsService.getSettings()
-    if (settings.dcCaptchaEnabled === false) {
-      throw DcException.captchaDisabled({
-        message: '디시인사이드 캡챠가 비활성화되어 있어 사용할 수 없습니다.',
-      })
-    }
-
     const captchaImg = page.locator(captchaImgSelector)
     const captchaCount = await captchaImg.count()
 
     if (captchaCount > 0) {
       this.logger.log('DC 캡챠 감지됨, 해결 시작')
+
+      // 캡챠 활성 여부 확인
+      const settings = await this.settingsService.getSettings()
+      if (settings.dcCaptchaEnabled === false) {
+        throw DcException.captchaDisabled({
+          message: '디시인사이드 캡챠가 비활성화되어 있어 사용할 수 없습니다.',
+        })
+      }
 
       // 캡챠 새로고침 버튼 클릭 (있는 경우)
       if (refreshSelector) {
