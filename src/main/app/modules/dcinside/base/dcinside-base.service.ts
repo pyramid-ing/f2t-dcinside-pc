@@ -580,6 +580,11 @@ export abstract class DcinsideBaseService {
   public async handleTetheringMode(settings: Settings): Promise<void> {
     await this._checkPermission(Permission.TETHERING)
 
+    // 와이파이 자동 연결 확인 및 처리
+    if (settings?.tethering?.wifi?.enabled && settings?.tethering?.wifi?.ssid && settings?.tethering?.wifi?.password) {
+      await this._handleWifiConnection(settings.tethering.wifi)
+    }
+
     // IP 변경이 필요한지 확인
     const shouldChange = this.tetheringService.shouldChangeIp(settings?.tethering?.changeInterval)
 
@@ -595,6 +600,37 @@ export abstract class DcinsideBaseService {
       }
     } else {
       await this.jobLogsService.createJobLog(`테더링 IP 변경 주기에 따라 변경하지 않음`)
+    }
+  }
+
+  /**
+   * 와이파이 연결 처리
+   */
+  private async _handleWifiConnection(wifiConfig: { ssid: string; password: string }): Promise<void> {
+    await this.jobLogsService.createJobLog(`와이파이 연결 확인 시작: ${wifiConfig.ssid}`)
+
+    // 현재 연결된 와이파이 SSID 확인
+    const currentSsid = this.tetheringService.getCurrentWifiSsid()
+
+    if (currentSsid.success && currentSsid.ssid === wifiConfig.ssid) {
+      await this.jobLogsService.createJobLog(`이미 ${wifiConfig.ssid}에 연결되어 있습니다.`)
+      return
+    }
+
+    // 설정된 와이파이와 다르면 연결 시도
+    if (currentSsid.success && currentSsid.ssid !== wifiConfig.ssid) {
+      await this.jobLogsService.createJobLog(`현재 연결: ${currentSsid.ssid}, 목표: ${wifiConfig.ssid}`)
+    }
+
+    // 와이파이 연결 시도
+    const result = await this.tetheringService.connectToWifi(wifiConfig.ssid, wifiConfig.password)
+
+    if (result.success) {
+      await this.jobLogsService.createJobLog(`와이파이 연결 성공: ${result.message}`)
+    } else {
+      await this.jobLogsService.createJobLog(`와이파이 연결 실패: ${result.message}`)
+      // 실패해도 경고만 하고 계속 진행 (기존 동작 유지)
+      this.logger.warn(`와이파이 연결 실패: ${result.message}`)
     }
   }
 

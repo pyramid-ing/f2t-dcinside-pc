@@ -41,9 +41,16 @@ export interface Settings {
 
   /** 테더링 설정 */
   tethering?: {
-    adbPath?: string
-    attempts?: number
-    waitSeconds?: number
+    changeInterval?: {
+      type: string
+      timeMinutes?: number
+      postCount?: number
+    }
+    wifi?: {
+      enabled?: boolean
+      ssid: string
+      password: string
+    }
   }
 
   /** 게시글 모니터링 설정 */

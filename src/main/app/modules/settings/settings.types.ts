@@ -52,6 +52,14 @@ export interface Settings {
       timeMinutes?: number // 시간 기반: 마지막 변경 후 N분이 지나면 변경 (기본 30분)
       postCount?: number // 포스팅 수 기반: N개 포스팅 후 변경 (기본 5개)
     }
+    /**
+     * 와이파이 자동 연결 설정
+     */
+    wifi?: {
+      enabled?: boolean // 와이파이 자동 연결 사용 여부
+      ssid: string // 와이파이 SSID
+      password: string // 와이파이 비밀번호
+    }
   }
 
   /** 게시글 모니터링 설정 */

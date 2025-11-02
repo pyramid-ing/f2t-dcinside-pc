@@ -55,3 +55,10 @@ export const changeIp = async (): Promise<{
   const res = await api.post('/settings/tethering/change-ip')
   return res.data
 }
+
+export const getWifiNetworks = async (): Promise<{
+  networks: string[]
+}> => {
+  const res = await api.get('/settings/tethering/wifi-networks')
+  return res.data
+}

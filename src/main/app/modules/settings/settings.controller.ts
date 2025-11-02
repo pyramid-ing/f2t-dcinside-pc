@@ -90,4 +90,12 @@ export class SettingsController {
       changed: prevIp.ip !== newIp.ip,
     }
   }
+
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.TETHERING)
+  @Get('tethering/wifi-networks')
+  async getWifiNetworks() {
+    const result = this.tetheringService.getSavedWifiNetworks()
+    return result
+  }
 }

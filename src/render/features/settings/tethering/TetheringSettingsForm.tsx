@@ -2,9 +2,9 @@ import type { Settings } from '@render/types/settings'
 import { TetheringChangeType } from '@main/app/modules/settings/settings.types'
 import React, { useEffect, useState } from 'react'
 import type { FormInstance } from 'antd'
-import { Form, Input, Space, message, Button, Radio } from 'antd'
+import { Form, Input, Space, message, Button, Radio, Select, Switch } from 'antd'
 import { CheckCircleTwoTone, CloseCircleTwoTone, ReloadOutlined } from '@ant-design/icons'
-import { checkTetheringConnection, changeIp } from '@render/api/settingsApi'
+import { checkTetheringConnection, changeIp, getWifiNetworks } from '@render/api/settingsApi'
 import { getSettings } from '@render/api'
 import { usePermissions } from '@render/hooks/usePermissions'
 import { Permission } from '@render/types/permissions'
@@ -28,6 +28,8 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
     connected: boolean
     output: string
   }>(null)
+  const [wifiNetworks, setWifiNetworks] = useState<string[]>([])
+  const [loadingWifi, setLoadingWifi] = useState(false)
   const { canAccess } = usePermissions()
   const canUseTethering = canAccess(Permission.TETHERING)
 
@@ -46,6 +48,24 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
       })()
     }
   }, [form])
+
+  useEffect(() => {
+    loadWifiNetworks()
+  }, [])
+
+  const loadWifiNetworks = async () => {
+    if (!canUseTethering) return
+
+    try {
+      setLoadingWifi(true)
+      const result = await getWifiNetworks()
+      setWifiNetworks(result.networks || [])
+    } catch (e: any) {
+      console.error('와이파이 목록 로드 실패:', e)
+    } finally {
+      setLoadingWifi(false)
+    }
+  }
 
   return (
     <div>
@@ -171,7 +191,49 @@ const TetheringSettingsForm: React.FC<Props> = ({ form: parentForm }) => {
         </div>
       </div>
 
-      <div style={{ color: '#888', marginTop: 8 }}>안드로이드 모바일 데이터 토글로 IP를 변경합니다.</div>
+      <div style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>와이파이 자동 연결</h4>
+          <Form.Item name={['tethering', 'wifi', 'enabled']} valuePropName="checked" style={{ margin: 0 }}>
+            <Switch disabled={!canUseTethering} />
+          </Form.Item>
+        </div>
+
+        <Form.Item
+          noStyle
+          shouldUpdate={(prevValues, currentValues) =>
+            prevValues.tethering?.wifi?.enabled !== currentValues.tethering?.wifi?.enabled
+          }
+        >
+          {({ getFieldValue }) => {
+            const wifiEnabled = getFieldValue(['tethering', 'wifi', 'enabled'])
+            return (
+              <>
+                <Form.Item label="와이파이 이름 (SSID)" name={['tethering', 'wifi', 'ssid']}>
+                  <Select
+                    disabled={!canUseTethering || !wifiEnabled}
+                    placeholder="저장된 와이파이 선택"
+                    loading={loadingWifi}
+                    showSearch
+                    allowClear
+                    filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                    options={wifiNetworks.map(network => ({ label: network, value: network }))}
+                  />
+                </Form.Item>
+
+                <Form.Item label="비밀번호" name={['tethering', 'wifi', 'password']}>
+                  <Input.Password disabled={!canUseTethering || !wifiEnabled} placeholder="와이파이 비밀번호" />
+                </Form.Item>
+              </>
+            )
+          }}
+        </Form.Item>
+
+        <div style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+          • 포스팅/댓글 작성 전에 설정된 와이파이에 자동 연결됩니다.
+          <br />• IP 변경 시 와이파이 연결이 끊어질 수 있어 자동으로 재연결합니다.
+        </div>
+      </div>
     </div>
   )
 }
