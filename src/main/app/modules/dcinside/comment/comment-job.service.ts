@@ -193,9 +193,9 @@ export class CommentJobService implements JobProcessor {
               postTitle,
               galleryId, // 추가: 갤러리 ID
               nickname: commentJobData.nickname ?? null,
-              password: commentJobData.password ?? null,
+              password: String(commentJobData.password) ?? null,
               loginId: commentJobData.loginId ?? null,
-              loginPassword: commentJobData.loginPassword ?? null,
+              loginPassword: String(commentJobData.loginPassword) ?? null,
             },
           },
         },
