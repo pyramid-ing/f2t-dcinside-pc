@@ -77,6 +77,9 @@ export interface Settings {
   /** 쿠팡 파트너스 설정 */
   coupangPartnersAccessKey?: string // 쿠팡 파트너스 Access Key
   coupangPartnersSecretKey?: string // 쿠팡 파트너스 Secret Key
+
+  /** 디시인사이드 캡챠 활성 여부 */
+  dcCaptchaEnabled?: boolean
 }
 
 export enum IpMode {

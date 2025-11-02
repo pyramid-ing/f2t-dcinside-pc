@@ -59,6 +59,7 @@ const SettingsForm: React.FC = () => {
           taskDelay: 10,
           actionDelay: 1.0,
           imageUploadFailureAction: 'fail',
+          dcCaptchaEnabled: true,
         }}
       >
         <Form.Item
@@ -115,6 +116,15 @@ const SettingsForm: React.FC = () => {
               <Radio value="skip">이미지 무시하고 진행 - 이미지 없이 텍스트만 포스팅합니다</Radio>
             </Space>
           </Radio.Group>
+        </Form.Item>
+
+        <Form.Item
+          label="디시인사이드 캡챠 활성"
+          name="dcCaptchaEnabled"
+          valuePropName="checked"
+          extra="디시인사이드 캡챠 자동 해결 기능 사용 여부를 설정합니다. 비활성화하면 캡챠가 감지되었을 때 작업이 실패합니다."
+        >
+          <Switch checkedChildren="활성" unCheckedChildren="비활성" loading={loading} />
         </Form.Item>
 
         <Form.Item>

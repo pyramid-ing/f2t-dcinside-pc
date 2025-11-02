@@ -415,6 +415,14 @@ export abstract class DcinsideBaseService {
    */
   protected async solveDcCaptcha(page: Page, captchaImgSelector: string, inputSelector: string): Promise<void> {
     try {
+      // 캡챠 활성 여부 확인
+      const settings = await this.settingsService.getSettings()
+      if (settings.dcCaptchaEnabled === false) {
+        throw DcException.captchaSolveFailed({
+          message: '디시인사이드 캡챠가 비활성화되어 있어 사용할 수 없습니다.',
+        })
+      }
+
       const captchaImg = page.locator(captchaImgSelector)
       const captchaCount = await captchaImg.count()
 

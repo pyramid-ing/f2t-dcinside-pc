@@ -46,6 +46,7 @@ export class SettingsService {
       commentSelectionMethod: 'random',
       coupangPartnersAccessKey: '',
       coupangPartnersSecretKey: '',
+      dcCaptchaEnabled: true, // 기본값: 활성화
     }
     const merged = {
       ...defaultSettings,

@@ -750,31 +750,7 @@ export class DcinsidePostingService extends DcinsideBaseService {
 
       // 2. DC 일반 캡챠 감지 및 처리 (리캡챠와 독립적으로 확인)
       // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
-      const captchaImg = page.locator('#kcaptcha')
-      const captchaCount = await captchaImg.count()
-
-      if (captchaCount > 0) {
-        this.logger.log('글쓰기용 문자 캡차 감지됨, 해결 시작')
-
-        try {
-          // 캡차 이미지 추출 (글쓰기용 selector)
-          const captchaImageBase64 = await this.dcCaptchaSolverService.extractCaptchaImageBase64(page, '#kcaptcha')
-
-          // 캡차 해결
-          const answer = await this.dcCaptchaSolverService.solveDcCaptcha(captchaImageBase64)
-
-          // 캡차 입력 필드에 답안 입력
-          const captchaInput = page.locator('input[name=kcaptcha_code]')
-          if ((await captchaInput.count()) > 0) {
-            await captchaInput.fill(answer)
-            this.logger.log(`글쓰기용 캡차 답안 입력 완료: ${answer}`)
-          }
-        } catch (error) {
-          throw DcException.captchaFailed({ message: error.message })
-        }
-      } else {
-        this.logger.log('글쓰기용 캡차가 존재하지 않음')
-      }
+      await this.solveDcCaptcha(page, '#kcaptcha', 'input[name=kcaptcha_code]')
 
       let dialogHandler: ((dialog: any) => Promise<void>) | null = null
       let timeoutId: NodeJS.Timeout | null = null
