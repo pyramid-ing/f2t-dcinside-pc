@@ -78,6 +78,7 @@ model PostJob {
   autoDeleteMinutes  Int? // 등록후자동삭제(분)
   viewCount          Int? // 조회수
   viewCountUpdatedAt DateTime? // 조회수 마지막 업데이트 시간
+  comment            String? // 게시글 등록 후 자동 댓글 등록용
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -63,6 +63,7 @@ export class DcinsideWorkflowService {
             imagePosition: transformedRow.imagePosition ?? null,
             deleteAt: transformedRow.deleteAt ?? undefined,
             autoDeleteMinutes: transformedRow.autoDeleteMinutes ?? undefined,
+            comment: transformedRow.comment ?? null,
           })
 
           const isScheduled = transformedRow.scheduledAt && dayjs(transformedRow.scheduledAt).isAfter(dayjs())

@@ -25,6 +25,7 @@ export const generateAutoPostSampleNonMember = () => {
       로그인비번: '',
       예약날짜: '',
       '등록후자동삭제(분)': '10',
+      댓글: '',
     },
     {
       갤러리주소: 'https://m.dcinside.com/board/maplestory_new',
@@ -48,6 +49,7 @@ export const generateAutoPostSampleNonMember = () => {
       로그인비번: '',
       예약날짜: '',
       '등록후자동삭제(분)': '10',
+      댓글: '',
     },
   ]
 
@@ -80,6 +82,7 @@ export const generateAutoPostSampleMember = () => {
       로그인비번: '로그인 비밀번호',
       예약날짜: '',
       '등록후자동삭제(분)': '10',
+      댓글: '',
     },
     {
       갤러리주소: 'https://m.dcinside.com/board/football_new9',
@@ -103,6 +106,7 @@ export const generateAutoPostSampleMember = () => {
       로그인비번: '로그인 비밀번호',
       예약날짜: '',
       '등록후자동삭제(분)': '10',
+      댓글: '',
     },
   ]
 

@@ -26,6 +26,7 @@ export const ExcelRowSchema = z
     예약날짜: z.string().optional(),
     '등록후자동삭제(분)': z.coerce.number().int().optional(),
     이미지위치: z.string().optional(),
+    댓글: z.string().optional(),
   })
   .transform(data => {
     // 이미지 경로들을 배열로 변환
@@ -91,5 +92,6 @@ export const ExcelRowSchema = z
       deleteAt,
       autoDeleteMinutes,
       imagePosition: data.이미지위치 && data.이미지위치.trim() ? data.이미지위치 : undefined,
+      comment: data.댓글 && data.댓글.trim() ? data.댓글 : undefined,
     }
   })

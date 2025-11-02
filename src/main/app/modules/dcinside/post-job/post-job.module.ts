@@ -7,9 +7,10 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CookieService } from '@main/app/modules/util/cookie.service'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
+import { DcinsideCommentModule } from '@main/app/modules/dcinside/comment/dcinsideCommentModule'
 
 @Module({
-  imports: [JobLogsModule, DcinsidePostingModule, CommonModule, UtilModule],
+  imports: [JobLogsModule, DcinsidePostingModule, CommonModule, UtilModule, DcinsideCommentModule],
   controllers: [PostJobController],
   providers: [PostJobService, SettingsService, CookieService],
   exports: [PostJobService],

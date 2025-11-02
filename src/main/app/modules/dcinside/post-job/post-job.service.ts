@@ -18,6 +18,7 @@ import * as XLSX from 'xlsx'
 import { BulkUpdateViewCountsDto, ExportExcelDto } from '@main/app/modules/dcinside/job/dto/bulk-action.dto'
 import { SelectionMode } from '@main/app/modules/dcinside/job/enums/selection-mode.enum'
 import { Prisma } from '@prisma/client'
+import { CommentJobService } from '@main/app/modules/dcinside/comment/comment-job.service'
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -31,6 +32,7 @@ export class PostJobService implements JobProcessor {
     private readonly tetheringService: TetheringService,
     private readonly browserManager: BrowserManagerService,
     private readonly jobContext: JobContextService,
+    private readonly commentJobService: CommentJobService,
   ) {}
 
   private buildWhere(filters: any): Prisma.JobWhereInput {
@@ -227,6 +229,31 @@ export class PostJobService implements JobProcessor {
           data: updateData,
         })
 
+        // 댓글이 있으면 댓글 작업 생성
+        const comment = job.postJob.comment
+        if (comment && comment.trim()) {
+          try {
+            await this.jobLogsService.createJobLog(`댓글 작업 시작: ${comment}`)
+
+            // 댓글 작업 생성
+            await this.commentJobService.createJobWithCommentJob({
+              keyword: `게시글: ${job.postJob.title}`,
+              comment,
+              postUrls: [result.url],
+              nickname: job.postJob.nickname ?? undefined,
+              password: job.postJob.password ?? undefined,
+              loginId: job.postJob.loginId ?? undefined,
+              loginPassword: job.postJob.loginPassword ?? undefined,
+              status: JobStatus.REQUEST, // 즉시 실행
+            })
+
+            await this.jobLogsService.createJobLog(`댓글 작업 등록 완료`)
+          } catch (commentError) {
+            this.logger.error(`댓글 작업 생성 실패: ${commentError.message}`, commentError.stack)
+            await this.jobLogsService.createJobLog(`댓글 작업 생성 실패: ${commentError.message}`, 'error')
+          }
+        }
+
         // 테더링 모드에서 포스팅 수 카운트 증가
         const settings = await this.settingsService.getSettings()
         if (settings?.ipMode === IpMode.TETHERING) {
@@ -296,6 +323,7 @@ export class PostJobService implements JobProcessor {
     resultUrl?: string
     deleteAt?: Date
     autoDeleteMinutes?: number
+    comment?: string
   }) {
     const job = await this.prismaService.job.create({
       data: {
@@ -318,6 +346,7 @@ export class PostJobService implements JobProcessor {
             ...(postJobData.resultUrl !== undefined && { resultUrl: postJobData.resultUrl }),
             ...(postJobData.deleteAt !== undefined && { deleteAt: postJobData.deleteAt }),
             ...(postJobData.autoDeleteMinutes !== undefined && { autoDeleteMinutes: postJobData.autoDeleteMinutes }),
+            ...(postJobData.comment !== undefined && { comment: postJobData.comment }),
           },
         },
       },
