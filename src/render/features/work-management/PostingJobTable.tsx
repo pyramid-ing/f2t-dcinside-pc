@@ -50,8 +50,17 @@ import {
   JobType,
   JOB_TYPE,
 } from '@render/api/type'
-import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
-import { BulkActionType } from '@render/types/bulk-action.enum'
+import {
+  SelectionState,
+  JobFilters,
+  BulkRetryRequest,
+  BulkDeleteRequest,
+  BulkPendingToRequest,
+  BulkApplyIntervalRequest,
+  BulkAutoDeleteRequest,
+  BulkUpdateViewCountsRequest,
+  ExportExcelRequest,
+} from '@render/types/selection'
 import { SelectionMode } from '@render/types/selection-mode.enum'
 
 const ResultCell = styled.div`
@@ -545,12 +554,11 @@ const PostingJobTable: React.FC = () => {
 
     setBulkRetryLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkRetryRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.RETRY,
       }
 
       const response = await retryJobs(request)
@@ -609,12 +617,11 @@ const PostingJobTable: React.FC = () => {
 
     setBulkDeleteLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkDeleteRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.DELETE,
       }
 
       const response = await deleteJobs(request)
@@ -648,12 +655,11 @@ const PostingJobTable: React.FC = () => {
 
     setAutoDeleteApplyLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkAutoDeleteRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.AUTO_DELETE,
         autoDeleteMinutes: m,
       }
 
@@ -713,12 +719,11 @@ const PostingJobTable: React.FC = () => {
 
     setAutoDeleteRemoveLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkAutoDeleteRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.AUTO_DELETE,
         autoDeleteMinutes: null, // null로 설정하여 자동삭제 제거
       }
 
@@ -753,12 +758,11 @@ const PostingJobTable: React.FC = () => {
     try {
       const startInSeconds = intervalUnit === 'min' ? intervalStart * 60 : intervalStart
       const endInSeconds = intervalUnit === 'min' ? intervalEnd * 60 : intervalEnd
-      const request: BulkActionRequest = {
+      const request: BulkApplyIntervalRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.APPLY_INTERVAL,
         intervalStart: startInSeconds,
         intervalEnd: endInSeconds,
       }
@@ -786,12 +790,11 @@ const PostingJobTable: React.FC = () => {
       return
     }
     try {
-      const request: BulkActionRequest = {
+      const request: BulkPendingToRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.PENDING_TO_REQUEST,
       }
 
       const response = await bulkPendingToRequest(request)
@@ -839,26 +842,14 @@ const PostingJobTable: React.FC = () => {
 
     setViewCountUpdateLoading(true)
     try {
-      // 선택된 작업 ID 목록 생성
-      let jobIds: string[] = []
-      if (selection.mode === SelectionMode.PAGE) {
-        jobIds = Array.from(selection.includeIds)
-      } else {
-        // ALL 모드일 경우, 제외된 것을 제외한 전체 목록
-        jobIds = data.filter(job => !selection.excludedIds.has(job.id)).map(job => job.id)
+      const request: BulkUpdateViewCountsRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
       }
 
-      // 완료된 작업만 필터링 (resultUrl이 있는 작업만)
-      const validJobs = data.filter(job => jobIds.includes(job.id) && job.postJob?.resultUrl)
-      const validJobIds = validJobs.map(job => job.id)
-
-      if (validJobIds.length === 0) {
-        message.warning('조회수를 가져올 수 있는 작업이 없습니다. (완료된 작업만 가능)')
-        setViewCountUpdateLoading(false)
-        return
-      }
-
-      const response = await updateViewCounts(validJobIds)
+      const response = await updateViewCounts(request)
       if (response.success) {
         message.success(`조회수 업데이트 완료: 성공 ${response.updated}개, 실패 ${response.failed}개`)
         fetchJobs()
@@ -886,25 +877,14 @@ const PostingJobTable: React.FC = () => {
 
     setExcelDownloadLoading(true)
     try {
-      // 선택된 작업 ID 목록 생성
-      let jobIds: string[] = []
-      if (selection.mode === SelectionMode.PAGE) {
-        jobIds = Array.from(selection.includeIds)
-      } else {
-        // ALL 모드일 경우, 제외된 것을 제외한 전체 목록
-        jobIds = data.filter(job => !selection.excludedIds.has(job.id)).map(job => job.id)
+      const request: ExportExcelRequest = {
+        mode: selection.mode,
+        filters: getCurrentFilters(),
+        includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
+        excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
       }
 
-      // 포스팅 작업만 필터링
-      const postJobIds = data.filter(job => jobIds.includes(job.id) && job.type === JOB_TYPE.POST).map(job => job.id)
-
-      if (postJobIds.length === 0) {
-        message.warning('다운로드할 수 있는 포스팅 작업이 없습니다.')
-        setExcelDownloadLoading(false)
-        return
-      }
-
-      const blob = await exportJobsToExcel(postJobIds)
+      const blob = await exportJobsToExcel(request)
 
       // Blob을 다운로드
       const url = window.URL.createObjectURL(blob)
@@ -916,7 +896,7 @@ const PostingJobTable: React.FC = () => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
 
-      message.success(`${postJobIds.length}개 작업을 엑셀로 다운로드했습니다.`)
+      message.success(`${selectedCount}개 작업을 엑셀로 다운로드했습니다.`)
     } catch (error: any) {
       message.error(error?.message || '엑셀 다운로드 실패')
     }

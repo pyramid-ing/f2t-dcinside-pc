@@ -44,8 +44,14 @@ import {
   JobType,
   JOB_TYPE,
 } from '@render/api/type'
-import { SelectionState, BulkActionRequest, JobFilters } from '@render/types/selection'
-import { BulkActionType } from '@render/types/bulk-action.enum'
+import {
+  SelectionState,
+  JobFilters,
+  BulkRetryRequest,
+  BulkDeleteRequest,
+  BulkPendingToRequest,
+  BulkApplyIntervalRequest,
+} from '@render/types/selection'
 import { SelectionMode } from '@render/types/selection-mode.enum'
 import { usePermissions } from '@render/hooks/usePermissions'
 import { Permission } from '@render/types/permissions'
@@ -500,12 +506,11 @@ const CommentJobTable: React.FC = () => {
 
     setBulkRetryLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkRetryRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.RETRY,
       }
 
       const response = await retryJobs(request)
@@ -533,12 +538,11 @@ const CommentJobTable: React.FC = () => {
 
     setBulkDeleteLoading(true)
     try {
-      const request: BulkActionRequest = {
+      const request: BulkDeleteRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.DELETE,
       }
 
       const response = await deleteJobs(request)
@@ -572,12 +576,11 @@ const CommentJobTable: React.FC = () => {
     try {
       const startInSeconds = intervalUnit === 'min' ? intervalStart * 60 : intervalStart
       const endInSeconds = intervalUnit === 'min' ? intervalEnd * 60 : intervalEnd
-      const request: BulkActionRequest = {
+      const request: BulkApplyIntervalRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.APPLY_INTERVAL,
         intervalStart: startInSeconds,
         intervalEnd: endInSeconds,
       }
@@ -605,12 +608,11 @@ const CommentJobTable: React.FC = () => {
       return
     }
     try {
-      const request: BulkActionRequest = {
+      const request: BulkPendingToRequest = {
         mode: selection.mode,
         filters: getCurrentFilters(),
         includeIds: selection.mode === SelectionMode.PAGE ? Array.from(selection.includeIds) : undefined,
         excludeIds: selection.mode === SelectionMode.ALL ? Array.from(selection.excludedIds) : undefined,
-        action: BulkActionType.PENDING_TO_REQUEST,
       }
 
       const response = await bulkPendingToRequest(request)

@@ -14,6 +14,10 @@ import { DcExceptionMapper } from '@main/app/modules/dcinside/utils/dc-exception
 import { DcException } from '@main/common/errors/dc.exception'
 import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
 import * as XLSX from 'xlsx'
+import { BulkUpdateViewCountsDto, ExportExcelDto } from '@main/app/modules/dcinside/job/dto/bulk-action.dto'
+import { SelectionMode } from '@main/app/modules/dcinside/job/enums/selection-mode.enum'
+import { Prisma } from '@prisma/client'
+import {ErrorCode} from "@main/common/errors/error-code.enum";
 
 @Injectable()
 export class PostJobService implements JobProcessor {
@@ -28,6 +32,28 @@ export class PostJobService implements JobProcessor {
     private readonly browserManager: BrowserManagerService,
     private readonly jobContext: JobContextService,
   ) {}
+
+  private buildWhere(filters: any): Prisma.JobWhereInput {
+    const where: Prisma.JobWhereInput = {}
+
+    if (filters.status) {
+      where.status = filters.status as JobStatus
+    }
+
+    if (filters.type) {
+      where.type = filters.type as JobType
+    }
+
+    if (filters.search) {
+      where.OR = [
+        { subject: { contains: filters.search } },
+        { desc: { contains: filters.search } },
+        { resultMsg: { contains: filters.search } },
+      ]
+    }
+
+    return where
+  }
 
   canProcess(job: any): boolean {
     return job.type === JobType.POST
@@ -307,28 +333,53 @@ export class PostJobService implements JobProcessor {
    * 선택된 작업들의 조회수를 업데이트합니다.
    */
   async updateViewCounts(
-    jobIds: string[],
+    body: BulkUpdateViewCountsDto,
   ): Promise<{ success: boolean; updated: number; failed: number; results: any[] }> {
+    const { mode, filters, includeIds, excludeIds } = body
+
+    // 필터 조건 빌드
+    const where = this.buildWhere(filters)
+    where.type = JobType.POST // POST 타입만
+    where.status = JobStatus.COMPLETED // 완료된 작업만
+    where.postJob = {
+      resultUrl: { not: null }, // resultUrl이 있는 작업만
+    }
+
+    // 선택 모드에 따른 필터 추가
+    if (mode === SelectionMode.PAGE) {
+      // 페이지 모드: includeIds로 특정 작업들만 처리
+      if (!includeIds || includeIds.length === 0) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+      where.id = { in: includeIds }
+    } else {
+      // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+      if (excludeIds && excludeIds.length > 0) {
+        where.id = { notIn: excludeIds }
+      }
+    }
+
+    // 작업들 조회
+    const jobs = await this.prismaService.job.findMany({
+      where,
+      include: { postJob: true },
+    })
+
     const results = []
     let updated = 0
     let failed = 0
 
-    for (const jobId of jobIds) {
+    for (const job of jobs) {
       try {
-        const job = await this.prismaService.job.findUnique({
-          where: { id: jobId },
-          include: { postJob: true },
-        })
-
-        if (!job || !job.postJob) {
-          results.push({ jobId, success: false, error: 'Job not found' })
+        if (!job.postJob) {
+          results.push({ jobId: job.id, success: false, error: 'Job not found' })
           failed++
           continue
         }
 
         const resultUrl = job.postJob.resultUrl
         if (!resultUrl) {
-          results.push({ jobId, success: false, error: 'Result URL not found' })
+          results.push({ jobId: job.id, success: false, error: 'Result URL not found' })
           failed++
           continue
         }
@@ -345,11 +396,11 @@ export class PostJobService implements JobProcessor {
           } as any,
         })
 
-        results.push({ jobId, success: true, viewCount })
+        results.push({ jobId: job.id, success: true, viewCount })
         updated++
       } catch (error) {
-        this.logger.error(`Failed to update view count for job ${jobId}: ${error.message}`)
-        results.push({ jobId, success: false, error: error.message })
+        this.logger.error(`Failed to update view count for job ${job.id}: ${error.message}`)
+        results.push({ jobId: job.id, success: false, error: error.message })
         failed++
       }
     }
@@ -365,14 +416,31 @@ export class PostJobService implements JobProcessor {
   /**
    * 작업 목록을 엑셀로 내보냅니다.
    */
-  async exportJobsToExcel(jobIds: string[]): Promise<Buffer> {
+  async exportJobsToExcel(body: ExportExcelDto): Promise<Buffer> {
     try {
+      const { mode, filters, includeIds, excludeIds } = body
+
+      // 필터 조건 빌드
+      const where = this.buildWhere(filters)
+      where.type = JobType.POST // POST 타입만
+
+      // 선택 모드에 따른 필터 추가
+      if (mode === SelectionMode.PAGE) {
+        // 페이지 모드: includeIds로 특정 작업들만 처리
+        if (!includeIds || includeIds.length === 0) {
+          throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+        }
+        where.id = { in: includeIds }
+      } else {
+        // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+        if (excludeIds && excludeIds.length > 0) {
+          where.id = { notIn: excludeIds }
+        }
+      }
+
       // 작업 정보 가져오기
       const jobs = await this.prismaService.job.findMany({
-        where: {
-          id: { in: jobIds },
-          type: JobType.POST,
-        },
+        where,
         include: {
           postJob: true,
         },

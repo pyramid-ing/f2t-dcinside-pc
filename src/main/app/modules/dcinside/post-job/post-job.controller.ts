@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Header, Param, Post, Put, Query, Res, Us
 import { Response } from 'express'
 import { PostJobService } from './post-job.service'
 import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
+import { ExportExcelDto, BulkUpdateViewCountsDto } from '@main/app/modules/dcinside/job/dto/bulk-action.dto'
 
 @Controller('post-jobs')
 export class PostJobController {
@@ -49,14 +50,14 @@ export class PostJobController {
   @UseGuards(AuthGuard)
   @Permissions(Permission.POSTING)
   @Post('update-view-counts')
-  async updateViewCounts(@Body() data: { jobIds: string[] }) {
-    return await this.postJobService.updateViewCounts(data.jobIds)
+  async updateViewCounts(@Body() body: BulkUpdateViewCountsDto) {
+    return await this.postJobService.updateViewCounts(body)
   }
 
   @Post('export-excel')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  async exportJobsToExcel(@Body() data: { jobIds: string[] }, @Res() res: Response) {
-    const excelBuffer = await this.postJobService.exportJobsToExcel(data.jobIds)
+  async exportJobsToExcel(@Body() body: ExportExcelDto, @Res() res: Response) {
+    const excelBuffer = await this.postJobService.exportJobsToExcel(body)
 
     const fileName = `포스팅목록_${new Date().toISOString().slice(0, 10)}.xlsx`
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)

@@ -7,9 +7,16 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus, JobType } from './job.types'
 import { SelectionMode } from './enums/selection-mode.enum'
-import { JobFiltersDto, BulkActionDto } from './dto/bulk-action.dto'
+import {
+  JobFiltersDto,
+  BulkRetryDto,
+  BulkDeleteDto,
+  BulkPendingToRequestDto,
+  BulkApplyIntervalDto,
+  BulkAutoDeleteDto,
+  BulkRetryDeleteDto,
+} from './dto/bulk-action.dto'
 import { UpdateJobDto } from './dto/update-job.dto'
-import { BulkRetryDeleteDto } from './dto/bulk-retry-delete.dto'
 
 @Injectable()
 export class JobService {
@@ -167,7 +174,7 @@ export class JobService {
     }
   }
 
-  async retryJobs(body: BulkActionDto) {
+  async retryJobs(body: BulkRetryDto) {
     const { mode, filters, includeIds, excludeIds } = body
 
     const where = this.buildWhere(filters)
@@ -230,7 +237,7 @@ export class JobService {
     }
   }
 
-  async deleteJobs(body: BulkActionDto) {
+  async deleteJobs(body: BulkDeleteDto) {
     const { mode, filters, includeIds, excludeIds } = body
 
     const where = this.buildWhere(filters)
@@ -281,7 +288,7 @@ export class JobService {
     }
   }
 
-  async bulkPendingToRequest(body: BulkActionDto) {
+  async bulkPendingToRequest(body: BulkPendingToRequestDto) {
     const { mode, filters, includeIds, excludeIds } = body
 
     const where = this.buildWhere(filters)
@@ -451,7 +458,7 @@ export class JobService {
     return jobs
   }
 
-  async bulkApplyInterval(body: BulkActionDto) {
+  async bulkApplyInterval(body: BulkApplyIntervalDto) {
     const { mode, filters, includeIds, excludeIds, intervalStart, intervalEnd } = body
 
     if (!intervalStart || !intervalEnd) {
@@ -521,7 +528,7 @@ export class JobService {
     }
   }
 
-  async bulkUpdateAutoDelete(body: BulkActionDto) {
+  async bulkUpdateAutoDelete(body: BulkAutoDeleteDto) {
     const { mode, filters, includeIds, excludeIds, autoDeleteMinutes } = body
 
     // autoDeleteMinutes가 null이면 자동삭제 제거, 숫자면 설정
@@ -665,40 +672,35 @@ export class JobService {
   }
 
   async bulkRetryDeleteJobs(request: BulkRetryDeleteDto) {
-    const { mode: selectionMode, includeIds: selectedIds, excludeIds: excludedIds, filters } = request
+    const { mode, filters, includeIds, excludeIds } = request
 
-    let whereCondition: Prisma.JobWhereInput = {
-      status: JobStatus.DELETE_FAILED, // 삭제 실패한 작업만
-      type: JobType.POST,
-      postJob: {
-        deletedAt: null, // 아직 삭제되지 않음
-        resultUrl: { not: null }, // 결과 URL이 있어야 삭제 가능
-      },
-    }
+    // 필터 조건 빌드
+    const where = this.buildWhere(filters)
 
-    // 필터 조건 추가
-    if (filters) {
-      if (filters.status) {
-        // 이미 DELETE_FAILED로 제한하고 있으므로 status 필터는 무시
-      }
-      if (filters.type) {
-        whereCondition.type = filters.type
-      }
-      if (filters.search) {
-        whereCondition.OR = [
-          { subject: { contains: filters.search } },
-          { desc: { contains: filters.search } },
-          { resultMsg: { contains: filters.search } },
-        ]
-      }
+    // 삭제 실패 작업 필터 추가
+    where.status = JobStatus.DELETE_FAILED
+    where.type = JobType.POST
+    where.postJob = {
+      deletedAt: null, // 아직 삭제되지 않음
+      resultUrl: { not: null }, // 결과 URL이 있어야 삭제 가능
     }
 
     // 선택 모드에 따른 필터 조건 추가
-    if (selectionMode === SelectionMode.PAGE && selectedIds && selectedIds.length > 0) {
-      whereCondition.id = { in: selectedIds }
-    } else if (selectionMode === SelectionMode.ALL && excludedIds && excludedIds.length > 0) {
-      whereCondition.id = { notIn: excludedIds }
+    if (mode === SelectionMode.PAGE) {
+      // 페이지 모드: includeIds로 특정 작업들만 처리
+      if (!includeIds || includeIds.length === 0) {
+        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
+      }
+      where.id = { in: includeIds }
+    } else {
+      // all 모드: 필터 조건에 맞는 모든 작업에서 excludeIds 제외
+      if (excludeIds && excludeIds.length > 0) {
+        where.id = { notIn: excludeIds }
+      }
     }
+
+    // whereCondition을 where로 변경
+    const whereCondition = where
 
     // 삭제 실패한 작업들 조회
     const failedDeleteJobs = await this.prisma.job.findMany({

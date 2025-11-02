@@ -1,10 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { UpdateJobDto } from './dto/update-job.dto'
-import { BulkActionDto } from './dto/bulk-action.dto'
-import { BulkRetryDeleteDto } from './dto/bulk-retry-delete.dto'
 import { JobService } from './job.service'
 import { JobStatus, JobType } from './job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
+import {
+  BulkApplyIntervalDto,
+  BulkAutoDeleteDto,
+  BulkDeleteDto,
+  BulkPendingToRequestDto,
+  BulkRetryDeleteDto,
+  BulkRetryDto,
+} from '@main/app/modules/dcinside/job/dto/bulk-action.dto'
 
 @Controller('jobs')
 export class JobController {
@@ -37,17 +43,17 @@ export class JobController {
   @UseGuards(AuthGuard)
   @Permissions(Permission.POSTING)
   @Post('bulk/retry')
-  async retryJobs(@Body() body: BulkActionDto) {
+  async retryJobs(@Body() body: BulkRetryDto) {
     return await this.jobService.retryJobs(body)
   }
 
   @Post('bulk/delete')
-  async deleteJobs(@Body() body: BulkActionDto) {
+  async deleteJobs(@Body() body: BulkDeleteDto) {
     return await this.jobService.deleteJobs(body)
   }
 
   @Post('bulk/pending-to-request')
-  async bulkPendingToRequest(@Body() body: BulkActionDto) {
+  async bulkPendingToRequest(@Body() body: BulkPendingToRequestDto) {
     return await this.jobService.bulkPendingToRequest(body)
   }
 
@@ -57,12 +63,12 @@ export class JobController {
   }
 
   @Post('bulk/apply-interval')
-  async bulkApplyInterval(@Body() body: BulkActionDto) {
+  async bulkApplyInterval(@Body() body: BulkApplyIntervalDto) {
     return await this.jobService.bulkApplyInterval(body)
   }
 
   @Post('bulk/auto-delete')
-  async bulkUpdateAutoDelete(@Body() body: BulkActionDto) {
+  async bulkUpdateAutoDelete(@Body() body: BulkAutoDeleteDto) {
     return await this.jobService.bulkUpdateAutoDelete(body)
   }
 

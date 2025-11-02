@@ -1,19 +1,15 @@
 import { api } from './apiClient'
 import { ApiResponse, Job, JobLog, JobStatus, JobType, PaginatedResponse } from '@render/api/type'
-import { BulkActionRequest } from '@render/types/selection'
-
-interface BulkRetryDeleteRequest {
-  mode: string
-  includeIds?: string[]
-  excludeIds?: string[]
-  filters?: {
-    status?: string
-    type?: string
-    search?: string
-    orderBy?: string
-    order?: string
-  }
-}
+import {
+  BulkRetryRequest,
+  BulkDeleteRequest,
+  BulkPendingToRequest,
+  BulkApplyIntervalRequest,
+  BulkAutoDeleteRequest,
+  BulkRetryDeleteRequest,
+  ExportExcelRequest,
+  BulkUpdateViewCountsRequest,
+} from '@render/types/selection'
 
 /**
  * 작업 목록을 조회합니다.
@@ -74,7 +70,7 @@ export async function deleteJob(jobId: string): Promise<ApiResponse> {
 /**
  * 여러 작업을 재시도합니다.
  */
-export async function retryJobs(request: BulkActionRequest): Promise<ApiResponse> {
+export async function retryJobs(request: BulkRetryRequest): Promise<ApiResponse> {
   const response = await api.post('/jobs/bulk/retry', request)
   return response.data
 }
@@ -90,7 +86,7 @@ export async function bulkRetryDeleteJobs(request: BulkRetryDeleteRequest): Prom
 /**
  * 여러 작업을 삭제합니다.
  */
-export async function deleteJobs(request: BulkActionRequest): Promise<ApiResponse> {
+export async function deleteJobs(request: BulkDeleteRequest): Promise<ApiResponse> {
   const response = await api.post('/jobs/bulk/delete', request)
   return response.data
 }
@@ -98,7 +94,7 @@ export async function deleteJobs(request: BulkActionRequest): Promise<ApiRespons
 /**
  * 여러 작업의 등록후자동삭제(분)을 설정합니다.
  */
-export async function bulkUpdateAutoDelete(request: BulkActionRequest): Promise<ApiResponse> {
+export async function bulkUpdateAutoDelete(request: BulkAutoDeleteRequest): Promise<ApiResponse> {
   const response = await api.post('/jobs/bulk/auto-delete', request)
   return response.data
 }
@@ -106,7 +102,7 @@ export async function bulkUpdateAutoDelete(request: BulkActionRequest): Promise<
 /**
  * 여러 작업에 등록 간격을 적용합니다.
  */
-export async function bulkApplyInterval(request: BulkActionRequest): Promise<ApiResponse> {
+export async function bulkApplyInterval(request: BulkApplyIntervalRequest): Promise<ApiResponse> {
   const response = await api.post('/jobs/bulk/apply-interval', request)
   return response.data
 }
@@ -114,7 +110,7 @@ export async function bulkApplyInterval(request: BulkActionRequest): Promise<Api
 /**
  * 여러 작업을 등록대기에서 등록요청으로 일괄 변경합니다.
  */
-export async function bulkPendingToRequest(request: BulkActionRequest): Promise<ApiResponse> {
+export async function bulkPendingToRequest(request: BulkPendingToRequest): Promise<ApiResponse> {
   const response = await api.post('/jobs/bulk/pending-to-request', request)
   return response.data
 }
@@ -155,22 +151,18 @@ export async function updateJobScheduledAt(jobId: string, scheduledAt: string | 
  * 선택된 작업들의 조회수를 업데이트합니다.
  */
 export async function updateViewCounts(
-  jobIds: string[],
+  request: BulkUpdateViewCountsRequest,
 ): Promise<{ success: boolean; updated: number; failed: number; results: any[] }> {
-  const response = await api.post('/post-jobs/update-view-counts', { jobIds })
+  const response = await api.post('/post-jobs/update-view-counts', request)
   return response.data
 }
 
 /**
  * 선택된 작업들을 엑셀로 다운로드합니다.
  */
-export async function exportJobsToExcel(jobIds: string[]): Promise<Blob> {
-  const response = await api.post(
-    '/post-jobs/export-excel',
-    { jobIds },
-    {
-      responseType: 'blob',
-    },
-  )
+export async function exportJobsToExcel(request: ExportExcelRequest): Promise<Blob> {
+  const response = await api.post('/post-jobs/export-excel', request, {
+    responseType: 'blob',
+  })
   return response.data
 }
