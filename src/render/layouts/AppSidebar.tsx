@@ -5,12 +5,15 @@ import {
   MessageOutlined,
   ShoppingOutlined,
   QrcodeOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 import UpdateManager from '../components/UpdateManager'
+import { usePermissions } from '../hooks/usePermissions'
+import { Permission } from '../types/permissions'
 
 const { Text } = Typography
 
@@ -120,6 +123,8 @@ const UpdateButtonWrapper = styled.div`
 const AppSidebar: React.FC = () => {
   const location = useLocation()
   const [appVersion, setAppVersion] = useState<string>('...')
+  const { canAccess } = usePermissions()
+  const hasCoupasPermission = canAccess(Permission.COUPAS)
 
   useEffect(() => {
     const getVersion = async () => {
@@ -140,30 +145,25 @@ const AppSidebar: React.FC = () => {
     if (location.pathname === '/comment-management') return '2'
     if (location.pathname === '/coupas-management') return '3'
     if (location.pathname === '/naver-qr') return '5'
+    if (location.pathname === '/post-monitoring') return '6'
     if (location.pathname === '/settings') return '4'
     if (location.pathname === '/license') return 'license-settings'
     return '1'
   }
 
-  return (
-    <Sider width={200} style={{ position: 'relative' }}>
-      <Logo>윈소프트 디씨 포스팅 봇</Logo>
-      <Menu
-        theme="dark"
-        selectedKeys={[getSelectedKey()]}
-        mode="inline"
-        style={{ paddingBottom: '80px' }}
-        items={[
-          {
-            key: '1',
-            icon: <UnorderedListOutlined />,
-            label: <NavLink to="/">글쓰기</NavLink>,
-          },
-          {
-            key: '2',
-            icon: <MessageOutlined />,
-            label: <NavLink to="/comment-management">댓글</NavLink>,
-          },
+  const menuItems = [
+    {
+      key: '1',
+      icon: <UnorderedListOutlined />,
+      label: <NavLink to="/">글쓰기</NavLink>,
+    },
+    {
+      key: '2',
+      icon: <MessageOutlined />,
+      label: <NavLink to="/comment-management">댓글</NavLink>,
+    },
+    ...(hasCoupasPermission
+      ? [
           {
             key: '3',
             icon: <ShoppingOutlined />,
@@ -175,16 +175,33 @@ const AppSidebar: React.FC = () => {
             label: <NavLink to="/naver-qr">네이버 QR</NavLink>,
           },
           {
-            key: '4',
-            icon: <SettingOutlined />,
-            label: <NavLink to="/settings">설정</NavLink>,
+            key: '6',
+            icon: <MonitorOutlined />,
+            label: <NavLink to="/post-monitoring">게시글 모니터링</NavLink>,
           },
-          {
-            key: 'license-settings',
-            icon: <KeyOutlined />,
-            label: <NavLink to="/license">라이센스</NavLink>,
-          },
-        ]}
+        ]
+      : []),
+    {
+      key: '4',
+      icon: <SettingOutlined />,
+      label: <NavLink to="/settings">설정</NavLink>,
+    },
+    {
+      key: 'license-settings',
+      icon: <KeyOutlined />,
+      label: <NavLink to="/license">라이센스</NavLink>,
+    },
+  ]
+
+  return (
+    <Sider width={200} style={{ position: 'relative' }}>
+      <Logo>윈소프트 디씨 포스팅 봇</Logo>
+      <Menu
+        theme="dark"
+        selectedKeys={[getSelectedKey()]}
+        mode="inline"
+        style={{ paddingBottom: '80px' }}
+        items={menuItems}
       />
       <UpdateSection>
         <VersionInfo>

@@ -7,6 +7,7 @@ import CoupasPage from './CoupasPage'
 import NaverQRPage from './NaverQRPage'
 import SettingsPage from './Settings'
 import LicensePage from '@render/pages/License'
+import PostMonitoring from './PostMonitoring'
 
 const App: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ const App: React.FC = () => {
         <Route path="/coupas-management" element={<CoupasPage />} />
         <Route path="/naver-qr" element={<NaverQRPage />} />
         <Route path="/license" element={<LicensePage />} />
+        <Route path="/post-monitoring" element={<PostMonitoring />} />
       </Routes>
     </AppLayout>
   )

@@ -3,7 +3,6 @@ import React from 'react'
 import CommentJobTable from '@render/features/work-management/CommentJobTable'
 import CommentManagement from './CommentManagement'
 import CommentExtraction from './CommentExtraction'
-import PostMonitoring from './PostMonitoring'
 import styled from 'styled-components'
 import { usePermissions } from '@render/hooks/usePermissions'
 import { Permission } from '@render/types/permissions'
@@ -100,11 +99,6 @@ const CommentPage: React.FC = () => {
               key: 'management',
               label: '댓글 작업',
               children: <CommentJobTable />,
-            },
-            {
-              key: 'monitoring',
-              label: '게시글 모니터링',
-              children: <PostMonitoring />,
             },
           ]}
         />
