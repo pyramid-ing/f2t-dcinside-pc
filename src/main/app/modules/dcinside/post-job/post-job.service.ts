@@ -9,6 +9,7 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { IpMode } from '@main/app/modules/settings/settings.types'
 import { BrowserManagerService } from '@main/app/modules/util/browser-manager.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { DcExceptionMapper } from '@main/app/modules/dcinside/utils/dc-exception-mapper.util'
 import { DcException } from '@main/common/errors/dc.exception'
@@ -17,7 +18,6 @@ import * as XLSX from 'xlsx'
 import { BulkUpdateViewCountsDto, ExportExcelDto } from '@main/app/modules/dcinside/job/dto/bulk-action.dto'
 import { SelectionMode } from '@main/app/modules/dcinside/job/enums/selection-mode.enum'
 import { Prisma } from '@prisma/client'
-import {ErrorCode} from "@main/common/errors/error-code.enum";
 
 @Injectable()
 export class PostJobService implements JobProcessor {
