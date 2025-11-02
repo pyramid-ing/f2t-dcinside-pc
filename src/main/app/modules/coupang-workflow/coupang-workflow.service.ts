@@ -314,11 +314,19 @@ export class CoupangWorkflowService {
       const prompt = await pull<ChatPromptTemplate>('coupang-keyword-extraction')
       this.logger.log('LangSmith에서 프롬프트를 가져왔습니다.')
 
+      // 쿠파스 설정에서 키워드 최소/최대 개수 가져오기
+      const keywordMin = settings?.coupas?.keywordMin ?? 2
+      const keywordMax = settings?.coupas?.keywordMax ?? 5
+
       // StructuredOutputParser 사용 (OpenAI는 functionCalling 방식 지원)
       // LangChain OpenAI structured output type issue로 인해 any 타입 사용
       const structuredLlm: any = (this.llm as any).withStructuredOutput(
         z.object({
-          검색키워드목록: z.array(z.string()).min(2).max(5).describe('쿠팡에서 검색할 키워드 5개'),
+          검색키워드목록: z
+            .array(z.string())
+            .min(keywordMin)
+            .max(keywordMax)
+            .describe(`쿠팡에서 검색할 키워드 ${keywordMin}~${keywordMax}개`),
           블로그제목: z
             .string()
             .describe('목적성이 명확하고 SEO에 최적화된 블로그 제목 (예: "가성비 무선 헤드셋 추천", 30자 이내)'),
@@ -416,6 +424,13 @@ export class CoupangWorkflowService {
       }>
     >
   > {
+    // 쿠파스 설정에서 키워드당 상품 최대 개수 가져오기
+    const settings = await this.settingsService.getSettings()
+    const productsPerKeyword = settings?.coupas?.productsPerKeyword ?? 1
+
+    // 검색할 개수는 선택할 개수의 최소 2배 또는 최소 10개로 설정
+    const searchCount = Math.max(10, productsPerKeyword * 2)
+
     const searchResultsMap = new Map<
       string,
       Array<{
@@ -431,8 +446,8 @@ export class CoupangWorkflowService {
 
     // 각 키워드를 순차적으로 검색 (1개 세션에서 이동)
     for (const keyword of searchKeywords) {
-      // 쿠팡에서 제품 검색 (각 키워드당 최대 10개)
-      const searchResults = await this.coupangCrawlerService.crawlProductList(keyword, 10)
+      // 쿠팡에서 제품 검색 (설정값 기반, 최소 10개)
+      const searchResults = await this.coupangCrawlerService.crawlProductList(keyword, searchCount)
 
       if (searchResults.length === 0) {
         this.logger.warn(`제품 검색 결과 없음: ${keyword}`)
@@ -469,6 +484,10 @@ export class CoupangWorkflowService {
       }>
     >,
   ): Promise<CoupangSearchResult[]> {
+    // 쿠파스 설정에서 키워드당 상품 최대 개수 가져오기
+    const settings = await this.settingsService.getSettings()
+    const productsPerKeyword = settings?.coupas?.productsPerKeyword ?? 1
+
     const results: CoupangSearchResult[] = []
 
     // 각 키워드를 순차적으로 처리 (Rate Limiter 적용)
@@ -478,8 +497,8 @@ export class CoupangWorkflowService {
 
       const successfulProducts: CoupangProductResult[] = []
 
-      // 랭킹 1위부터 순차적으로 시도하며, 성공한 제품이 1개가 될 때까지 반복
-      for (let i = 0; i < searchResults.length && successfulProducts.length < 1; i++) {
+      // 랭킹 1위부터 순차적으로 시도하며, 설정값만큼의 제품이 성공할 때까지 반복
+      for (let i = 0; i < searchResults.length && successfulProducts.length < productsPerKeyword; i++) {
         const product = searchResults[i]
 
         try {
@@ -511,7 +530,7 @@ export class CoupangWorkflowService {
           })
 
           await this.jobLogsService.createJobLog(
-            `✅ ${keyword}: ${i + 1}위 제품 링크 생성 성공 (총 ${successfulProducts.length}/1)`,
+            `✅ ${keyword}: ${i + 1}위 제품 링크 생성 성공 (총 ${successfulProducts.length}/${productsPerKeyword})`,
           )
         } catch (error) {
           this.logger.warn(`제품 처리 실패 (${keyword} - 랭킹 ${i + 1}위, ${product.title}):`, error)

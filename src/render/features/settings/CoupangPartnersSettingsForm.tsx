@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Form, Input, message, Card, Space, Typography, Alert } from 'antd'
-import { KeyOutlined, SaveOutlined, ShoppingOutlined } from '@ant-design/icons'
+import { Button, Form, Input, InputNumber, message, Card, Space, Typography, Alert, Divider } from 'antd'
+import { KeyOutlined, SaveOutlined, ShoppingOutlined, SearchOutlined } from '@ant-design/icons'
 import { getSettings, updateSettings } from '@render/api'
+import type { Settings } from '@render/types/settings'
 
 const { Text, Link } = Typography
 
 const CoupangPartnersSettingsForm: React.FC = () => {
-  const [form] = Form.useForm()
+  const [form] = Form.useForm<Partial<Settings>>()
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [hasKeys, setHasKeys] = useState(false)
 
   useEffect(() => {
@@ -16,26 +18,35 @@ const CoupangPartnersSettingsForm: React.FC = () => {
 
   const loadSettings = async () => {
     try {
+      setLoading(true)
       const settings = await getSettings()
       form.setFieldsValue({
         coupangPartnersAccessKey: settings.coupangPartnersAccessKey || '',
         coupangPartnersSecretKey: settings.coupangPartnersSecretKey || '',
+        coupas: {
+          keywordMin: settings.coupas?.keywordMin ?? 2,
+          keywordMax: settings.coupas?.keywordMax ?? 5,
+          productsPerKeyword: settings.coupas?.productsPerKeyword ?? 1,
+        },
       })
       setHasKeys(!!(settings.coupangPartnersAccessKey && settings.coupangPartnersSecretKey))
     } catch (error) {
       console.error('설정 로드 실패:', error)
       message.error('설정을 불러오는데 실패했습니다.')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleSubmit = async (values: any) => {
-    setLoading(true)
+  const handleSubmit = async (values: Partial<Settings>) => {
+    setSaving(true)
     try {
       const settings = await getSettings()
       await updateSettings({
         ...settings,
         coupangPartnersAccessKey: values.coupangPartnersAccessKey,
         coupangPartnersSecretKey: values.coupangPartnersSecretKey,
+        coupas: values.coupas,
       })
       message.success('쿠팡 파트너스 설정이 저장되었습니다.')
       setHasKeys(!!(values.coupangPartnersAccessKey && values.coupangPartnersSecretKey))
@@ -43,7 +54,7 @@ const CoupangPartnersSettingsForm: React.FC = () => {
       console.error('설정 저장 실패:', error)
       message.error('설정 저장에 실패했습니다.')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -89,7 +100,7 @@ const CoupangPartnersSettingsForm: React.FC = () => {
               rules={[{ required: true, message: 'Access Key를 입력하세요' }]}
               extra="쿠팡 파트너스에서 발급받은 Access Key를 입력하세요"
             >
-              <Input.Password placeholder="Access Key" prefix={<KeyOutlined />} />
+              <Input.Password placeholder="Access Key" prefix={<KeyOutlined />} disabled={loading} />
             </Form.Item>
 
             <Form.Item
@@ -98,16 +109,93 @@ const CoupangPartnersSettingsForm: React.FC = () => {
               rules={[{ required: true, message: 'Secret Key를 입력하세요' }]}
               extra="쿠팡 파트너스에서 발급받은 Secret Key를 입력하세요"
             >
-              <Input.Password placeholder="Secret Key" prefix={<KeyOutlined />} />
+              <Input.Password placeholder="Secret Key" prefix={<KeyOutlined />} disabled={loading} />
             </Form.Item>
 
             <Form.Item>
-              <Button type="primary" htmlType="submit" loading={loading} icon={<SaveOutlined />} size="large">
+              <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />} size="large">
                 저장
               </Button>
             </Form.Item>
           </Form>
         </Space>
+      </Card>
+
+      <Divider />
+
+      <Card
+        title={
+          <Space>
+            <SearchOutlined />
+            쿠파스 상품 검색 설정
+          </Space>
+        }
+        style={{ marginTop: 24 }}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <Form.Item
+            label="키워드 최소 개수"
+            name={['coupas', 'keywordMin']}
+            rules={[
+              { required: true, message: '키워드 최소 개수를 입력하세요' },
+              { type: 'number', min: 1, max: 10, message: '1개 ~ 10개 사이의 값을 입력하세요' },
+            ]}
+            extra="AI가 추천할 쿠팡 검색 키워드의 최소 개수입니다"
+          >
+            <InputNumber
+              min={1}
+              max={10}
+              addonAfter="개"
+              style={{ width: 150 }}
+              disabled={loading}
+              placeholder="최소 개수"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="키워드 최대 개수"
+            name={['coupas', 'keywordMax']}
+            rules={[
+              { required: true, message: '키워드 최대 개수를 입력하세요' },
+              { type: 'number', min: 1, max: 10, message: '1개 ~ 10개 사이의 값을 입력하세요' },
+            ]}
+            extra="AI가 추천할 쿠팡 검색 키워드의 최대 개수입니다"
+          >
+            <InputNumber
+              min={1}
+              max={10}
+              addonAfter="개"
+              style={{ width: 150 }}
+              disabled={loading}
+              placeholder="최대 개수"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="키워드당 상품 최대 개수"
+            name={['coupas', 'productsPerKeyword']}
+            rules={[
+              { required: true, message: '키워드당 상품 최대 개수를 입력하세요' },
+              { type: 'number', min: 1, max: 10, message: '1개 ~ 10개 사이의 값을 입력하세요' },
+            ]}
+            extra="각 키워드당 쿠팡에서 가져올 상품의 최대 개수입니다"
+          >
+            <InputNumber
+              min={1}
+              max={10}
+              addonAfter="개"
+              style={{ width: 150 }}
+              disabled={loading}
+              placeholder="상품 개수"
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={saving} icon={<SaveOutlined />} size="large">
+              저장
+            </Button>
+          </Form.Item>
+        </Form>
       </Card>
     </div>
   )

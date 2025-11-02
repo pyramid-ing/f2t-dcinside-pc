@@ -47,6 +47,11 @@ export class SettingsService {
       coupangPartnersAccessKey: '',
       coupangPartnersSecretKey: '',
       dcCaptchaEnabled: true, // 기본값: 활성화
+      coupas: {
+        keywordMin: 2, // 기본값: 최소 2개
+        keywordMax: 5, // 기본값: 최대 5개
+        productsPerKeyword: 1, // 기본값: 키워드당 1개
+      },
     }
     const merged = {
       ...defaultSettings,

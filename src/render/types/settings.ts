@@ -80,6 +80,16 @@ export interface Settings {
 
   /** 디시인사이드 캡챠 활성 여부 */
   dcCaptchaEnabled?: boolean
+
+  /** 쿠파스 설정 */
+  coupas?: {
+    /** 추천 키워드 최소 개수 */
+    keywordMin?: number
+    /** 추천 키워드 최대 개수 */
+    keywordMax?: number
+    /** 키워드당 상품 최대 개수 */
+    productsPerKeyword?: number
+  }
 }
 
 export enum IpMode {
