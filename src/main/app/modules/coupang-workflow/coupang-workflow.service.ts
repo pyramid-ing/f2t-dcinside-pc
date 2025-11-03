@@ -26,6 +26,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import axios from 'axios'
 import sharp from 'sharp'
+import { sleep } from '@main/app/utils/sleep'
+import { random } from 'lodash'
 
 // CoupangWorkflowError 클래스 정의
 export class CoupangWorkflowErrorClass extends Error {
@@ -461,6 +463,7 @@ export class CoupangWorkflowService {
       await this.jobLogsService.createJobLog(`📦 ${keyword}: 검색 결과 ${searchResults.length}개 발견`)
 
       searchResultsMap.set(keyword, searchResults)
+      await sleep(random(3000, 5000))
     }
 
     return searchResultsMap

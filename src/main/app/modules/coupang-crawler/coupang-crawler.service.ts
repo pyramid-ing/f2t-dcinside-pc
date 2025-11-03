@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Browser, BrowserContext, chromium, Page } from 'playwright'
+import { BrowserContext, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
@@ -33,15 +33,19 @@ export class CoupangCrawlerErrorClass extends Error {
 export class CoupangCrawlerService {
   private readonly logger = new Logger(CoupangCrawlerService.name)
 
+  // 브라우저/컨텍스트를 보관하여 재사용 (없을 때만 생성)
+  private context: BrowserContext | null = null
+  private page: Page | null = null
+  private contextClosed = false
+
   constructor() {}
 
   /**
    * 상품 정보 크롤링
    */
   public async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
-    let page: Page | null = null
     try {
-      page = await this._createPage()
+      const page = await this._getPage()
 
       // 최대 3회 페이지 갱신 기반 재시도 (util.retry 사용)
       let isFirstAttempt = true
@@ -100,9 +104,7 @@ export class CoupangCrawlerService {
         details: error,
       })
     } finally {
-      if (page) {
-        await page.close()
-      }
+      // 브라우저와 페이지는 재사용을 위해 닫지 않습니다
     }
   }
 
@@ -124,11 +126,10 @@ export class CoupangCrawlerService {
       reviewCount: number
     }[]
   > {
-    let page: Page | null = null
     try {
       const query = encodeURIComponent(keyword)
       const url = `https://www.coupang.com/np/search?q=${query}&channel=user`
-      page = await this._createPage()
+      const page = await this._getPage()
       await page.goto(url, { waitUntil: 'load' })
 
       // retry 로직으로 목록 추출 (최대 3회 시도)
@@ -245,17 +246,33 @@ export class CoupangCrawlerService {
         details: error,
       })
     } finally {
-      if (page) await page.close()
+      // 브라우저와 페이지는 재사용을 위해 닫지 않습니다
     }
   }
 
   /**
    * 브라우저 인스턴스를 가져옵니다.
    */
-  private async _getBrowser(): Promise<Browser> {
-    const browser = await chromium.launch({
-      headless: true,
-      // Use system Chrome channel and harden flags to avoid HTTP/2 issues in headless
+  // launchPersistentContext 기반으로 영구 컨텍스트 생성/재사용
+
+  /**
+   * 브라우저 컨텍스트를 가져옵니다.
+   */
+  private async _getContext(): Promise<BrowserContext> {
+    // 기존 컨텍스트가 유효하면 재사용
+    if (this.context && !this.contextClosed) {
+      return this.context
+    }
+
+    // 사용자 데이터 디렉토리 준비
+    const userDataDir = path.join(EnvConfig.tempDir, 'coupang-chrome')
+    if (!fs.existsSync(userDataDir)) {
+      fs.mkdirSync(userDataDir, { recursive: true })
+    }
+
+    // 영구 컨텍스트 생성 (브라우저 재시작 없이 프로필 유지)
+    this.context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
       channel: 'chrome',
       args: [
         '--disable-quic',
@@ -266,16 +283,15 @@ export class CoupangCrawlerService {
         '--disable-blink-features=AutomationControlled',
       ],
     })
-    return browser
-  }
 
-  /**
-   * 브라우저 컨텍스트를 가져옵니다.
-   */
-  private async _getContext(): Promise<BrowserContext> {
-    const browser = await this._getBrowser()
-    const context = await browser.newContext()
-    return context
+    this.contextClosed = false
+    this.context.on('close', () => {
+      this.contextClosed = true
+      this.context = null
+      this.page = null
+    })
+
+    return this.context
   }
 
   /**
@@ -284,8 +300,35 @@ export class CoupangCrawlerService {
   private async _createPage(): Promise<Page> {
     const context = await this._getContext()
     const page = await context.newPage()
-
     return page
+  }
+
+  /**
+   * 재사용 가능한 페이지를 반환합니다. 없거나 닫힌 경우 새로 생성합니다.
+   */
+  private async _getPage(): Promise<Page> {
+    const context = await this._getContext()
+
+    // 기존 페이지가 있고 아직 닫히지 않았다면 재사용
+    if (this.page && !this.page.isClosed()) {
+      return this.page
+    }
+
+    // 컨텍스트 내 기존 페이지 재활용 시도 (launchPersistentContext는 기본 탭이 있을 수 있음)
+    const existing = context.pages()?.[0]
+    if (existing && !existing.isClosed()) {
+      this.page = existing
+    } else {
+      // 새 페이지 생성 및 보관
+      this.page = await this._createPage()
+    }
+
+    // 페이지가 닫히면 캐시 초기화
+    this.page.on('close', () => {
+      this.page = null
+    })
+
+    return this.page
   }
 
   /**

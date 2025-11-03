@@ -3,6 +3,8 @@
 
 /node_modules
 /temp
+/static/exports
+/static/temp
 /dist
 /release
 .idea
