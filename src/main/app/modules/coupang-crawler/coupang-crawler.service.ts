@@ -32,8 +32,6 @@ export class CoupangCrawlerErrorClass extends Error {
 @Injectable()
 export class CoupangCrawlerService {
   private readonly logger = new Logger(CoupangCrawlerService.name)
-  private browser: Browser | null = null
-  private context: BrowserContext | null = null
 
   constructor() {}
 
@@ -255,36 +253,29 @@ export class CoupangCrawlerService {
    * 브라우저 인스턴스를 가져옵니다.
    */
   private async _getBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      this.browser = await chromium.launch({
-        headless: false,
-        // Use system Chrome channel and harden flags to avoid HTTP/2 issues in headless
-        channel: 'chrome',
-        args: [
-          '--disable-quic',
-          '--disable-http2',
-          '--use-spdy=off',
-          '--no-sandbox',
-          '--disable-gpu',
-          '--disable-features=NetworkService',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-background-networking',
-          '--disable-features=VizDisplayCompositor',
-        ],
-      })
-    }
-    return this.browser
+    const browser = await chromium.launch({
+      headless: true,
+      // Use system Chrome channel and harden flags to avoid HTTP/2 issues in headless
+      channel: 'chrome',
+      args: [
+        '--disable-quic',
+        '--disable-http2',
+        '--disable-gpu',
+        '--no-sandbox',
+        '--disable-features=NetworkService',
+        '--disable-blink-features=AutomationControlled',
+      ],
+    })
+    return browser
   }
 
   /**
    * 브라우저 컨텍스트를 가져옵니다.
    */
   private async _getContext(): Promise<BrowserContext> {
-    if (!this.context) {
-      const browser = await this._getBrowser()
-      this.context = await browser.newContext()
-    }
-    return this.context
+    const browser = await this._getBrowser()
+    const context = await browser.newContext()
+    return context
   }
 
   /**
