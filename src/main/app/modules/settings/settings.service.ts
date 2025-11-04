@@ -52,6 +52,7 @@ export class SettingsService {
         keywordMax: 5, // 기본값: 최대 5개
         productsPerKeyword: 1, // 기본값: 키워드당 1개
       },
+      commentBatchSize: 1, // 기본값: 동시 처리 1개
     }
     const merged = {
       ...defaultSettings,

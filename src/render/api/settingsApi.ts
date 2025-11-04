@@ -62,3 +62,12 @@ export const getWifiNetworks = async (): Promise<{
   const res = await api.get('/settings/tethering/wifi-networks')
   return res.data
 }
+
+export const updateCommentBatchSize = async (
+  commentBatchSize: number,
+): Promise<{
+  commentBatchSize: number
+}> => {
+  const res = await api.post('/settings/comment-batch-size', { commentBatchSize })
+  return res.data
+}

@@ -7,6 +7,7 @@ import SettingsForm from './SettingsForm'
 import IpSettingsForm from './ip/IpSettingsForm'
 import WordPressSettingsForm from './WordPressSettingsForm'
 import CoupangPartnersSettingsForm from './CoupangPartnersSettingsForm'
+import JobSettingsForm from './JobSettingsForm'
 import { usePermissions } from '@render/hooks/usePermissions'
 import { Permission } from '@render/types/permissions'
 
@@ -63,6 +64,11 @@ const SettingsTabs: React.FC = () => {
         key: 'coupang',
         label: '쿠팡 파트너스',
         children: <CoupangPartnersSettingsForm />,
+      },
+      {
+        key: 'job',
+        label: '작업세팅',
+        children: <JobSettingsForm />,
       },
     )
   }

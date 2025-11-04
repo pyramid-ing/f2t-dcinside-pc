@@ -16,6 +16,7 @@ import type { Response } from 'express'
 import { TetheringService } from '@main/app/modules/util/tethering.service'
 import { AuthGuard, Permission, Permissions } from '@main/app/modules/auth/auth.guard'
 import { sleep } from '@main/app/utils/sleep'
+import { UpdateCommentBatchSizeDto } from './dto/update-comment-batch-size.dto'
 
 @Controller('settings')
 export class SettingsController {
@@ -97,5 +98,17 @@ export class SettingsController {
   async getWifiNetworks() {
     const result = this.tetheringService.getSavedWifiNetworks()
     return result
+  }
+
+  @UseGuards(AuthGuard)
+  @Permissions(Permission.USE_COUPANG_PARTNERS)
+  @Post('comment-batch-size')
+  async updateCommentBatchSize(@Body() dto: UpdateCommentBatchSizeDto) {
+    const currentSettings = await this.settingsService.getSettings()
+    const updatedSettings = await this.settingsService.updateSettings({
+      ...currentSettings,
+      commentBatchSize: dto.commentBatchSize,
+    })
+    return { commentBatchSize: updatedSettings.commentBatchSize }
   }
 }

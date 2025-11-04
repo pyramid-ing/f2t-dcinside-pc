@@ -98,6 +98,9 @@ export interface Settings {
     /** 키워드당 상품 최대 개수 */
     productsPerKeyword?: number
   }
+
+  /** 댓글 작업 동시 처리 개수 (1~10, 기본 1) */
+  commentBatchSize?: number
 }
 
 export enum IpMode {

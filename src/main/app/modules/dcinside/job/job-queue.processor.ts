@@ -7,11 +7,11 @@ import { CommentJobService } from '@main/app/modules/dcinside/comment/comment-jo
 import { CoupasJobService } from '@main/app/modules/dcinside/coupas-job/coupas-job.service'
 import { JobLogsService } from '@main/app/modules/dcinside/job-logs/job-logs.service'
 import { JobContextService } from '@main/app/modules/common/job-context/job-context.service'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
   private readonly logger = new Logger(JobQueueProcessor.name)
-  private readonly COMMENT_BATCH_SIZE = 5 // 동시 처리할 댓글 작업 수
 
   constructor(
     private readonly prisma: PrismaService,
@@ -20,6 +20,7 @@ export class JobQueueProcessor implements OnModuleInit {
     private readonly coupasJobService: CoupasJobService,
     private readonly jobLogsService: JobLogsService,
     private readonly jobContext: JobContextService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async onModuleInit() {
@@ -72,6 +73,10 @@ export class JobQueueProcessor implements OnModuleInit {
    */
   private async processCommentJobs() {
     try {
+      // 설정에서 배치 사이즈 가져오기 (기본값 1)
+      const settings = await this.settingsService.getSettings()
+      const commentBatchSize = Math.max(1, Math.min(10, settings.commentBatchSize || 1))
+
       // COMMENT 타입의 처리 중인 작업이 있는지 확인
       const processingCount = await this.prisma.job.count({
         where: {
@@ -81,8 +86,8 @@ export class JobQueueProcessor implements OnModuleInit {
       })
 
       // 처리 중인 작업 수가 배치 사이즈보다 적으면 새 작업들을 배치로 시작
-      if (processingCount < this.COMMENT_BATCH_SIZE) {
-        const availableSlots = this.COMMENT_BATCH_SIZE - processingCount
+      if (processingCount < commentBatchSize) {
+        const availableSlots = commentBatchSize - processingCount
 
         // 댓글 작업은 갤러리 분산 로직 적용하여 배치로 가져오기
         const commentRequestJobs = await this.findNextCommentJobsWithDistribution(availableSlots)
