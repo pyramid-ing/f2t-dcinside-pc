@@ -48,6 +48,10 @@ const config = {
       to: 'resources',
       filter: ['**/*'],
     },
+    {
+      from: 'db-force-reset.json',
+      to: 'db-force-reset.json',
+    },
   ],
   mac: {
     icon: 'build/icon.icns',

@@ -75,6 +75,13 @@ export class DbForceResetConfig {
       // 3. 설정 비교 및 업데이트
       if (userDataConfig && resourceConfig) {
         // 두 설정 파일이 모두 있는 경우
+        // resources 설정의 forceReset이 true이면 항상 resources 설정으로 업데이트
+        if (resourceConfig.forceReset) {
+          LoggerConfig.info(`Resources 설정의 forceReset 감지: resources 설정으로 업데이트`)
+          this.saveConfig(resourceConfig)
+          return resourceConfig
+        }
+
         if (resourceConfig.version !== userDataConfig.version) {
           // 버전이 다르면 resources 설정으로 업데이트
           LoggerConfig.info(`버전 변경 감지: ${userDataConfig.version} → ${resourceConfig.version}`)
