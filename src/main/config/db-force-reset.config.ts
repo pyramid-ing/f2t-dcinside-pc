@@ -11,12 +11,12 @@ interface IDbForceResetConfig {
 
 export class DbForceResetConfig {
   private static readonly CONFIG_FILE_NAME = 'db-force-reset.json'
-  private static configPath: string
+  private static userConfigPath: string
   private static resourceConfigPath: string
 
   public static initialize() {
     // userData 설정 파일 경로 (사용자별 설정)
-    this.configPath = path.join(app.isPackaged ? app.getPath('userData') : process.cwd(), this.CONFIG_FILE_NAME)
+    this.userConfigPath = path.join(app.isPackaged ? app.getPath('userData') : process.cwd(), this.CONFIG_FILE_NAME)
 
     // resources 설정 파일 경로 (기본 설정)
     this.resourceConfigPath = app.isPackaged
@@ -51,11 +51,11 @@ export class DbForceResetConfig {
       let resourceConfig: IDbForceResetConfig | null = null
 
       // 1. userData 설정 파일 읽기
-      if (fs.existsSync(this.configPath)) {
+      if (fs.existsSync(this.userConfigPath)) {
         try {
-          const configContent = fs.readFileSync(this.configPath, 'utf8')
-          userDataConfig = JSON.parse(configContent)
-          LoggerConfig.info(`UserData 설정 파일 읽기: ${this.configPath}`)
+          const userConfigContent = fs.readFileSync(this.userConfigPath, 'utf8')
+          userDataConfig = JSON.parse(userConfigContent)
+          LoggerConfig.info(`UserData 설정 파일 읽기: ${this.userConfigPath}`)
         } catch (error) {
           LoggerConfig.error('UserData 설정 파일 읽기 오류:', error)
         }
@@ -75,9 +75,9 @@ export class DbForceResetConfig {
       // 3. 설정 비교 및 업데이트
       if (userDataConfig && resourceConfig) {
         // 두 설정 파일이 모두 있는 경우
-        // resources 설정의 forceReset이 true이면 항상 resources 설정으로 업데이트
-        if (resourceConfig.forceReset) {
-          LoggerConfig.info(`Resources 설정의 forceReset 감지: resources 설정으로 업데이트`)
+        // resources 설정의 forceReset이 true이고, 아직 이 버전에서 초기화하지 않았으면 resources 설정 적용
+        if (resourceConfig.forceReset && userDataConfig.lastResetVersion !== currentVersion) {
+          LoggerConfig.info(`Resources 설정의 forceReset 감지: resources 설정으로 업데이트 (버전: ${currentVersion})`)
           this.saveConfig(resourceConfig)
           return resourceConfig
         }
@@ -116,12 +116,12 @@ export class DbForceResetConfig {
    */
   private static saveConfig(config: IDbForceResetConfig): void {
     try {
-      const configDir = path.dirname(this.configPath)
+      const configDir = path.dirname(this.userConfigPath)
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true })
       }
-      fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2))
-      LoggerConfig.info(`설정 파일 저장: ${this.configPath}`)
+      fs.writeFileSync(this.userConfigPath, JSON.stringify(config, null, 2))
+      LoggerConfig.info(`설정 파일 저장: ${this.userConfigPath}`)
     } catch (error) {
       LoggerConfig.error('설정 파일 저장 오류:', error)
     }
