@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
+import { compareVersions } from 'compare-versions'
 import { LoggerConfig } from './logger.config'
 
 interface IDbForceResetConfig {
@@ -25,6 +26,67 @@ export class DbForceResetConfig {
   }
 
   /**
+   * 강제 초기화가 필요한지 확인합니다
+   */
+  public static shouldForceReset(): boolean {
+    const config = this._readConfig()
+    const currentVersion = this.getCurrentVersion()
+    const resourceConfig = this._readResourceConfig()
+
+    // resources 설정이 없으면 초기화하지 않음
+    if (!resourceConfig) {
+      LoggerConfig.info(`Resources 설정 파일 없음: 초기화하지 않음`)
+      return false
+    }
+
+    // resources 설정의 version이 현재 앱 버전보다 높거나 같고, forceReset이 true인 경우만 초기화
+    const resourceVersionCompare = compareVersions(resourceConfig.version, currentVersion)
+    if (resourceConfig.forceReset && resourceVersionCompare >= 0) {
+      // resources 설정의 version과 config의 version을 비교
+      const configVersionCompare = config.version ? compareVersions(config.version, resourceConfig.version) : -1
+
+      // config의 lastResetVersion이 resources 설정의 version보다 낮으면 초기화 필요
+      const lastResetVersionCompare = config.lastResetVersion
+        ? compareVersions(config.lastResetVersion, resourceConfig.version)
+        : -1
+
+      if (lastResetVersionCompare < 0) {
+        LoggerConfig.info(
+          `DB 강제 초기화 필요: resources 버전 ${resourceConfig.version}에서 초기화 필요 (현재 앱 버전: ${currentVersion}, 마지막 초기화 버전: ${config.lastResetVersion || '없음'})`,
+        )
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * 강제 초기화 완료를 기록합니다
+   */
+  public static markResetComplete(): void {
+    const config = this._readConfig()
+    const resourceConfig = this._readResourceConfig()
+
+    // resources 설정의 version을 lastResetVersion으로 저장 (resources 설정이 있는 경우)
+    if (resourceConfig) {
+      config.lastResetVersion = resourceConfig.version
+      config.version = resourceConfig.version
+    } else {
+      // resources 설정이 없으면 현재 앱 버전 사용
+      const currentVersion = this.getCurrentVersion()
+      config.lastResetVersion = currentVersion
+      config.version = currentVersion
+    }
+
+    config.forceReset = false // 강제 초기화 비활성화
+
+    this._saveConfig(config)
+    LoggerConfig.info(
+      `DB 강제 초기화 완료 기록: 버전 ${config.lastResetVersion} (resources 설정: ${resourceConfig?.version || '없음'})`,
+    )
+  }
+  /**
    * 현재 앱 버전을 가져옵니다
    */
   private static getCurrentVersion(): string {
@@ -40,15 +102,15 @@ export class DbForceResetConfig {
     }
   }
 
+
   /**
    * 설정 파일을 읽고 비교하여 업데이트합니다
    */
-  private static readConfig(): IDbForceResetConfig {
+  private static _readConfig(): IDbForceResetConfig {
     const currentVersion = this.getCurrentVersion()
 
     try {
       let userDataConfig: IDbForceResetConfig | null = null
-      let resourceConfig: IDbForceResetConfig | null = null
 
       // 1. userData 설정 파일 읽기
       if (fs.existsSync(this.userConfigPath)) {
@@ -62,40 +124,54 @@ export class DbForceResetConfig {
       }
 
       // 2. resources 설정 파일 읽기
-      if (fs.existsSync(this.resourceConfigPath)) {
-        try {
-          const configContent = fs.readFileSync(this.resourceConfigPath, 'utf8')
-          resourceConfig = JSON.parse(configContent)
-          LoggerConfig.info(`Resources 설정 파일 읽기: ${this.resourceConfigPath}`)
-        } catch (error) {
-          LoggerConfig.error('Resources 설정 파일 읽기 오류:', error)
-        }
-      }
+      const resourceConfig = this._readResourceConfig()
 
       // 3. 설정 비교 및 업데이트
       if (userDataConfig && resourceConfig) {
         // 두 설정 파일이 모두 있는 경우
-        // resources 설정의 forceReset이 true이고, 아직 이 버전에서 초기화하지 않았으면 resources 설정 적용
-        if (resourceConfig.forceReset && userDataConfig.lastResetVersion !== currentVersion) {
-          LoggerConfig.info(`Resources 설정의 forceReset 감지: resources 설정으로 업데이트 (버전: ${currentVersion})`)
-          this.saveConfig(resourceConfig)
-          return resourceConfig
+        // resources 설정의 version이 현재 앱 버전보다 높거나 같고, forceReset이 true인 경우만 고려
+        const resourceVersionCompare = compareVersions(resourceConfig.version, currentVersion)
+
+        if (resourceConfig.forceReset && resourceVersionCompare >= 0) {
+          // resources 설정의 version이 현재 앱 버전보다 높거나 같고, forceReset이 true
+          // 아직 이 resources 버전에서 초기화하지 않았으면 resources 설정 적용
+          const lastResetVersionCompare = userDataConfig.lastResetVersion
+            ? compareVersions(userDataConfig.lastResetVersion, resourceConfig.version)
+            : -1
+
+          if (lastResetVersionCompare < 0) {
+            // 아직 resources 설정의 version보다 낮은 버전에서 초기화했거나, 초기화한 적이 없음
+            LoggerConfig.info(
+              `Resources 설정의 forceReset 감지: resources 설정으로 업데이트 (resources 버전: ${resourceConfig.version}, 현재 앱 버전: ${currentVersion})`,
+            )
+            this._saveConfig(resourceConfig)
+            return resourceConfig
+          }
         }
 
-        if (resourceConfig.version !== userDataConfig.version) {
-          // 버전이 다르면 resources 설정으로 업데이트
-          LoggerConfig.info(`버전 변경 감지: ${userDataConfig.version} → ${resourceConfig.version}`)
-          this.saveConfig(resourceConfig)
-          return resourceConfig
-        } else {
-          // 버전이 같으면 userData 설정 유지
-          return userDataConfig
+        // resources 설정의 version이 현재 앱 버전보다 낮거나, forceReset이 false이면 userData 설정 유지
+        if (resourceVersionCompare < 0) {
+          LoggerConfig.info(
+            `Resources 설정 버전이 현재 앱 버전보다 낮음: userData 설정 유지 (resources: ${resourceConfig.version}, 현재: ${currentVersion})`,
+          )
         }
+
+        // userData 설정 유지
+        return userDataConfig
       } else if (resourceConfig) {
         // resources만 있는 경우 (첫 실행)
-        LoggerConfig.info('Resources 설정을 UserData로 복사')
-        this.saveConfig(resourceConfig)
-        return resourceConfig
+        // resources 설정의 version이 현재 앱 버전보다 높거나 같고, forceReset이 true인 경우만 적용
+        const resourceVersionCompare = compareVersions(resourceConfig.version, currentVersion)
+        if (resourceConfig.forceReset && resourceVersionCompare >= 0) {
+          LoggerConfig.info('Resources 설정을 UserData로 복사 (첫 실행)')
+          this._saveConfig(resourceConfig)
+          return resourceConfig
+        } else {
+          // resources 설정이 조건을 만족하지 않으면 기본 설정 반환
+          LoggerConfig.info(
+            `Resources 설정이 조건을 만족하지 않음: 기본 설정 반환 (resources 버전: ${resourceConfig.version}, 현재: ${currentVersion}, forceReset: ${resourceConfig.forceReset})`,
+          )
+        }
       } else if (userDataConfig) {
         // userData만 있는 경우
         return userDataConfig
@@ -112,9 +188,23 @@ export class DbForceResetConfig {
   }
 
   /**
+   * resources 설정 파일을 직접 읽습니다
+   */
+  private static _readResourceConfig(): IDbForceResetConfig | null {
+    if (!fs.existsSync(this.resourceConfigPath)) {
+      return null
+    }
+
+    const configContent = fs.readFileSync(this.resourceConfigPath, 'utf8')
+    const resourceConfig = JSON.parse(configContent)
+    LoggerConfig.info(`Resources 설정 파일 읽기: ${this.resourceConfigPath}`)
+    return resourceConfig
+  }
+
+  /**
    * 설정 파일을 저장합니다 (userData에만 저장)
    */
-  private static saveConfig(config: IDbForceResetConfig): void {
+  private static _saveConfig(config: IDbForceResetConfig): void {
     try {
       const configDir = path.dirname(this.userConfigPath)
       if (!fs.existsSync(configDir)) {
@@ -125,60 +215,5 @@ export class DbForceResetConfig {
     } catch (error) {
       LoggerConfig.error('설정 파일 저장 오류:', error)
     }
-  }
-
-  /**
-   * 강제 초기화가 필요한지 확인합니다
-   */
-  public static shouldForceReset(): boolean {
-    const config = this.readConfig()
-    const currentVersion = this.getCurrentVersion()
-
-    // 1. 강제 초기화가 활성화되어 있고, 아직 이 버전에서 초기화하지 않았으면
-    if (config.forceReset && config.lastResetVersion !== currentVersion) {
-      LoggerConfig.info(`DB 강제 초기화 필요: 버전 ${currentVersion} (forceReset: true)`)
-      return true
-    }
-
-    // 2. lastResetVersion이 없으면 강제 초기화 (첫 실행 또는 설정 누락)
-    if (!config.lastResetVersion) {
-      LoggerConfig.info(`DB 강제 초기화 필요: 버전 ${currentVersion} (lastResetVersion 없음)`)
-      return true
-    }
-
-    return false
-  }
-
-  /**
-   * 강제 초기화 완료를 기록합니다
-   */
-  public static markResetComplete(): void {
-    const config = this.readConfig()
-    const currentVersion = this.getCurrentVersion()
-
-    config.lastResetVersion = currentVersion
-    config.forceReset = false // 강제 초기화 비활성화
-
-    this.saveConfig(config)
-    LoggerConfig.info(`DB 강제 초기화 완료 기록: 버전 ${currentVersion}`)
-  }
-
-  /**
-   * 강제 초기화 설정을 업데이트합니다 (개발용)
-   */
-  public static updateForceResetConfig(forceReset: boolean): void {
-    const config = this.readConfig()
-    config.forceReset = forceReset
-    config.version = this.getCurrentVersion()
-
-    this.saveConfig(config)
-    LoggerConfig.info(`DB 강제 초기화 설정 업데이트: forceReset=${forceReset}, version=${config.version}`)
-  }
-
-  /**
-   * 현재 설정을 가져옵니다
-   */
-  public static getCurrentConfig(): IDbForceResetConfig {
-    return this.readConfig()
   }
 }
