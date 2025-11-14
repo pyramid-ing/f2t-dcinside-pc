@@ -100,19 +100,25 @@ export abstract class DcinsideBaseService {
     reuseExisting?: boolean
     respectProxy?: boolean
   }) {
-    let proxyArg = undefined
-    let proxyAuth = undefined
-    let lastError = null
-    let proxyInfo = null
-
     const settings = await this.settingsService.getSettings()
     const headless = options?.headless ?? !settings.showBrowserWindow
     const respectProxy = options?.respectProxy ?? true
+    const reuseExisting = options?.reuseExisting ?? false
 
-    // ipMode가 proxy일 때만 프록시 적용
-    if (respectProxy && settings?.ipMode === IpMode.PROXY && settings?.proxies && settings.proxies.length > 0) {
+    const canUseProxy =
+      respectProxy &&
+      settings?.ipMode === IpMode.PROXY &&
+      Array.isArray(settings?.proxies) &&
+      settings.proxies.length > 0
+
+    let proxyArg: string | undefined
+    let proxyAuth: { server: string; username?: string; password?: string } | undefined
+    let proxyInfo: { ip: string; port: number; id?: string; pw?: string } | null = null
+
+    if (canUseProxy) {
       const method = settings.proxyChangeMethod || 'random'
       const { proxy } = getProxyByMethod(settings.proxies, method)
+
       if (proxy) {
         proxyArg = `--proxy-server=${proxy.ip}:${proxy.port}`
         proxyAuth = {
@@ -121,65 +127,41 @@ export abstract class DcinsideBaseService {
           ...(proxy.pw ? { password: proxy.pw } : {}),
         }
         proxyInfo = { ip: proxy.ip, port: proxy.port, id: proxy.id, pw: proxy.pw }
-        try {
-          const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
-            headless,
-            args: [proxyArg],
-          })
-          if (options?.reuseExisting) {
-            let context = browser.contexts()[0] || null
-            let page: Page | null = null
-            if (context) {
-              page = context.pages()[0] || (await context.newPage())
-            } else {
-              const cp = await this.initContextAndPage(browser, { proxyAuth })
-              context = cp.context
-              page = cp.page
-            }
-            return { browser, context, page, proxyInfo }
-          }
-          const { context, page } = await this.initContextAndPage(browser, { proxyAuth })
-          return { browser, context, page, proxyInfo }
-        } catch (error) {
-          // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
-          if (error instanceof ChromeNotInstalledError) {
-            throw DcException.chromeNotInstalled({
-              message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
-            })
-          }
-          this.logger.warn(`프록시 브라우저 실행 실패: ${error.message}`)
-          lastError = error
-        }
       }
     }
-    // fallback: 프록시 없이 재시도
+
+    const launchOptions: { headless: boolean; args?: string[] } = {
+      headless,
+    }
+    if (proxyArg) {
+      launchOptions.args = [proxyArg]
+    }
+
     try {
-      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, {
-        headless,
-      })
-      if (options?.reuseExisting) {
-        let context = browser.contexts()[0] || null
-        let page: Page | null = null
-        if (context) {
-          page = context.pages()[0] || (await context.newPage())
-        } else {
-          const cp = await this.initContextAndPage(browser)
-          context = cp.context
-          page = cp.page
+      const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, launchOptions)
+
+      // 기존 컨텍스트/페이지가 있고 재사용 옵션이 켜져 있으면 그대로 사용
+      if (reuseExisting) {
+        const existingContext = browser.contexts()[0] || null
+        const existingPage = existingContext ? existingContext.pages()[0] || null : null
+
+        if (existingContext && existingPage) {
+          return { browser, context: existingContext, page: existingPage, proxyInfo }
         }
-        if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
-        return { browser, context, page, proxyInfo: null }
       }
-      const { context, page } = await this.initContextAndPage(browser)
-      if (lastError) this.logger.warn('프록시 모드 실패 또는 미적용으로 프록시 없이 브라우저를 재시도합니다.')
-      return { browser, context, page, proxyInfo: null }
-    } catch (error) {
+
+      // 없으면 새 컨텍스트/페이지 생성 (공통 설정 적용)
+      const { context, page } = await this.createContextAndPage(browser, proxyAuth ? { proxyAuth } : undefined)
+
+      return { browser, context, page, proxyInfo }
+    } catch (error: any) {
       // 브라우저 설치 오류를 런처 상위에서 도메인 예외로 변환
       if (error instanceof ChromeNotInstalledError) {
         throw DcException.chromeNotInstalled({
           message: '크롬 브라우저가 설치되지 않았습니다. 크롬을 재설치 해주세요.',
         })
       }
+
       throw error
     }
   }
@@ -189,7 +171,7 @@ export abstract class DcinsideBaseService {
    * - viewport, userAgent, sessionStorage 초기화 스크립트 공통 적용
    * - 필요 시 컨텍스트 레벨 프록시 옵션 적용
    */
-  public async initContextAndPage(
+  public async createContextAndPage(
     browser: any,
     options?: { proxyAuth?: { server: string; username?: string; password?: string } },
   ): Promise<{ context: BrowserContext; page: Page }> {
