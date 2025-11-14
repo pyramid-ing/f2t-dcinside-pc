@@ -8,11 +8,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname),
+      '@render': path.resolve(__dirname),
     },
   },
   server: {
     port: 5173,
-    open: true,
+    open: false,
     proxy: {
     },
   },

@@ -1,5 +1,4 @@
-import type { Settings } from '@render/types/settings'
-import { TetheringChangeType } from '@main/app/modules/settings/settings.types'
+import { TetheringChangeType, type Settings } from '@render/types/settings'
 import React, { useEffect, useState } from 'react'
 import type { FormInstance } from 'antd'
 import { Form, Input, Space, message, Button, Radio, Select, Switch } from 'antd'

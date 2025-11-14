@@ -100,3 +100,8 @@ export enum IpMode {
   PROXY = 'proxy',
   TETHERING = 'tethering',
 }
+
+export enum TetheringChangeType {
+  TIME = 'time',
+  COUNT = 'count',
+}
