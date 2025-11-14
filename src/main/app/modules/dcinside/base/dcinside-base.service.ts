@@ -97,19 +97,16 @@ export abstract class DcinsideBaseService {
   public async launch(options?: {
     browserId?: string
     headless?: boolean
-    reuseExisting?: boolean
-    respectProxy?: boolean
+    reuseBrowser?: boolean
+    useProxy?: boolean
   }) {
     const settings = await this.settingsService.getSettings()
     const headless = options?.headless ?? !settings.showBrowserWindow
-    const respectProxy = options?.respectProxy ?? true
-    const reuseExisting = options?.reuseExisting ?? false
+    const useProxy = options?.useProxy ?? true
+    const reuseBrowser = options?.reuseBrowser ?? false
 
     const canUseProxy =
-      respectProxy &&
-      settings?.ipMode === IpMode.PROXY &&
-      Array.isArray(settings?.proxies) &&
-      settings.proxies.length > 0
+      useProxy && settings?.ipMode === IpMode.PROXY && Array.isArray(settings?.proxies) && settings.proxies.length > 0
 
     let proxyArg: string | undefined
     let proxyAuth: { server: string; username?: string; password?: string } | undefined
@@ -140,28 +137,31 @@ export abstract class DcinsideBaseService {
     try {
       const browser = await this.browserManagerService.getOrCreateBrowser(options?.browserId, launchOptions)
 
-      // 기존 컨텍스트/페이지가 있고 재사용 옵션이 켜져 있으면 그대로 사용
-      if (reuseExisting) {
-        const contexts = browser.contexts()
-        let existingContext: BrowserContext | null = null
-        let existingPage: Page | null = null
+      let context: BrowserContext | null = null
+      let page: Page | null = null
 
-        for (const ctx of contexts) {
-          const pages = ctx.pages()
-          if (pages.length > 0) {
-            existingContext = ctx
-            existingPage = pages[0]
-            break
-          }
-        }
+      // 기존 컨텍스트/페이지가 있고 재사용 옵션이 켜져 있으면 그대로 사용
+      if (reuseBrowser) {
+        const existingContext =
+          browser.contexts().find(ctx => {
+            const pages = ctx.pages()
+            return pages && pages.length > 0
+          }) ?? null
+
+        const existingPage = existingContext ? (existingContext.pages()[0] ?? null) : null
 
         if (existingContext && existingPage) {
-          return { browser, context: existingContext, page: existingPage, proxyInfo }
+          context = existingContext
+          page = existingPage
         }
       }
 
-      // 없으면 새 컨텍스트/페이지 생성 (공통 설정 적용)
-      const { context, page } = await this.createContextAndPage(browser, proxyAuth ? { proxyAuth } : undefined)
+      // 재사용할 수 있는 페이지가 없으면 새 컨텍스트/페이지 생성 (공통 설정 적용)
+      if (!context || !page) {
+        const created = await this.createContextAndPage(browser, proxyAuth ? { proxyAuth } : undefined)
+        context = created.context
+        page = created.page
+      }
 
       return { browser, context, page, proxyInfo }
     } catch (error: any) {
@@ -636,8 +636,8 @@ export abstract class DcinsideBaseService {
     const { browser, context, page, proxyInfo } = await this.launch({
       browserId,
       headless: !settings.showBrowserWindow,
-      reuseExisting: settings.reuseWindowBetweenTasks,
-      respectProxy: true,
+      reuseBrowser: settings.reuseWindowBetweenTasks,
+      useProxy: true,
     })
 
     // 프록시 정보 로깅
@@ -666,8 +666,8 @@ export abstract class DcinsideBaseService {
     const { context, page } = await this.launch({
       browserId,
       headless: !settings.showBrowserWindow,
-      reuseExisting: true,
-      respectProxy: false,
+      reuseBrowser: true,
+      useProxy: false,
     })
 
     // 실제 외부 IP 로깅
@@ -686,8 +686,8 @@ export abstract class DcinsideBaseService {
     const { context, page } = await this.launch({
       browserId,
       headless: !settings.showBrowserWindow,
-      reuseExisting: false,
-      respectProxy: false,
+      reuseBrowser: false,
+      useProxy: false,
     })
 
     // 실제 외부 IP 로깅
