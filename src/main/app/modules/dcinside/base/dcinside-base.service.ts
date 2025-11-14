@@ -142,8 +142,18 @@ export abstract class DcinsideBaseService {
 
       // 기존 컨텍스트/페이지가 있고 재사용 옵션이 켜져 있으면 그대로 사용
       if (reuseExisting) {
-        const existingContext = browser.contexts()[0] || null
-        const existingPage = existingContext ? existingContext.pages()[0] || null : null
+        const contexts = browser.contexts()
+        let existingContext: BrowserContext | null = null
+        let existingPage: Page | null = null
+
+        for (const ctx of contexts) {
+          const pages = ctx.pages()
+          if (pages.length > 0) {
+            existingContext = ctx
+            existingPage = pages[0]
+            break
+          }
+        }
 
         if (existingContext && existingPage) {
           return { browser, context: existingContext, page: existingPage, proxyInfo }
