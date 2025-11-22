@@ -35,6 +35,8 @@ export class EnvConfig {
         return EnvConfig.isPackaged
           ? path.join(EnvConfig.userDataCustomPath, 'adb.exe')
           : path.join(process.cwd(), 'resources', 'adb.exe')
+      case 'darwin':
+        return '/opt/homebrew/bin/adb'
       default:
         return 'adb'
     }
