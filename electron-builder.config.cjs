@@ -78,7 +78,7 @@ const config = {
     createStartMenuShortcut: true,
     runAfterFinish: true,
     perMachine: true,
-    artifactName: '${productName}-Setup-${version}.${ext}',
+    artifactName: '${productName}-Setup.${ext}',
   },
 }
 
