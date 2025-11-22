@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { BrowserContext, chromium, Page } from 'playwright'
+import { BrowserContext, chromium, Page } from 'patchright'
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'

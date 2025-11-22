@@ -67,6 +67,7 @@
     "nestjs-cls": "^6.0.1",
     "node-machine-id": "^1.1.12",
     "openai": "^5.17.0",
+    "patchright": "^1.56.1",
     "playwright": "^1.49.1",
     "prisma": "^6.9.0",
     "react": "^18.3.1",
