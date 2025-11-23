@@ -110,8 +110,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.STORE_PATH }}
-          # 루트의 pnpm-lock.yaml만 대상으로 캐시 키 계산 (macOS에서 glob 이슈 방지)
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          # hashFiles 사용 시 경로 이슈가 발생하므로, OS 기준의 고정 키로 캐시 사용
+          key: ${{ runner.os }}-pnpm-store
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
