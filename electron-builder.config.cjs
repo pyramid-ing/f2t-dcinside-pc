@@ -14,7 +14,9 @@ const config = {
     {
       provider: 'github',
       owner: 'pyramid-ing',
-      repo: 'f2t-dcinside-pc',
+      // 코드 리포는 private(`f2t-dcinside-pc`), 실제 배포/업데이트용은 public(`f2t-dcinside-pc-public`)
+      // 으로 분리해서 사용하기 위해 public 리포를 대상으로 설정
+      repo: 'f2t-dcinside-pc-public',
       releaseType: 'release',
     },
   ],

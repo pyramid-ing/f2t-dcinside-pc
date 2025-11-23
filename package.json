@@ -12,6 +12,8 @@
     "dev": "rimraf dist && vite",
     "debug": "rimraf dist && vite -- --dsb-debug",
     "build": "rimraf dist && vite build",
+    "dist:electron": "electron-builder --config electron-builder.config.cjs",
+    "release": "electron-builder --config electron-builder.config.cjs --publish always",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "postinstall": "electron-builder install-app-deps && pnpm db:generate",

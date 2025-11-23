@@ -142,83 +142,19 @@ jobs:
           git tag "${{ needs.check-version.outputs.tag-name }}"
           git push origin "${{ needs.check-version.outputs.tag-name }}"
 
-      # 9. Electron 빌드
-      - name: Build ${{ matrix.platform }} App
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      # 9. Vite 빌드 (렌더러/메인 코드 번들링)
+      - name: Build app (Vite)
         run: pnpm build
 
-      # 10. 빌드된 파일 업로드 (Artifacts)
+      # 10. Electron 패키징 + GitHub Release 에 업로드 (f2t-dcinside-pc-public 리포)
+      - name: Package & publish Electron app with electron-builder
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: pnpm release
+
+      # 11. 빌드된 파일 업로드 (Artifacts)
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: winsoft-dc-${{ matrix.platform }}-v${{ needs.check-version.outputs.current-version }}
           path: dist/electron
-
-
-  # 12. GitHub Release 생성 (모든 빌드 완료 후 실행)
-  release:
-    needs: [check-version, build]
-    if: startsWith(github.ref, 'refs/tags/') || needs.check-version.outputs.version-changed == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: winsoft-dc-win-v${{ needs.check-version.outputs.current-version }}
-          path: ./artifacts/windows
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: winsoft-dc-mac-v${{ needs.check-version.outputs.current-version }}
-          path: ./artifacts/macos
-
-      - name: Remove duplicate files
-        run: |
-          # Remove builder-debug.yml to prevent upload conflicts
-          find ./artifacts -name "builder-debug.yml" -delete
-          
-          # List remaining files for debugging
-          echo "Files to be uploaded:"
-          find ./artifacts -type f | sort
-
-      - name: Extract Release Notes from CHANGELOG
-        id: release-notes
-        shell: bash
-        run: |
-          version="${{ needs.check-version.outputs.current-version }}"
-          changelog_path="CHANGELOG.md"
-          
-          # 기본값은 공란
-          release_notes=""
-          
-          if [[ -f "$changelog_path" ]]; then
-            # 현재 버전의 변경사항 추출
-            release_notes=$(sed -n "/## \[$version\]/,/## \[/{/## \[$version\]/d;/## \[/q;p}" "$changelog_path")
-            release_notes=$(echo "$release_notes" | sed '/^$/d' | sed 's/^[[:space:]]*//')
-          fi
-          
-          # GitHub Actions output으로 설정 (멀티라인 처리)
-          delimiter="EOF$(shuf -i 1000-9999 -n 1)"
-          echo "notes<<$delimiter" >> $GITHUB_OUTPUT
-          echo "$release_notes" >> $GITHUB_OUTPUT
-          echo "$delimiter" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.check-version.outputs.tag-name }}
-          name: Release ${{ needs.check-version.outputs.tag-name }}
-          body: ${{ steps.release-notes.outputs.notes }}
-          files: |
-            ./artifacts/windows/*
-            ./artifacts/macos/*
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
