@@ -403,6 +403,86 @@ export abstract class DcinsideBaseService {
   }
 
   /**
+   * DC 글쓰기 Cloudflare Turnstile 해결 (2captcha 사용)
+   * - 모바일 글쓰기 페이지에 #dc-turnstile 과 dcTsSiteKey/dcTsAction 이 있으면 적용된 갤러리
+   * - DC 스크립트(common.js dcTsParams)는 등록 시 turnstile.getResponse(dcTs.id) 값을 cf-turnstile-response 로 보낸다.
+   *   2captcha 토큰을 getResponse 가 돌려주게 하면 dcTsWait 도 기다리지 않고 그 토큰으로 제출된다.
+   * - 등록 뒤 dcTsReset 으로 토큰이 소모되므로 등록 시도마다 새로 받는다.
+   */
+  protected async solveDcTurnstile(page: Page): Promise<void> {
+    const config = await page
+      .evaluate(() => {
+        const w = window as any
+        if (!document.querySelector('#dc-turnstile') || typeof w.dcTsSiteKey !== 'string') return null
+        return { siteKey: w.dcTsSiteKey as string, action: (w.dcTsAction as string) || undefined }
+      })
+      .catch(() => null)
+
+    if (!config) {
+      this.logger.log('Turnstile이 존재하지 않음')
+      return
+    }
+
+    const settings = await this.settingsService.getSettings()
+    if (!settings.twoCaptchaApiKey) {
+      throw DcException.postParamInvalid({
+        message: 'Cloudflare Turnstile이 감지되었지만 2captcha API 키가 설정되지 않았습니다.',
+      })
+    }
+
+    this.logger.log(`Turnstile 감지됨 (사이트 키: ${config.siteKey}), 2captcha로 해결 시작`)
+
+    // DC 스크립트가 위젯을 렌더링할 때까지(api.js 비동기 로드) 대기
+    await page
+      .waitForFunction(() => !!(window as any).turnstile && (window as any).dcTs?.id != null, undefined, {
+        timeout: 20_000,
+      })
+      .catch(() => {})
+
+    try {
+      const token = await this.twoCaptchaService.solveTurnstile(
+        settings.twoCaptchaApiKey,
+        config.siteKey,
+        page.url(),
+        config.action,
+      )
+
+      await page.evaluate(tok => {
+        const w = window as any
+        // api.js 로드가 막힌 경우에도 dcTsParams 가 토큰을 읽을 수 있도록 최소 객체를 둔다
+        if (!w.turnstile) w.turnstile = { reset() {}, remove() {}, render: () => 'dc-ts' }
+        if (w.dcTs) {
+          if (w.dcTs.id == null) w.dcTs.id = 'dc-ts'
+          w.dcTs.state = 'ok'
+          w.dcTs.tokenAt = Date.now()
+        }
+        w.turnstile.getResponse = () => tok
+
+        // 최종 폼 제출(write_new.php)은 위젯이 폼에 넣는 cf-turnstile-response 입력값을 쓴다
+        const form = document.querySelector('#writeForm') || document.querySelector('#dc-turnstile')?.closest('form')
+        if (form) {
+          let input = form.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement | null
+          if (!input) {
+            input = document.createElement('input')
+            input.type = 'hidden'
+            input.name = 'cf-turnstile-response'
+            form.appendChild(input)
+          }
+          input.value = tok
+        }
+      }, token)
+
+      this.logger.log('Turnstile 토큰 적용 완료')
+    } catch (error) {
+      const errorMessage = `2captcha Turnstile 해결 실패: ${error.message}`
+      this.logger.error(errorMessage)
+      throw DcException.postSubmitFailed({
+        message: errorMessage,
+      })
+    }
+  }
+
+  /**
    * DC 캡챠 해결
    */
   protected async solveDcCaptcha(

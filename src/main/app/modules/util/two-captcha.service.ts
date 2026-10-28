@@ -36,7 +36,11 @@ export class TwoCaptchaService {
     this.logger.log('2captcha reCAPTCHA v2 해결 시작')
 
     // 1. 캡챠 제출
-    const captchaId = await this.submitRecaptcha(apiKey, siteKey, pageUrl)
+    const captchaId = await this.submitCaptcha(apiKey, {
+      method: 'userrecaptcha',
+      googlekey: siteKey,
+      pageurl: pageUrl,
+    })
     this.logger.log(`캡챠 ID: ${captchaId}`)
 
     // 2. 결과 대기 및 가져오기
@@ -47,16 +51,45 @@ export class TwoCaptchaService {
   }
 
   /**
-   * reCAPTCHA를 2captcha에 제출
+   * Cloudflare Turnstile을 2captcha로 해결
+   * @param apiKey 2captcha API 키
+   * @param siteKey Turnstile 사이트 키
+   * @param pageUrl 페이지 URL
+   * @param action Turnstile action (DC 글쓰기는 'write')
+   * @returns cf-turnstile-response 토큰
    */
-  private async submitRecaptcha(apiKey: string, siteKey: string, pageUrl: string): Promise<string> {
+  async solveTurnstile(apiKey: string, siteKey: string, pageUrl: string, action?: string): Promise<string> {
+    if (!apiKey) {
+      throw new CustomHttpException(ErrorCode.POST_PARAM_INVALID, {
+        message: '2captcha API 키가 설정되지 않았습니다.',
+      })
+    }
+
+    this.logger.log('2captcha Turnstile 해결 시작')
+
+    const captchaId = await this.submitCaptcha(apiKey, {
+      method: 'turnstile',
+      sitekey: siteKey,
+      pageurl: pageUrl,
+      ...(action ? { action } : {}),
+    })
+    this.logger.log(`캡챠 ID: ${captchaId}`)
+
+    const token = await this.getRecaptchaResult(apiKey, captchaId)
+    this.logger.log('2captcha Turnstile 해결 완료')
+
+    return token
+  }
+
+  /**
+   * 캡챠를 2captcha에 제출
+   */
+  private async submitCaptcha(apiKey: string, taskParams: Record<string, string>): Promise<string> {
     const submitUrl = `${this.baseUrl}/in.php`
 
     const params = {
       key: apiKey,
-      method: 'userrecaptcha',
-      googlekey: siteKey,
-      pageurl: pageUrl,
+      ...taskParams,
       json: 1,
     }
 

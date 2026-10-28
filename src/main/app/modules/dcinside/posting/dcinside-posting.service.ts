@@ -761,6 +761,9 @@ export class DcinsidePostingService extends DcinsideBaseService {
     // 리캡챠와 일반 캡챠가 동시에 존재할 수 있으므로 둘 다 처리
     await this.solveDcCaptcha(page, '#kcaptcha', 'input[name=kcaptcha_code]', '#kcaptcha')
 
+    // 3. Cloudflare Turnstile 처리 (2026-10 DC 글쓰기 적용, 토큰은 시도마다 새로 받음)
+    await this.solveDcTurnstile(page)
+
     let dialogHandler: ((dialog: any) => Promise<void>) | null = null
     let timeoutId: NodeJS.Timeout | null = null
 
