@@ -197,9 +197,9 @@ const TwoCaptchaSettingsForm: React.FC = () => {
           name="twoCaptchaApiKey"
           extra={
             <div>
-              <div>Cloudflare 보안 확인(Turnstile)·reCAPTCHA 자동 해결을 위한 2captcha API 키를 입력하세요.</div>
+              <div>reCAPTCHA 자동 해결을 위한 2captcha API 키를 입력하세요.</div>
               <div style={{ marginTop: 4, color: '#666' }}>
-                디시 글쓰기에 보안 확인이 적용된 갤러리는 키가 없으면 글 등록이 실패합니다. (1회 약 $0.00145)
+                선택 사항입니다. 설정하지 않으면 reCAPTCHA 발생 시 작업이 중단됩니다.
               </div>
               <div style={{ marginTop: 4 }}>
                 <a
